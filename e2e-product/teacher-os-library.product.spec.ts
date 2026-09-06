@@ -95,7 +95,9 @@ test("Phase A — Publish seed work artifact then Library lists it", async ({
 
   await page.goto("/teacher-os/library");
   await connectDevSession(page);
-  await expect(page.getByRole("heading", { name: "Library" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Library", exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: content.title })).toBeVisible();
   await expect(page.getByText("Published").first()).toBeVisible();
 });
@@ -104,12 +106,12 @@ test("Phase B — type and stewardship filters", async ({ page }) => {
   const content = await fetchContent(page);
   await page.goto("/teacher-os/library");
   await connectDevSession(page);
-  await page.getByLabelText(/Content type/i).fill(content.content_type);
-  await page.getByLabelText(/Stewardship state/i).selectOption("APPROVED");
+  await page.getByLabel(/Content type/i).fill(content.content_type);
+  await page.getByLabel(/Stewardship state/i).selectOption("APPROVED");
   await page.getByRole("button", { name: /Apply filters/i }).click();
   await expect(page.getByRole("heading", { name: content.title })).toBeVisible();
 
-  await page.getByLabelText(/Stewardship state/i).selectOption("DRAFT");
+  await page.getByLabel(/Stewardship state/i).selectOption("DRAFT");
   await page.getByRole("button", { name: /Apply filters/i }).click();
   await expect(
     page.getByRole("heading", { name: content.title }),
@@ -178,7 +180,7 @@ test("Phase D — unpublished item remains visible without published marker", as
   await expect(row.getByText("Not published")).toBeVisible();
   await expect(row.getByText("DRAFT")).toBeVisible();
 
-  await page.getByLabelText(/Published only/i).check();
+  await page.getByLabel(/Published only/i).check();
   await page.getByRole("button", { name: /Apply filters/i }).click();
   await expect(
     page.getByRole("heading", { name: created.title }),

@@ -26,7 +26,7 @@ describe("LibraryPage", () => {
     );
     renderApp("/teacher-os/library");
     expect(
-      await screen.findByRole("heading", { name: "Library" }),
+      await screen.findByRole("heading", { name: "Library", exact: true }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Not implemented yet/i)).not.toBeInTheDocument();
     expect(
