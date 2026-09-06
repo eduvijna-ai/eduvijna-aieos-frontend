@@ -9,12 +9,12 @@ const repoRoot = path.resolve(
 );
 
 const EXPECTED_BACKEND =
-  "62733e3ad0d48887f3cd1e1a4486839170a5d651";
+  "01c2c54a43d95427aaa3e9a81ceaafe033581743";
 const EXPECTED_MIGRATION = "tosd090002";
 const EXPECTED_OPENAPI =
-  "B4326D43A213D7831F2AAD8E77A2CEC6BA70B800B4C62EFC52D5B8DFC07CB4D9";
+  "81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87";
 const EXPECTED_FRONTEND_BASE =
-  "05400f007c345283af9880b38e16abdbd55677e4";
+  "08887e3f6a427e8e3f5aed852fb3d9a4031a9ff4";
 const OBSOLETE_BACKEND = "1fe28f4fd1a2a2070aa69d67daa49cd53ba5820d";
 const OBSOLETE_MIGRATION = "tosd080002";
 
@@ -22,7 +22,7 @@ function read(relativePath: string): string {
   return readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
 
-describe("TOS-DEV09 product-E2E pin consistency", () => {
+describe("TOS-DEV10-I02 product-E2E pin consistency", () => {
   it("keeps constants.mjs, harness, seed, bootstrap, and CI on the same pins", () => {
     const constants = read("scripts/product-e2e/constants.mjs");
     expect(constants).toContain(EXPECTED_BACKEND);
@@ -65,6 +65,7 @@ describe("TOS-DEV09 product-E2E pin consistency", () => {
     expect(readme).toContain(EXPECTED_OPENAPI);
     expect(readme).toContain(EXPECTED_FRONTEND_BASE);
     expect(readme).toContain("teacher-os-improve.product.spec.ts");
+    expect(readme).toContain("teacher-os-library.product.spec.ts");
     expect(readme).not.toContain("Improve product E2E remains TOS-DEV09-I04");
   });
 });
