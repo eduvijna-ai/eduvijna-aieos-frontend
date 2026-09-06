@@ -1,0 +1,38 @@
+.settings-page .settings-form {
+  max-width: 28rem;
+  margin-top: 0.75rem;
+}
+
+.settings-page .stack-tight {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.settings-page .settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.settings-page .settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+}
+
+.settings-page .settings-notice,
+.settings-page .settings-confirm {
+  margin: 0.75rem 0 0;
+  max-width: 40rem;
+}
+
+.settings-page .settings-notice {
+  color: var(--color-warning, #8a5a00);
+}
+
+.settings-page .settings-confirm {
+  color: var(--color-accent, inherit);
+}

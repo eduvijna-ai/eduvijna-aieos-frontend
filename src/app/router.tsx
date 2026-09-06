@@ -12,7 +12,7 @@ import { ExecutionDetailPage } from "@/features/teacher-os/teach/ExecutionDetail
 import { AssessPage } from "@/features/teacher-os/assess/AssessPage";
 import { ImprovePage } from "@/features/teacher-os/improve/ImprovePage";
 import { PlaceholderPage } from "@/features/teacher-os/placeholders/PlaceholderPage";
-import { SettingsPage } from "@/features/teacher-os/placeholders/SettingsPage";
+import { SettingsPage } from "@/features/teacher-os/settings/SettingsPage";
 
 export function AppRouter() {
   return (

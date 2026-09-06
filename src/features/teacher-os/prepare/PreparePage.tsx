@@ -8,6 +8,9 @@ import { localTomorrow } from "@/shared/time/calendarDate";
 import { DEFAULT_LOCALE, INTENT_TYPE, summaryParts } from "./intent";
 import "./prepare.css";
 
+// MEMORY → UI PREPARE DEFAULTS DEFERRED: Teacher Memory preferences do not map
+// cleanly onto Prepare fields; this page does not hydrate from Memory.
+
 type Step = "outcome" | "context" | "confirm";
 
 const STEPS: { id: Step; label: string }[] = [
