@@ -14,9 +14,9 @@ Architecture and product intelligence do **not** live here:
 
 | Concern | Canonical home |
 |---------|----------------|
-| Enterprise architecture, ADRs, reviews | [eduvijna-architecture](https://github.com/eduvijna/eduvijna-architecture) |
-| Product vision, Teacher OS product architecture, EBPs, EDRs | [eduvijna-product](https://github.com/eduvijna/eduvijna-product) |
-| AIEOS backend / APIs / domain services | [eduvijna-aieos-backend](https://github.com/eduvijna/eduvijna-aieos-backend) |
+| Enterprise architecture, ADRs, reviews | [eduvijna-architecture](https://github.com/eduvijna-ai/eduvijna-architecture) |
+| Product vision, Teacher OS product architecture, EBPs, EDRs | [eduvijna-product](https://github.com/eduvijna-ai/eduvijna-product) |
+| AIEOS backend / APIs / domain services | [eduvijna-aieos-backend](https://github.com/eduvijna-ai/eduvijna-aieos-backend) |
 | AIEOS frontend / Teacher OS shell | **this repository** |
 
 ## Repository Scope
@@ -69,7 +69,7 @@ Out of scope:
 
 EduVijna Engineering, under Architecture Office and Product Office stewardship.
 
-GitHub: [github.com/eduvijna/eduvijna-aieos-frontend](https://github.com/eduvijna/eduvijna-aieos-frontend)
+GitHub: [github.com/eduvijna-ai/eduvijna-aieos-frontend](https://github.com/eduvijna-ai/eduvijna-aieos-frontend)
 
 ## License
 
