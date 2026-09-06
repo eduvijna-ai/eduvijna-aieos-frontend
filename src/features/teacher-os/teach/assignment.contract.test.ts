@@ -37,6 +37,9 @@ const REQUIRED_OPERATION_IDS = [
   "assessment_classroom_correct",
   "assessment_classroom_void",
   "teaching_work_from_classroom_assessment_create",
+  "teacher_os_library_list",
+  "teacher_os_library_get",
+  "teacher_os_library_version_get",
   "teacher_os_memory_get",
   "teacher_os_memory_create",
   "teacher_os_memory_update",
@@ -49,10 +52,10 @@ describe("TOS-DEV10-I03 OpenAPI consumer contract", () => {
       "utf8",
     );
     expect(syncScript).toContain(
-      "79d50f04773ceeb1eca91f7b6561cee2ef2f3151",
+      "2f034cfe3073db3b7da42f67bf778ea7da5eda4c",
     );
     expect(syncScript).toContain(
-      "9B36BD1BF21BA4935A8ACA031176F9C57A06EB2E54E3ACA2261A7D7B6C3EDA69",
+      "ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB",
     );
   });
 
@@ -63,7 +66,7 @@ describe("TOS-DEV10-I03 OpenAPI consumer contract", () => {
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "9B36BD1BF21BA4935A8ACA031176F9C57A06EB2E54E3ACA2261A7D7B6C3EDA69",
+      "ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB",
     );
   });
 

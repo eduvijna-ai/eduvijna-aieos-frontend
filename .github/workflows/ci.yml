@@ -67,7 +67,7 @@ jobs:
     timeout-minutes: 45
     env:
       AIEOS_BACKEND_ROOT: ${{ github.workspace }}/backend
-      AIEOS_BACKEND_PIN_SHA: 79d50f04773ceeb1eca91f7b6561cee2ef2f3151
+      AIEOS_BACKEND_PIN_SHA: 2f034cfe3073db3b7da42f67bf778ea7da5eda4c
       AIEOS_TEST_BOOTSTRAP_DATABASE_URL: postgresql+psycopg://aieos_bootstrap:aieos_test@127.0.0.1:5432/aieos
       AIEOS_TEST_DATABASE_URL: postgresql+psycopg://aieos_migrator:aieos_test@127.0.0.1:5432/aieos
       AIEOS_TEST_RUNTIME_DATABASE_URL: postgresql+psycopg://aieos_runtime:aieos_test@127.0.0.1:5432/aieos
@@ -96,7 +96,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: eduvijna-ai/eduvijna-aieos-backend
-          ref: 79d50f04773ceeb1eca91f7b6561cee2ef2f3151
+          ref: 2f034cfe3073db3b7da42f67bf778ea7da5eda4c
           path: backend
           token: ${{ secrets.AIEOS_CI_READ_TOKEN }}
 

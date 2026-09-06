@@ -11,6 +11,8 @@ import { AssignmentDetailPage } from "@/features/teacher-os/teach/AssignmentDeta
 import { ExecutionDetailPage } from "@/features/teacher-os/teach/ExecutionDetailPage";
 import { AssessPage } from "@/features/teacher-os/assess/AssessPage";
 import { ImprovePage } from "@/features/teacher-os/improve/ImprovePage";
+import { LibraryPage } from "@/features/teacher-os/library/LibraryPage";
+import { LibraryDetailPage } from "@/features/teacher-os/library/LibraryDetailPage";
 import { PlaceholderPage } from "@/features/teacher-os/placeholders/PlaceholderPage";
 import { SettingsPage } from "@/features/teacher-os/settings/SettingsPage";
 
@@ -43,10 +45,8 @@ export function AppRouter() {
         />
         <Route path="assess" element={<AssessPage />} />
         <Route path="improve" element={<ImprovePage />} />
-        <Route
-          path="library"
-          element={<PlaceholderPage title="Library" slug="library" />}
-        />
+        <Route path="library" element={<LibraryPage />} />
+        <Route path="library/:contentId" element={<LibraryDetailPage />} />
         <Route
           path="ai-assistant"
           element={
