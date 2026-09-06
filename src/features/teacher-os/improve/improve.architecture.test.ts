@@ -16,7 +16,7 @@ function read(relativePath: string): string {
 describe("TOS-DEV09-I03 Improve architecture / contract", () => {
   it("pins Backend OpenAPI consumer authority", () => {
     const sync = read("scripts/sync-openapi-snapshot.mjs");
-    expect(sync).toContain("2f034cfe3073db3b7da42f67bf778ea7da5eda4c");
+    expect(sync).toContain("070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0");
     const digest = createHash("sha256")
       .update(readFileSync(path.join(repoRoot, "contracts/openapi/aieos-v1.consumer-snapshot.json")))
       .digest("hex")

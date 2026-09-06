@@ -9,7 +9,7 @@ const repoRoot = path.resolve(
 );
 
 const EXPECTED_BACKEND =
-  "2f034cfe3073db3b7da42f67bf778ea7da5eda4c";
+  "070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0";
 const EXPECTED_MIGRATION = "tosd100001";
 const EXPECTED_OPENAPI =
   "ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB";
@@ -47,6 +47,11 @@ describe("TOS-DEV10-I03R1 product-E2E pin consistency", () => {
     expect(seed).toContain(
       `EXPECTED_MIGRATION_HEAD = "${EXPECTED_MIGRATION}"`,
     );
+    expect(seed).toContain("INSERT INTO security.principals");
+    expect(seed).toContain("'HUMAN'");
+    expect(seed).toContain("ON CONFLICT (principal_id) DO UPDATE SET");
+    expect(seed).toContain("PRODUCT_E2E_BOOTSTRAP_DATABASE_URL");
+    expect(seed).toContain("bootstrap_database_url");
     expect(seed).not.toContain(OBSOLETE_BACKEND);
     expect(seed).not.toContain(OBSOLETE_MIGRATION);
 

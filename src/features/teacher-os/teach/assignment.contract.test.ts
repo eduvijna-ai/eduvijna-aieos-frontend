@@ -52,7 +52,7 @@ describe("TOS-DEV10-I03 OpenAPI consumer contract", () => {
       "utf8",
     );
     expect(syncScript).toContain(
-      "2f034cfe3073db3b7da42f67bf778ea7da5eda4c",
+      "070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0",
     );
     expect(syncScript).toContain(
       "ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB",

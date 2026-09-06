@@ -10,7 +10,7 @@ Playwright mocks**.
 | Artifact | SHA |
 |----------|-----|
 | Frontend base | `08887e3f6a427e8e3f5aed852fb3d9a4031a9ff4` |
-| Backend read-only pin | `2f034cfe3073db3b7da42f67bf778ea7da5eda4c` |
+| Backend read-only pin | `070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0` |
 | OpenAPI authority | `ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB` |
 | Migration head | `tosd100001` |
 
@@ -114,7 +114,7 @@ reload → same. No Teacher Memory primary nav item.
 
 ## CI
 
-The `product-e2e` workflow job checks out Backend `2f034cfe…`, verifies the pin
+The `product-e2e` workflow job checks out Backend `070e479…`, verifies the pin
 SHA, provisions PostgreSQL 18, migrates to `tosd100001`, starts the development
 app, and runs `pnpm test:e2e:product` (Assignment + TeachingExecution +
 ClassroomAssessment + Improve + Library + Memory product specs).

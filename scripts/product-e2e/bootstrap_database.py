@@ -92,6 +92,7 @@ def main() -> int:
         "postgres_major": 18,
         "migration_head": head,
         "runtime_database_url": r_url,
+        "bootstrap_database_url": b_url,
         "started_container": started_container,
         "container_name": os.environ.get("PRODUCT_E2E_PG_CONTAINER", "aieos-product-e2e-pg")
         if started_container

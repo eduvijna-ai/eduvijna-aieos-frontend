@@ -68,6 +68,7 @@ if (process.env.PRODUCT_E2E_SKIP_BOOTSTRAP !== "1") {
   const dbReport = JSON.parse(readFileSync(dbReportPath, "utf8"));
   runPython("seed_precondition.py", {
     PRODUCT_E2E_RUNTIME_DATABASE_URL: dbReport.runtime_database_url,
+    PRODUCT_E2E_BOOTSTRAP_DATABASE_URL: dbReport.bootstrap_database_url,
   });
   process.env.PRODUCT_E2E_FIXTURE_PATH = fixturePath;
 }

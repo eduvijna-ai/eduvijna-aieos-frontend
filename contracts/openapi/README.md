@@ -10,13 +10,13 @@ This directory holds a **consumer snapshot** of the AIEOS HTTP contract for fron
 - The file `aieos-v1.consumer-snapshot.json` in this frontend repo is **NON-AUTHORITATIVE**.
   It must not be treated as the source of truth for API behaviour.
 
-## Snapshot provenance (TOS-DEV10-I03R1)
+## Snapshot provenance (TOS-DEV10-I03R3)
 
 | Field | Value |
 |-------|--------|
 | Source repo | `eduvijna-aieos-backend` |
 | Source path | `contracts/openapi/aieos-v1.json` |
-| Source SHA | `2f034cfe3073db3b7da42f67bf778ea7da5eda4c` |
+| Source SHA | `070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0` |
 | Authoritative OpenAPI SHA-256 | `ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB` |
 | Consumer file | `contracts/openapi/aieos-v1.consumer-snapshot.json` |
 | Consumer file SHA-256 | `ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB` |
@@ -97,6 +97,8 @@ Also retained from earlier slices:
 
 | Slice | Source SHA |
 |-------|------------|
+| TOS-DEV10-I03R3 pre-CI-fix | `85b3aee257ebfbf70ca1954aa20ae320b150ec47` |
+| TOS-DEV10-I03R1 | `2f034cfe3073db3b7da42f67bf778ea7da5eda4c` |
 | TOS-DEV10-I03 | `79d50f04773ceeb1eca91f7b6561cee2ef2f3151` |
 | TOS-DEV10-I02 | `01c2c54a43d95427aaa3e9a81ceaafe033581743` |
 | TOS-DEV09-I03 | `62733e3ad0d48887f3cd1e1a4486839170a5d651` |
@@ -124,7 +126,7 @@ overrides when the default location or pinned SHA is not current:
 
 ```bash
 AIEOS_BACKEND_ROOT=../eduvijna-aieos-backend \
-AIEOS_BACKEND_OPENAPI_SHA=2f034cfe3073db3b7da42f67bf778ea7da5eda4c \
+AIEOS_BACKEND_OPENAPI_SHA=070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0 \
   pnpm sync:openapi
 ```
 
