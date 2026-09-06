@@ -95,9 +95,10 @@ jobs:
       - name: Checkout backend at pin SHA
         uses: actions/checkout@v4
         with:
-          repository: eduvijna/eduvijna-aieos-backend
+          repository: eduvijna-ai/eduvijna-aieos-backend
           ref: 62733e3ad0d48887f3cd1e1a4486839170a5d651
           path: backend
+          token: ${{ secrets.AIEOS_CI_READ_TOKEN }}
 
       - name: Verify backend pin SHA
         run: |

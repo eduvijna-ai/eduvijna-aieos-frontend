@@ -2,7 +2,7 @@
 
 Contributions to this AIEOS frontend repository must preserve architecture-first delivery, traceability, and reviewability.
 
-These rules mirror the contribution rules of [eduvijna-architecture](https://github.com/eduvijna/eduvijna-architecture) and [eduvijna-product](https://github.com/eduvijna/eduvijna-product), adapted for frontend implementation (not EAO governance or product-intelligence directories).
+These rules mirror the contribution rules of [eduvijna-architecture](https://github.com/eduvijna-ai/eduvijna-architecture) and [eduvijna-product](https://github.com/eduvijna-ai/eduvijna-product), adapted for frontend implementation (not EAO governance or product-intelligence directories).
 
 ## Rules
 
@@ -99,4 +99,4 @@ Reviewers verify:
 
 ## Questions
 
-Use a General or Governance issue template, or contact EduVijna Engineering through leadership channels. Architecture questions belong in [eduvijna-architecture](https://github.com/eduvijna/eduvijna-architecture); product questions belong in [eduvijna-product](https://github.com/eduvijna/eduvijna-product).
+Use a General or Governance issue template, or contact EduVijna Engineering through leadership channels. Architecture questions belong in [eduvijna-architecture](https://github.com/eduvijna-ai/eduvijna-architecture); product questions belong in [eduvijna-product](https://github.com/eduvijna-ai/eduvijna-product).
