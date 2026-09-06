@@ -13,7 +13,7 @@ import { AssessPage } from "@/features/teacher-os/assess/AssessPage";
 import { ImprovePage } from "@/features/teacher-os/improve/ImprovePage";
 import { LibraryPage } from "@/features/teacher-os/library/LibraryPage";
 import { LibraryDetailPage } from "@/features/teacher-os/library/LibraryDetailPage";
-import { PlaceholderPage } from "@/features/teacher-os/placeholders/PlaceholderPage";
+import { AiAssistantPage } from "@/features/teacher-os/ai-assistant/AiAssistantPage";
 import { SettingsPage } from "@/features/teacher-os/settings/SettingsPage";
 
 export function AppRouter() {
@@ -47,12 +47,7 @@ export function AppRouter() {
         <Route path="improve" element={<ImprovePage />} />
         <Route path="library" element={<LibraryPage />} />
         <Route path="library/:contentId" element={<LibraryDetailPage />} />
-        <Route
-          path="ai-assistant"
-          element={
-            <PlaceholderPage title="AI Assistant" slug="ai-assistant" />
-          }
-        />
+        <Route path="ai-assistant" element={<AiAssistantPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/teacher-os/today" replace />} />

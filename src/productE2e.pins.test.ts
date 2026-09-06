@@ -9,20 +9,20 @@ const repoRoot = path.resolve(
 );
 
 const EXPECTED_BACKEND =
-  "070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0";
+  "62930830cbd9b54721a0d0dc6ab61860622d3422";
 const EXPECTED_MIGRATION = "tosd100001";
 const EXPECTED_OPENAPI =
-  "ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB";
+  "4BF6C88B662D99F1E0E21E6F0AF2D267B39644300D85D99A859A7720F1568411";
 const EXPECTED_FRONTEND_BASE =
   "08887e3f6a427e8e3f5aed852fb3d9a4031a9ff4";
-const OBSOLETE_BACKEND = "79d50f04773ceeb1eca91f7b6561cee2ef2f3151";
+const OBSOLETE_BACKEND = "070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0";
 const OBSOLETE_MIGRATION = "tosd090002";
 
 function read(relativePath: string): string {
   return readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
 
-describe("TOS-DEV10-I03R1 product-E2E pin consistency", () => {
+describe("TOS-DEV10-I04 product-E2E pin consistency", () => {
   it("keeps constants.mjs, harness, seed, bootstrap, and CI on the same pins", () => {
     const constants = read("scripts/product-e2e/constants.mjs");
     expect(constants).toContain(EXPECTED_BACKEND);
@@ -69,6 +69,7 @@ describe("TOS-DEV10-I03R1 product-E2E pin consistency", () => {
     expect(readme).toContain(EXPECTED_MIGRATION);
     expect(readme).toContain(EXPECTED_OPENAPI);
     expect(readme).toContain(EXPECTED_FRONTEND_BASE);
+    expect(readme).toContain("teacher-os-assistant.product.spec.ts");
     expect(readme).toContain("teacher-os-memory.product.spec.ts");
     expect(readme).toContain("teacher-os-improve.product.spec.ts");
     expect(readme).toContain("teacher-os-library.product.spec.ts");

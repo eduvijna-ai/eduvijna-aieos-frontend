@@ -21,7 +21,7 @@ SCENARIO_MARKER = (
     "[TOS-DEV08-I04:product-e2e] ClassroomAssessment real-stack product journey"
 )
 SCENARIO_ID = "tos-dev08-i04-classroom-assessment-product-e2e"
-BACKEND_PIN_SHA = "070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0"
+BACKEND_PIN_SHA = "62930830cbd9b54721a0d0dc6ab61860622d3422"
 EXPECTED_MIGRATION_HEAD = "tosd100001"
 
 

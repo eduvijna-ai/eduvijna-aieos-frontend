@@ -1,0 +1,99 @@
+.assistant-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 52rem;
+}
+
+.assistant-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.assistant-header .lede {
+  max-width: 38rem;
+}
+
+.assistant-section-title {
+  margin: 0 0 0.65rem;
+  font-size: 1.05rem;
+}
+
+.assistant-context-summary {
+  word-break: break-word;
+}
+
+.assistant-turns {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.assistant-turn-role {
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  color: var(--color-muted, #5b6b70);
+}
+
+.assistant-turn-body {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.assistant-turn-assistant {
+  border-left: 3px solid var(--color-accent, #0f6e6a);
+  padding-left: 0.75rem;
+}
+
+.assistant-turn-user {
+  border-left: 3px solid #16323a;
+  padding-left: 0.75rem;
+}
+
+.assistant-next-step {
+  margin: 0.65rem 0 0;
+  color: var(--color-muted, #5b6b70);
+}
+
+.assistant-suggestions ul {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: flex-start;
+}
+
+.assistant-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.assistant-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 4.5rem;
+  font: inherit;
+  padding: 0.65rem 0.75rem;
+}
+
+.assistant-compose-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.35rem;
+}
+
+.assistant-guardrail {
+  margin: 0.85rem 0 0;
+}

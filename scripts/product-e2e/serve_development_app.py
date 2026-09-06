@@ -27,6 +27,9 @@ def main() -> int:
         SYNTHETIC_PRINCIPAL_ID,
         SYNTHETIC_TENANT_ID,
     )
+    from aieos.domains.teaching.application.assistant_answer_v1 import (
+        TeacherAssistantAnswerV1,
+    )
     from aieos.platform.ai.fake import FakeStructuredModelGateway
     from tests.domains.teaching.worksheet_fixtures import valid_worksheet_model
 
@@ -37,9 +40,14 @@ def main() -> int:
     port = int(os.environ.get("PRODUCT_E2E_BACKEND_PORT", "8000"))
     host = os.environ.get("PRODUCT_E2E_BACKEND_HOST", "127.0.0.1")
 
+    def result_factory(request):
+        if request.output_type is TeacherAssistantAnswerV1:
+            return TeacherAssistantAnswerV1.development_fake(request.input_text)
+        return valid_worksheet_model()
+
     engine = create_engine(runtime_url)
     gateway = FakeStructuredModelGateway(
-        result_factory=lambda _request: valid_worksheet_model(),
+        result_factory=result_factory,
         provider_id="fake",
         model_id="fake-model",
     )
