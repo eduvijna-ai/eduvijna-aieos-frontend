@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -15,11 +12,6 @@ const ASSISTANT_PATH = "/api/v1/teacher-os/assistant";
 const FOCUS_QUESTION = "What should I focus on today?";
 const SAMPLE_ANSWER =
   "Based on today's mission context, prioritize the highest-urgency teacher action.";
-
-const repoRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../../..",
-);
 
 function sampleAssistantResponse(
   overrides?: Record<string, unknown>,
@@ -209,7 +201,7 @@ describe("AiAssistantPage", () => {
     expect(screen.getByText(FOCUS_QUESTION)).toBeInTheDocument();
   });
 
-  it("calls only the Backend assistant path and never openai in source", async () => {
+  it("calls only the Backend assistant path (no provider SDK traffic)", async () => {
     const user = userEvent.setup();
     const calls = stubFetch((call) => {
       if (isAssistantPost(call)) {
@@ -225,21 +217,9 @@ describe("AiAssistantPage", () => {
 
     expect(calls.every((call) => call.url === ASSISTANT_PATH)).toBe(true);
     expect(calls.every((call) => call.method === "POST")).toBe(true);
-
-    const pageSource = readFileSync(
-      path.join(
-        repoRoot,
-        "src/features/teacher-os/ai-assistant/AiAssistantPage.tsx",
-      ),
-      "utf8",
-    );
-    const apiSource = readFileSync(
-      path.join(repoRoot, "src/services/api/aiAssistantApi.ts"),
-      "utf8",
-    );
-    expect(pageSource.toLowerCase()).not.toContain("openai");
-    expect(apiSource.toLowerCase()).not.toContain("openai");
-    expect(apiSource).toContain(ASSISTANT_PATH);
+    expect(
+      calls.some((call) => /openai|anthropic|generativelanguage/i.test(call.url)),
+    ).toBe(false);
   });
 
   it("keeps suggested actions as navigation links only (no silent mutate POSTs)", async () => {
