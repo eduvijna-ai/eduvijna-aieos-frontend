@@ -121,6 +121,7 @@ describe("TOS-DEV08-I03 Assess page", () => {
 
   it("records with Idempotency-Key and without tenant/teacher identity in body", async () => {
     const user = userEvent.setup();
+    let recorded = false;
     const calls = stubFetch((call) => {
       if (call.url.endsWith(`/api/v1/teaching/executions/${EXECUTION_ID}`)) {
         return mockJsonResponse(sampleExecution());
@@ -130,12 +131,15 @@ describe("TOS-DEV08-I03 Assess page", () => {
         call.url.includes("/api/v1/assessment/classroom-assessments") &&
         !call.url.includes(ASSESSMENT_ID)
       ) {
-        return mockJsonResponse({ items: [] });
+        return mockJsonResponse({
+          items: recorded ? [sampleAssessment()] : [],
+        });
       }
       if (
         call.method === "POST" &&
         call.url.endsWith("/api/v1/assessment/classroom-assessments")
       ) {
+        recorded = true;
         return mockJsonResponse(sampleAssessment(), {
           status: 201,
           etag: '"r0"',
@@ -161,6 +165,9 @@ describe("TOS-DEV08-I03 Assess page", () => {
     );
 
     await waitFor(() => {
+      expect(
+        screen.getByText(/Classroom assessment recorded/i),
+      ).toBeInTheDocument();
       const record = calls.find(
         (call) =>
           call.method === "POST" &&
@@ -183,9 +190,6 @@ describe("TOS-DEV08-I03 Assess page", () => {
       expect(body.learner_id).toBeUndefined();
       expect(body.student_id).toBeUndefined();
     });
-    expect(
-      await screen.findByText(/Classroom assessment recorded/i),
-    ).toBeInTheDocument();
   });
 
   it("reuses Idempotency-Key for same RECORD material", async () => {
