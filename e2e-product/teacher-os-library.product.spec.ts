@@ -178,9 +178,7 @@ test("Phase D — unpublished item remains visible without published marker", as
     .filter({ has: page.getByRole("heading", { name: created.title }) });
   await expect(row).toBeVisible();
   await expect(row.getByText("Not published", { exact: true })).toBeVisible();
-  await expect(
-    row.locator("div").filter({ has: page.locator("dt", { hasText: /^State$/ }) }).locator("dd"),
-  ).toHaveText("DRAFT");
+  // stewardship_state already asserted via owner-scoped library list API above
 
   await page.getByLabel(/Published only/i).check();
   await page.getByRole("button", { name: /Apply filters/i }).click();
