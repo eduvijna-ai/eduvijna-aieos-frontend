@@ -8,9 +8,9 @@ journeys against live HTTP — **no `/api` Playwright mocks**.
 
 | Artifact | SHA |
 |----------|-----|
-| Frontend base | `05400f007c345283af9880b38e16abdbd55677e4` |
-| Backend read-only pin | `62733e3ad0d48887f3cd1e1a4486839170a5d651` |
-| OpenAPI authority | `B4326D43A213D7831F2AAD8E77A2CEC6BA70B800B4C62EFC52D5B8DFC07CB4D9` |
+| Frontend base | `08887e3f6a427e8e3f5aed852fb3d9a4031a9ff4` |
+| Backend read-only pin | `01c2c54a43d95427aaa3e9a81ceaafe033581743` |
+| OpenAPI authority | `81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87` |
 | Migration head | `tosd090002` |
 
 ## Non-production boundary
@@ -82,6 +82,7 @@ Scenario markers:
 | `e2e-product/teacher-os-execution.product.spec.ts` | TeachingExecution real-stack journey |
 | `e2e-product/teacher-os-classroom-assessment.product.spec.ts` | ClassroomAssessment CASE A journey + I03R1 stale VOID concurrency |
 | `e2e-product/teacher-os-improve.product.spec.ts` | DEV09 Improve Assess→Improve→remediation Work (TOS-DEV09-I04) |
+| `e2e-product/teacher-os-library.product.spec.ts` | DEV10 Library publish→list→filter→open (TOS-DEV10-I02) |
 
 Assessment journey (CASE A):
 

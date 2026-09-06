@@ -10,16 +10,16 @@ This directory holds a **consumer snapshot** of the AIEOS HTTP contract for fron
 - The file `aieos-v1.consumer-snapshot.json` in this frontend repo is **NON-AUTHORITATIVE**.
   It must not be treated as the source of truth for API behaviour.
 
-## Snapshot provenance (TOS-DEV09-I03)
+## Snapshot provenance (TOS-DEV10-I02)
 
 | Field | Value |
 |-------|--------|
 | Source repo | `eduvijna-aieos-backend` |
 | Source path | `contracts/openapi/aieos-v1.json` |
-| Source SHA | `62733e3ad0d48887f3cd1e1a4486839170a5d651` |
-| Authoritative OpenAPI SHA-256 | `B4326D43A213D7831F2AAD8E77A2CEC6BA70B800B4C62EFC52D5B8DFC07CB4D9` |
+| Source SHA | `01c2c54a43d95427aaa3e9a81ceaafe033581743` |
+| Authoritative OpenAPI SHA-256 | `81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87` |
 | Consumer file | `contracts/openapi/aieos-v1.consumer-snapshot.json` |
-| Consumer file SHA-256 | `B4326D43A213D7831F2AAD8E77A2CEC6BA70B800B4C62EFC52D5B8DFC07CB4D9` |
+| Consumer file SHA-256 | `81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87` |
 
 Operations consumed by this frontend at this SHA (Improve / remediation create additions):
 
@@ -81,7 +81,7 @@ Also retained from earlier slices:
 
 | Slice | Source SHA |
 |-------|------------|
-| TOS-DEV09-I03 | `62733e3ad0d48887f3cd1e1a4486839170a5d651` |
+| TOS-DEV09-I03 | `01c2c54a43d95427aaa3e9a81ceaafe033581743` |
 | TOS-DEV08-I03 | `1fe28f4fd1a2a2070aa69d67daa49cd53ba5820d` |
 | TOS-DEV07-I03 | `551e46e004233421746e4df2789c07367702528b` |
 | TOS-DEV06-I04 | `06e05277e73e0c71172cae4904efb37d771c3fad` |
@@ -106,14 +106,14 @@ overrides when the default location or pinned SHA is not current:
 
 ```bash
 AIEOS_BACKEND_ROOT=../eduvijna-aieos-backend \
-AIEOS_BACKEND_OPENAPI_SHA=62733e3ad0d48887f3cd1e1a4486839170a5d651 \
+AIEOS_BACKEND_OPENAPI_SHA=01c2c54a43d95427aaa3e9a81ceaafe033581743 \
   pnpm sync:openapi
 ```
 
 Verify the consumer file hash after sync:
 
 ```bash
-# Expected: B4326D43A213D7831F2AAD8E77A2CEC6BA70B800B4C62EFC52D5B8DFC07CB4D9
+# Expected: 81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87
 ```
 
 See `scripts/sync-openapi-snapshot.mjs` for how to refresh from a known backend checkout/SHA.

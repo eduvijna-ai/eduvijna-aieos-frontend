@@ -16,13 +16,13 @@ function read(relativePath: string): string {
 describe("TOS-DEV09-I03 Improve architecture / contract", () => {
   it("pins Backend OpenAPI consumer authority", () => {
     const sync = read("scripts/sync-openapi-snapshot.mjs");
-    expect(sync).toContain("62733e3ad0d48887f3cd1e1a4486839170a5d651");
+    expect(sync).toContain("01c2c54a43d95427aaa3e9a81ceaafe033581743");
     const digest = createHash("sha256")
       .update(readFileSync(path.join(repoRoot, "contracts/openapi/aieos-v1.consumer-snapshot.json")))
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "B4326D43A213D7831F2AAD8E77A2CEC6BA70B800B4C62EFC52D5B8DFC07CB4D9",
+      "81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87",
     );
   });
 

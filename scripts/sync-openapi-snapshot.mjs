@@ -13,9 +13,14 @@
  * Destination (this repo):
  *   contracts/openapi/aieos-v1.consumer-snapshot.json
  *
- * TOS-DEV09-I03 pinned backend OpenAPI source SHA:
- *   62733e3ad0d48887f3cd1e1a4486839170a5d651
+ * TOS-DEV10-I02 pinned backend OpenAPI source SHA:
+ *   01c2c54a43d95427aaa3e9a81ceaafe033581743
  * Authoritative Backend OpenAPI SHA-256:
+ *   81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87
+ *
+ * Previous pin (TOS-DEV09-I03):
+ *   62733e3ad0d48887f3cd1e1a4486839170a5d651
+ *   Authoritative Backend OpenAPI SHA-256:
  *   B4326D43A213D7831F2AAD8E77A2CEC6BA70B800B4C62EFC52D5B8DFC07CB4D9
  *
  * Previous pin (TOS-DEV08-I03):
@@ -41,7 +46,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendRoot = path.resolve(__dirname, "..");
 
-const PINNED_SHA = "62733e3ad0d48887f3cd1e1a4486839170a5d651";
+const PINNED_SHA = "01c2c54a43d95427aaa3e9a81ceaafe033581743";
 const backendRoot =
   process.env.AIEOS_BACKEND_ROOT ||
   path.resolve(frontendRoot, "..", "eduvijna-aieos-backend");
