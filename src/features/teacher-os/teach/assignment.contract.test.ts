@@ -37,19 +37,25 @@ const REQUIRED_OPERATION_IDS = [
   "assessment_classroom_correct",
   "assessment_classroom_void",
   "teaching_work_from_classroom_assessment_create",
+  "teacher_os_library_list",
+  "teacher_os_library_get",
+  "teacher_os_library_version_get",
+  "teacher_os_memory_get",
+  "teacher_os_memory_create",
+  "teacher_os_memory_update",
 ] as const;
 
-describe("TOS-DEV09-I03 OpenAPI consumer contract", () => {
+describe("TOS-DEV10-I03 OpenAPI consumer contract", () => {
   it("pins Backend OpenAPI source SHA in sync script", () => {
     const syncScript = readFileSync(
       path.join(repoRoot, "scripts/sync-openapi-snapshot.mjs"),
       "utf8",
     );
     expect(syncScript).toContain(
-      '01c2c54a43d95427aaa3e9a81ceaafe033581743',
+      "070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0",
     );
     expect(syncScript).toContain(
-      "81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87",
+      "ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB",
     );
   });
 
@@ -60,11 +66,11 @@ describe("TOS-DEV09-I03 OpenAPI consumer contract", () => {
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87",
+      "ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB",
     );
   });
 
-  it("snapshot and generated types include Assessment + remediation create operationIds", () => {
+  it("snapshot and generated types include Memory + Assessment + remediation operationIds", () => {
     const snapshot = readFileSync(snapshotPath, "utf8");
     const generated = readFileSync(generatedPath, "utf8");
     for (const operationId of REQUIRED_OPERATION_IDS) {
@@ -73,11 +79,12 @@ describe("TOS-DEV09-I03 OpenAPI consumer contract", () => {
     }
   });
 
-  it("does not invent an /improvements API or learner/mastery/memory surface", () => {
+  it("does not invent an /improvements API or learner/mastery surface", () => {
     const snapshot = readFileSync(snapshotPath, "utf8");
     expect(snapshot).not.toMatch(/\/api\/v1\/improvements/);
     expect(snapshot).not.toMatch(/operationId": ".*mastery/);
-    expect(snapshot).not.toMatch(/operationId": ".*teacher_memory/);
     expect(snapshot).not.toMatch(/\/api\/v1\/learners/);
+    expect(snapshot).toContain('"operationId": "teacher_os_memory_get"');
+    expect(snapshot).toContain("/api/v1/teacher-os/memory");
   });
 });

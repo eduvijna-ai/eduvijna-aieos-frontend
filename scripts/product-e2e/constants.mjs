@@ -1,15 +1,15 @@
-/** TOS-DEV10-I02 governed pins (Library + prior Teacher OS product E2E). */
+/** TOS-DEV10-I03R3 governed pins (Library + Teacher Memory / prior product E2E). */
 
 export const FRONTEND_BASE_SHA =
   "08887e3f6a427e8e3f5aed852fb3d9a4031a9ff4";
 
 export const BACKEND_PIN_SHA =
-  "01c2c54a43d95427aaa3e9a81ceaafe033581743";
+  "070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0";
 
 export const OPENAPI_AUTHORITY_SHA =
-  "81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87";
+  "ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB";
 
-export const EXPECTED_MIGRATION_HEAD = "tosd090002";
+export const EXPECTED_MIGRATION_HEAD = "tosd100001";
 
 /** Synthetic development tenant/principal from backend teacher_os_review_scenario. */
 export const DEV_TENANT_ID = "71b5fb49-2bdb-56c3-ab7c-3b33e92a89f0";

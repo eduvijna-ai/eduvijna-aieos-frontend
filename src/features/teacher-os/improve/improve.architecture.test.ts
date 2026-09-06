@@ -16,13 +16,13 @@ function read(relativePath: string): string {
 describe("TOS-DEV09-I03 Improve architecture / contract", () => {
   it("pins Backend OpenAPI consumer authority", () => {
     const sync = read("scripts/sync-openapi-snapshot.mjs");
-    expect(sync).toContain("01c2c54a43d95427aaa3e9a81ceaafe033581743");
+    expect(sync).toContain("070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0");
     const digest = createHash("sha256")
       .update(readFileSync(path.join(repoRoot, "contracts/openapi/aieos-v1.consumer-snapshot.json")))
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87",
+      "ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB",
     );
   });
 
@@ -42,7 +42,9 @@ describe("TOS-DEV09-I03 Improve architecture / contract", () => {
     expect(page).not.toContain("createTeachingAssignment");
     expect(page).toContain("createRemediationTeachingWorkFromAssessment");
     expect(page).not.toMatch(/\/improvements/);
-    expect(page).not.toMatch(/learner|mastery|teacher.?memory|AI recommend/i);
+    expect(page).not.toMatch(/learner|mastery|AI recommend/i);
+    expect(page).not.toContain("teacherMemory");
+    expect(page).not.toContain("/teacher-os/memory");
   });
 
   it("API client posts only the dedicated remediation endpoint", () => {

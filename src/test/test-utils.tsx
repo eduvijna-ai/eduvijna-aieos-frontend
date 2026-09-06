@@ -33,7 +33,7 @@ import { ImprovePage } from "@/features/teacher-os/improve/ImprovePage";
 import { LibraryPage } from "@/features/teacher-os/library/LibraryPage";
 import { LibraryDetailPage } from "@/features/teacher-os/library/LibraryDetailPage";
 import { PlaceholderPage } from "@/features/teacher-os/placeholders/PlaceholderPage";
-import { SettingsPage } from "@/features/teacher-os/placeholders/SettingsPage";
+import { SettingsPage } from "@/features/teacher-os/settings/SettingsPage";
 import type {
   ContentResponse,
   ContentVersionResponse,

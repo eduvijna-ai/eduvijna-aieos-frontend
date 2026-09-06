@@ -2,7 +2,7 @@
 
 Reuses backend tests/conftest.py identity, migration, and runtime-grant patterns.
 NON_PRODUCTION only. Requires AIEOS_BACKEND_ROOT.
-Governed migration head: tosd090002.
+Governed migration head: tosd100001.
 """
 
 from __future__ import annotations
@@ -84,14 +84,15 @@ def main() -> int:
         head = conn.execute(
             text("SELECT version_num FROM alembic_version")
         ).scalar_one()
-    if head != "tosd090002":
-        raise RuntimeError(f"Expected migration head tosd090002; got {head}")
+    if head != "tosd100001":
+        raise RuntimeError(f"Expected migration head tosd100001; got {head}")
     provision_runtime_grants(bootstrap)
 
     report = {
         "postgres_major": 18,
         "migration_head": head,
         "runtime_database_url": r_url,
+        "bootstrap_database_url": b_url,
         "started_container": started_container,
         "container_name": os.environ.get("PRODUCT_E2E_PG_CONTAINER", "aieos-product-e2e-pg")
         if started_container

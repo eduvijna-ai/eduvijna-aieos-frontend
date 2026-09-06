@@ -1,17 +1,18 @@
 # Product E2E
 
 Real-stack Playwright lane proving Assignment regression, TeachingExecution
-regression, ClassroomAssessment, and Improve (remediation create) product
-journeys against live HTTP — **no `/api` Playwright mocks**.
+regression, ClassroomAssessment, Improve (remediation create), Library, and Teacher
+Memory (Settings preferences) product journeys against live HTTP — **no `/api`
+Playwright mocks**.
 
-## Governed pins (TOS-DEV09 Backend authority)
+## Governed pins (TOS-DEV10 Backend authority)
 
 | Artifact | SHA |
 |----------|-----|
 | Frontend base | `08887e3f6a427e8e3f5aed852fb3d9a4031a9ff4` |
-| Backend read-only pin | `01c2c54a43d95427aaa3e9a81ceaafe033581743` |
-| OpenAPI authority | `81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87` |
-| Migration head | `tosd090002` |
+| Backend read-only pin | `070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0` |
+| OpenAPI authority | `ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB` |
+| Migration head | `tosd100001` |
 
 ## Non-production boundary
 
@@ -83,6 +84,7 @@ Scenario markers:
 | `e2e-product/teacher-os-classroom-assessment.product.spec.ts` | ClassroomAssessment CASE A journey + I03R1 stale VOID concurrency |
 | `e2e-product/teacher-os-improve.product.spec.ts` | DEV09 Improve Assess→Improve→remediation Work (TOS-DEV09-I04) |
 | `e2e-product/teacher-os-library.product.spec.ts` | DEV10 Library publish→list→filter→open (TOS-DEV10-I02) |
+| `e2e-product/teacher-os-memory.product.spec.ts` | DEV10 Teacher Memory Settings preferences persistence + ETag update |
 
 Assessment journey (CASE A):
 
@@ -99,9 +101,20 @@ Assess “Improve this class” → Improve goal/context/confirm → real
 Assign / Teach → Today's Mission identifies remediation → CTA opens the exact
 remediation Work.
 
+Library journey (TOS-DEV10-I02):
+
+Publish approved worksheet → Library list shows published item → filter → open
+detail / version.
+
+Memory journey (TOS-DEV10-I03):
+
+Settings → Teaching preferences → defaults (404 / not saved yet) → change →
+Save (create) → reload → same values → change one → Save (If-Match update) →
+reload → same. No Teacher Memory primary nav item.
+
 ## CI
 
-The `product-e2e` workflow job checks out Backend `62733e3a…`, verifies the pin
-SHA, provisions PostgreSQL 18, migrates to `tosd090002`, starts the development
+The `product-e2e` workflow job checks out Backend `070e479…`, verifies the pin
+SHA, provisions PostgreSQL 18, migrates to `tosd100001`, starts the development
 app, and runs `pnpm test:e2e:product` (Assignment + TeachingExecution +
-ClassroomAssessment + Improve product specs).
+ClassroomAssessment + Improve + Library + Memory product specs).

@@ -21,8 +21,8 @@ SCENARIO_MARKER = (
     "[TOS-DEV08-I04:product-e2e] ClassroomAssessment real-stack product journey"
 )
 SCENARIO_ID = "tos-dev08-i04-classroom-assessment-product-e2e"
-BACKEND_PIN_SHA = "01c2c54a43d95427aaa3e9a81ceaafe033581743"
-EXPECTED_MIGRATION_HEAD = "tosd090002"
+BACKEND_PIN_SHA = "070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0"
+EXPECTED_MIGRATION_HEAD = "tosd100001"
 
 
 def _backend_root() -> Path:
@@ -66,20 +66,30 @@ def main() -> int:
     from tests.domains.teaching.worksheet_fixtures import valid_worksheet_model
 
     runtime_url = os.environ.get("PRODUCT_E2E_RUNTIME_DATABASE_URL")
-    if not runtime_url:
-        db_report = Path(
-            os.environ.get(
-                "PRODUCT_E2E_DB_REPORT",
-                Path(__file__).resolve().parents[2] / "tmp" / "product-e2e-db.json",
-            )
+    bootstrap_url = os.environ.get("PRODUCT_E2E_BOOTSTRAP_DATABASE_URL")
+    db_report_path = Path(
+        os.environ.get(
+            "PRODUCT_E2E_DB_REPORT",
+            Path(__file__).resolve().parents[2] / "tmp" / "product-e2e-db.json",
         )
-        if not db_report.is_file():
+    )
+    db_report: dict | None = None
+    if db_report_path.is_file():
+        db_report = json.loads(db_report_path.read_text(encoding="utf-8"))
+    if not runtime_url:
+        if not db_report:
             raise SystemExit(
                 "PRODUCT_E2E_RUNTIME_DATABASE_URL or PRODUCT_E2E_DB_REPORT required"
             )
-        runtime_url = json.loads(db_report.read_text(encoding="utf-8"))[
-            "runtime_database_url"
-        ]
+        runtime_url = db_report["runtime_database_url"]
+    if not bootstrap_url:
+        if db_report and db_report.get("bootstrap_database_url"):
+            bootstrap_url = db_report["bootstrap_database_url"]
+        else:
+            raise SystemExit(
+                "PRODUCT_E2E_BOOTSTRAP_DATABASE_URL or bootstrap_database_url in "
+                "PRODUCT_E2E_DB_REPORT required to upsert HUMAN teacher principal"
+            )
 
     fixture_path = Path(
         os.environ.get(
@@ -91,6 +101,30 @@ def main() -> int:
     tenant_id = SYNTHETIC_TENANT_ID
     principal_id = SYNTHETIC_PRINCIPAL_ID
     engine = create_engine(runtime_url)
+    bootstrap_engine = create_engine(bootstrap_url)
+
+    # Teacher Memory gates on SoR principal_kind=HUMAN; upsert via bootstrap role
+    # (runtime role lacks INSERT on security.principals).
+    with bootstrap_engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO security.principals (
+                    principal_id, status, principal_kind, created_at, updated_at
+                ) VALUES (
+                    :principal_id, 'ACTIVE', 'HUMAN',
+                    clock_timestamp(), clock_timestamp()
+                )
+                ON CONFLICT (principal_id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    principal_kind = EXCLUDED.principal_kind,
+                    updated_at = EXCLUDED.updated_at
+                """
+            ),
+            {"principal_id": principal_id},
+        )
+    bootstrap_engine.dispose()
+
     gateway = FakeStructuredModelGateway(
         result_factory=lambda _request: valid_worksheet_model(),
         provider_id="fake",

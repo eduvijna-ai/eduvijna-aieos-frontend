@@ -10,18 +10,34 @@ This directory holds a **consumer snapshot** of the AIEOS HTTP contract for fron
 - The file `aieos-v1.consumer-snapshot.json` in this frontend repo is **NON-AUTHORITATIVE**.
   It must not be treated as the source of truth for API behaviour.
 
-## Snapshot provenance (TOS-DEV10-I02)
+## Snapshot provenance (TOS-DEV10-I03R3)
 
 | Field | Value |
 |-------|--------|
 | Source repo | `eduvijna-aieos-backend` |
 | Source path | `contracts/openapi/aieos-v1.json` |
-| Source SHA | `01c2c54a43d95427aaa3e9a81ceaafe033581743` |
-| Authoritative OpenAPI SHA-256 | `81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87` |
+| Source SHA | `070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0` |
+| Authoritative OpenAPI SHA-256 | `ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB` |
 | Consumer file | `contracts/openapi/aieos-v1.consumer-snapshot.json` |
-| Consumer file SHA-256 | `81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87` |
+| Consumer file SHA-256 | `ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB` |
 
-Operations consumed by this frontend at this SHA (Improve / remediation create additions):
+Operations consumed by this frontend at this SHA (Teacher Memory / Settings preferences):
+
+| Operation ID | Method | Path |
+|--------------|--------|------|
+| `teacher_os_memory_get` | GET | `/api/v1/teacher-os/memory` |
+| `teacher_os_memory_create` | POST | `/api/v1/teacher-os/memory` |
+| `teacher_os_memory_update` | PUT | `/api/v1/teacher-os/memory` |
+
+Also retained from prior slices (Library):
+
+| Operation ID | Method | Path |
+|--------------|--------|------|
+| `teacher_os_library_list` | GET | `/api/v1/teacher-os/library` |
+| `teacher_os_library_get` | GET | `/api/v1/teacher-os/library/{content_id}` |
+| `teacher_os_library_version_get` | GET | `/api/v1/teacher-os/library/{content_id}/versions/{version_id}` |
+
+Also retained from prior slices (Improve / remediation create):
 
 | Operation ID | Method | Path |
 |--------------|--------|------|
@@ -81,7 +97,11 @@ Also retained from earlier slices:
 
 | Slice | Source SHA |
 |-------|------------|
-| TOS-DEV09-I03 | `01c2c54a43d95427aaa3e9a81ceaafe033581743` |
+| TOS-DEV10-I03R3 pre-CI-fix | `85b3aee257ebfbf70ca1954aa20ae320b150ec47` |
+| TOS-DEV10-I03R1 | `2f034cfe3073db3b7da42f67bf778ea7da5eda4c` |
+| TOS-DEV10-I03 | `79d50f04773ceeb1eca91f7b6561cee2ef2f3151` |
+| TOS-DEV10-I02 | `01c2c54a43d95427aaa3e9a81ceaafe033581743` |
+| TOS-DEV09-I03 | `62733e3ad0d48887f3cd1e1a4486839170a5d651` |
 | TOS-DEV08-I03 | `1fe28f4fd1a2a2070aa69d67daa49cd53ba5820d` |
 | TOS-DEV07-I03 | `551e46e004233421746e4df2789c07367702528b` |
 | TOS-DEV06-I04 | `06e05277e73e0c71172cae4904efb37d771c3fad` |
@@ -106,14 +126,14 @@ overrides when the default location or pinned SHA is not current:
 
 ```bash
 AIEOS_BACKEND_ROOT=../eduvijna-aieos-backend \
-AIEOS_BACKEND_OPENAPI_SHA=01c2c54a43d95427aaa3e9a81ceaafe033581743 \
+AIEOS_BACKEND_OPENAPI_SHA=070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0 \
   pnpm sync:openapi
 ```
 
 Verify the consumer file hash after sync:
 
 ```bash
-# Expected: 81C2EC1BC0C14E3F97A5FEECD3A5768BFAC55982BBF0E1EF4E8654138525CE87
+# Expected: ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB
 ```
 
 See `scripts/sync-openapi-snapshot.mjs` for how to refresh from a known backend checkout/SHA.
