@@ -401,12 +401,13 @@ test.describe("TOS-DEV09-I04 Improve Product E2E", () => {
       new RegExp(`/teacher-os/work/${state.remediationWorkId}`),
     );
     await expect(
-      page.getByRole("heading", { name: REMEDIATION_GOAL }),
+      page.getByRole("heading", { name: /^Fraction comparison$/i }),
     ).toBeVisible();
-    await expect(page.getByText("Remediate class")).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: /Saved remediation preparation/i }),
-    ).toBeVisible();
+    await expect(page.locator(".work-hero-outcome p")).toHaveText(
+      REMEDIATION_GOAL,
+    );
+    await expect(page.getByText(/Remediate class/)).toBeVisible();
+    await expect(page.getByText(/Remediation preparation/)).toBeVisible();
     await expect(
       page.getByRole("button", { name: /Create preparation kit/i }),
     ).toBeVisible();
@@ -443,9 +444,12 @@ test.describe("TOS-DEV09-I04 Improve Product E2E", () => {
     await page.goto(`/teacher-os/work/${state.remediationWorkId}`);
     await connectDevSession(page);
     await expect(
-      page.getByRole("heading", { name: REMEDIATION_GOAL }),
+      page.getByRole("heading", { name: /^Fraction comparison$/i }),
     ).toBeVisible();
-    await expect(page.getByText("Remediate class")).toBeVisible();
+    await expect(page.locator(".work-hero-outcome p")).toHaveText(
+      REMEDIATION_GOAL,
+    );
+    await expect(page.getByText(/Remediate class/)).toBeVisible();
     await expect(
       page.getByRole("button", { name: /Create preparation kit/i }),
     ).toBeVisible();
@@ -543,9 +547,12 @@ test.describe("TOS-DEV09-I04 Improve Product E2E", () => {
       new RegExp(`/teacher-os/work/${state.remediationWorkId}`),
     );
     await expect(
-      page.getByRole("heading", { name: REMEDIATION_GOAL }),
+      page.getByRole("heading", { name: /^Fraction comparison$/i }),
     ).toBeVisible();
-    await expect(page.getByText("Remediate class")).toBeVisible();
+    await expect(page.locator(".work-hero-outcome p")).toHaveText(
+      REMEDIATION_GOAL,
+    );
+    await expect(page.getByText(/Remediate class/)).toBeVisible();
     await expect(
       page.getByRole("button", { name: /Create preparation kit/i }),
     ).toBeVisible();

@@ -7,18 +7,14 @@ import { userMessageForApiError } from "@/shared/errors/ApiError";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ErrorState } from "@/shared/components/ErrorState";
 import { LoadingState } from "@/shared/components/LoadingState";
+import { StatusBadge } from "@/shared/components/StatusBadge";
+import { formatSubmittedAt } from "@/shared/time/teacherDates";
+import {
+  originQueueLabel,
+  reviewArtifactTypeLabel,
+  reviewStatusLabel,
+} from "./reviewPresentation";
 import "./review.css";
-
-function formatSubmittedAt(value: string): string {
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return value;
-  }
-}
 
 export function ReviewQueuePage() {
   const { isConnected, isProduction } = useSession();
@@ -74,14 +70,14 @@ export function ReviewQueuePage() {
 
   return (
     <article className="stack review-queue-page">
-      <header>
+      <header className="review-queue-hero">
         <p className="muted">
           <Link to="/teacher-os/today">Today</Link> · Review
         </p>
         <h1>Review Queue</h1>
-        <p className="muted">
-          Artifacts awaiting teacher judgment. Open an item to inspect payload
-          and decide.
+        <p>
+          Resources waiting for your review. Check each resource before
+          approving it for publication.
         </p>
       </header>
 
@@ -105,7 +101,7 @@ export function ReviewQueuePage() {
         {status === "ready" && items.length === 0 ? (
           <EmptyState
             title="Queue is empty"
-            description="There are no pending review items on this page."
+            description="There are no resources waiting for review."
           />
         ) : null}
       </div>
@@ -116,43 +112,39 @@ export function ReviewQueuePage() {
             Pending items
           </h2>
           <ul className="review-queue-list">
-            {items.map((item) => (
-              <li key={`${item.content_id}:${item.version_id}`} className="panel">
-                <div className="review-queue-item">
-                  <div>
-                    <h3>{item.title}</h3>
-                    <dl className="review-meta">
-                      <div>
-                        <dt>Content type</dt>
-                        <dd>{item.content_type}</dd>
+            {items.map((item) => {
+              const typeLabel = reviewArtifactTypeLabel(item.content_type);
+              const statusLabel = reviewStatusLabel(item.artifact_status);
+              const origin = originQueueLabel(item.origin);
+              return (
+                <li key={`${item.content_id}:${item.version_id}`}>
+                  <article className="panel review-queue-card">
+                    <div className="review-queue-item">
+                      <div className="review-queue-copy">
+                        <div className="review-queue-card-head">
+                          <p className="review-queue-kind">{typeLabel}</p>
+                          <StatusBadge label={statusLabel} />
+                        </div>
+                        <h3>{item.title}</h3>
+                        <p className="muted review-queue-submitted">
+                          Submitted {formatSubmittedAt(item.submitted_at)}
+                        </p>
+                        {origin ? (
+                          <p className="muted review-queue-origin">{origin}</p>
+                        ) : null}
                       </div>
-                      <div>
-                        <dt>Version</dt>
-                        <dd>{item.version_number}</dd>
-                      </div>
-                      <div>
-                        <dt>Status</dt>
-                        <dd>{item.artifact_status}</dd>
-                      </div>
-                      <div>
-                        <dt>Origin</dt>
-                        <dd>{item.origin}</dd>
-                      </div>
-                      <div>
-                        <dt>Submitted</dt>
-                        <dd>{formatSubmittedAt(item.submitted_at)}</dd>
-                      </div>
-                    </dl>
-                  </div>
-                  <Link
-                    className="btn"
-                    to={`/teacher-os/review/${item.content_id}/versions/${item.version_id}`}
-                  >
-                    Open artifact
-                  </Link>
-                </div>
-              </li>
-            ))}
+                      <Link
+                        className="btn"
+                        to={`/teacher-os/review/${item.content_id}/versions/${item.version_id}`}
+                        aria-label={`Review ${item.title}`}
+                      >
+                        Review
+                      </Link>
+                    </div>
+                  </article>
+                </li>
+              );
+            })}
           </ul>
           {nextCursor ? (
             <div className="review-load-more">

@@ -166,7 +166,7 @@ describe("TOS-DEV05R1 lifecycle helpers", () => {
       other: 0,
     });
     expect(formatArtifactLifecycleSummary(summary)).toBe(
-      "6 artifacts · 3 in review · 2 approved · 1 published",
+      "6 resources prepared · 3 awaiting review · 2 approved · 1 published",
     );
   });
 });

@@ -10,11 +10,25 @@ import { ApiError, userMessageForApiError } from "@/shared/errors/ApiError";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ErrorState } from "@/shared/components/ErrorState";
 import { LoadingState } from "@/shared/components/LoadingState";
+import { StatusBadge } from "@/shared/components/StatusBadge";
+import { ArtifactRenderer } from "@/features/teacher-os/artifacts/ArtifactRenderer";
+import { canonicalContentType } from "@/features/teacher-os/artifacts/artifactLabels";
 import { safeWorkReturnPath } from "@/features/teacher-os/work/lifecycle";
-import { SafeJsonPayload } from "./SafeJsonPayload";
+import { formatSubmittedDay } from "@/shared/time/teacherDates";
+import {
+  originPreparedLabel,
+  reviewArtifactTypeLabel,
+  reviewPageTitle,
+  reviewStatusLabel,
+} from "./reviewPresentation";
 import "./review.css";
 
 type ActionMode = "idle" | "request-changes" | "reject";
+
+const OUT_OF_DATE_MESSAGE =
+  "This page is out of date. Reload and try again.";
+const STALE_DECISION_MESSAGE =
+  "This resource was updated elsewhere. We've loaded the latest version. Review it and try again.";
 
 export function ReviewDetailPage() {
   const { contentId = "", versionId = "" } = useParams();
@@ -91,9 +105,7 @@ export function ReviewDetailPage() {
     body: { comment?: string | null },
   ) {
     if (!etag) {
-      setActionMessage(
-        "Missing ETag from detail response (client contract error). Refresh and retry.",
-      );
+      setActionMessage(OUT_OF_DATE_MESSAGE);
       return;
     }
     setBusy(true);
@@ -103,7 +115,7 @@ export function ReviewDetailPage() {
       returnAfterDecision(action);
     } catch (error) {
       if (error instanceof ApiError && error.code === "precondition_failed") {
-        setActionMessage(userMessageForApiError(error));
+        setActionMessage(STALE_DECISION_MESSAGE);
         await loadDetail({ silent: true });
       } else {
         setActionMessage(userMessageForApiError(error));
@@ -139,9 +151,21 @@ export function ReviewDetailPage() {
     });
   }
 
+  const typeLabel = detail ? reviewArtifactTypeLabel(detail.content_type) : null;
+  const pageTitle = detail
+    ? reviewPageTitle(detail.content_type)
+    : "Review resource";
+  const statusLabel = detail
+    ? reviewStatusLabel(detail.artifact_status)
+    : null;
+  const origin = detail ? originPreparedLabel(detail.origin) : "";
+  const rendererType = detail
+    ? canonicalContentType(detail.content_type) || detail.content_type
+    : "";
+
   return (
     <article className="stack review-detail-page">
-      <header>
+      <header className="review-hero">
         <p className="muted">
           {workReturnPath ? (
             <>
@@ -149,24 +173,39 @@ export function ReviewDetailPage() {
             </>
           ) : (
             <>
-              <Link to="/teacher-os/review">Review Queue</Link> · Artifact
+              <Link to="/teacher-os/review">Review Queue</Link> · Review
             </>
           )}
         </p>
-        <h1>{detail?.title ?? "Review artifact"}</h1>
+        <div className="review-hero-title-row">
+          <h1>{pageTitle}</h1>
+          {statusLabel ? <StatusBadge label={statusLabel} /> : null}
+        </div>
+        {detail ? (
+          <h2 className="review-hero-resource">{detail.title}</h2>
+        ) : null}
+        {detail ? (
+          <p className="muted review-hero-meta">
+            {origin ? `${origin} · ` : null}
+            Version {detail.version_number}
+            {detail.submitted_at
+              ? ` · Submitted ${formatSubmittedDay(detail.submitted_at)}`
+              : null}
+          </p>
+        ) : null}
       </header>
 
       <div className="status-region" aria-live="polite">
-        {status === "loading" ? <LoadingState label="Loading artifact…" /> : null}
+        {status === "loading" ? <LoadingState label="Loading resource…" /> : null}
         {status === "unavailable" ? (
           <EmptyState
             title="Session required"
-            description="Connect a DEV session to load this review artifact."
+            description="Connect a DEV session to load this review resource."
           />
         ) : null}
         {status === "error" ? (
           <ErrorState
-            title="Could not load artifact"
+            title="Could not load resource"
             message={errorMessage}
             onRetry={() => void loadDetail()}
           />
@@ -175,56 +214,31 @@ export function ReviewDetailPage() {
 
       {status === "ready" && detail ? (
         <>
-          <section className="panel" aria-labelledby="detail-meta-heading">
-            <h2 id="detail-meta-heading">Metadata</h2>
-            <dl className="review-meta">
-              <div>
-                <dt>Content type</dt>
-                <dd>{detail.content_type}</dd>
-              </div>
-              <div>
-                <dt>Version</dt>
-                <dd>{detail.version_number}</dd>
-              </div>
-              <div>
-                <dt>Status</dt>
-                <dd>{detail.artifact_status}</dd>
-              </div>
-              <div>
-                <dt>Origin</dt>
-                <dd>{detail.origin}</dd>
-              </div>
-              <div>
-                <dt>Submitted</dt>
-                <dd>{detail.submitted_at}</dd>
-              </div>
-              <div>
-                <dt>Schema</dt>
-                <dd>
-                  {detail.schema_id} v{detail.schema_version}
-                </dd>
-              </div>
-              <div>
-                <dt>Aggregate revision</dt>
-                <dd>{detail.aggregate_revision}</dd>
-              </div>
-              <div>
-                <dt>ETag</dt>
-                <dd>
-                  <code>{etag ?? "missing"}</code>
-                </dd>
-              </div>
-            </dl>
-            <p className="muted">{detail.description}</p>
+          <section
+            className="panel review-document"
+            aria-labelledby="review-document-heading"
+          >
+            <h2 id="review-document-heading" className="sr-only">
+              {typeLabel ?? "Resource"}
+            </h2>
+            <ArtifactRenderer
+              contentType={rendererType}
+              payload={detail.payload}
+            />
           </section>
 
-          <section className="panel" aria-labelledby="payload-heading">
-            <h2 id="payload-heading">Payload</h2>
-            <SafeJsonPayload payload={detail.payload} />
-          </section>
-
-          <section className="panel" aria-labelledby="actions-heading">
-            <h2 id="actions-heading">Review decision</h2>
+          <section
+            className="panel review-decision"
+            aria-labelledby="actions-heading"
+          >
+            <h2 id="actions-heading">Your decision</h2>
+            <p>
+              Review the resource first, then choose what happens next.
+            </p>
+            <p className="muted">
+              Approval confirms this version is ready. Publishing remains a
+              separate step.
+            </p>
             <div className="review-actions">
               <button
                 type="button"
@@ -263,31 +277,36 @@ export function ReviewDetailPage() {
             {mode === "request-changes" ? (
               <form className="review-action-form" onSubmit={onRequestChanges}>
                 <label htmlFor="request-changes-comment">
-                  Comment (required)
+                  What should be changed?
+                  <span id="request-changes-hint" className="muted review-field-hint">
+                    Describe what you want revised before approving this resource.
+                  </span>
                   <textarea
                     id="request-changes-comment"
                     name="comment"
                     required
                     rows={4}
                     value={comment}
+                    aria-describedby="request-changes-hint"
                     onChange={(e) => setComment(e.target.value)}
                   />
                 </label>
                 <button type="submit" className="btn" disabled={busy}>
-                  Submit request changes
+                  Send change request
                 </button>
               </form>
             ) : null}
 
             {mode === "reject" ? (
               <form className="review-action-form" onSubmit={onReject}>
+                <p className="review-reject-lead">Reject this resource</p>
                 <label className="review-confirm">
                   <input
                     type="checkbox"
                     checked={rejectConfirmed}
                     onChange={(e) => setRejectConfirmed(e.target.checked)}
                   />
-                  I confirm I want to reject this artifact
+                  I understand this resource will be rejected.
                 </label>
                 <label htmlFor="reject-comment">
                   Comment (optional)
@@ -304,7 +323,7 @@ export function ReviewDetailPage() {
                   className="btn btn-danger"
                   disabled={busy || !rejectConfirmed}
                 >
-                  Confirm reject
+                  Reject this resource
                 </button>
               </form>
             ) : null}

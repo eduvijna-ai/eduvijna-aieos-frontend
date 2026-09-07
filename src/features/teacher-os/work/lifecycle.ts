@@ -195,9 +195,11 @@ export function summarizeResolvedLifecycle(
 export function formatArtifactLifecycleSummary(
   summary: ArtifactLifecycleSummary,
 ): string {
-  const parts = [`${summary.total} artifact${summary.total === 1 ? "" : "s"}`];
+  const parts = [
+    `${summary.total} resource${summary.total === 1 ? "" : "s"} prepared`,
+  ];
   if (summary.inReview > 0) {
-    parts.push(`${summary.inReview} in review`);
+    parts.push(`${summary.inReview} awaiting review`);
   }
   if (summary.approved > 0) {
     parts.push(`${summary.approved} approved`);

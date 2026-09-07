@@ -31,6 +31,8 @@ import {
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ErrorState } from "@/shared/components/ErrorState";
 import { LoadingState } from "@/shared/components/LoadingState";
+import { StatusBadge } from "@/shared/components/StatusBadge";
+import { formatLessonDate } from "@/shared/time/teacherDates";
 import {
   buildRefineBody,
   EMPTY_WORK_FORM,
@@ -42,6 +44,9 @@ import {
   orderPreparationArtifacts,
   preparationArtifactLabel,
 } from "./preparationKit";
+import { artifactPurposeCopy } from "./artifactPurpose";
+import { EducationalQualitySummary } from "./EducationalQualitySummary";
+import { formatImproveIntentLabel } from "../improve/improvePresentation";
 import {
   artifactViewPath,
   formatArtifactLifecycleSummary,
@@ -50,8 +55,20 @@ import {
   summarizeResolvedLifecycle,
   type ArtifactLifecycleActions,
 } from "./lifecycle";
-import { formatImproveIntentLabel } from "../improve/improvePresentation";
 import "./work.css";
+
+const OUT_OF_DATE_MESSAGE =
+  "This page is out of date. Reload and try again.";
+const STALE_SAVE_MESSAGE =
+  "This preparation was updated elsewhere. We've loaded the latest version. Review your changes and try again.";
+
+function lessonTitle(work: TeachingWork): string {
+  return work.topic?.trim() || work.goal_text;
+}
+
+function lessonContextLine(work: TeachingWork): string {
+  return [work.class_label, work.subject].filter(Boolean).join(" · ");
+}
 
 function ArtifactActions(props: {
   item: WorkArtifactItem;
@@ -62,6 +79,8 @@ function ArtifactActions(props: {
   onPublish: (item: WorkArtifactItem) => void;
 }) {
   const { actions } = props;
+  const viewClass =
+    actions.showPublish || actions.showReview ? "btn btn-secondary" : "btn";
   return (
     <div className="work-actions">
       {actions.showReview ? (
@@ -70,14 +89,6 @@ function ArtifactActions(props: {
           to={reviewPathForArtifact(props.item, props.workId)}
         >
           Review {props.kindLabel}
-        </Link>
-      ) : null}
-      {actions.showView ? (
-        <Link
-          className="btn btn-secondary"
-          to={artifactViewPath(props.workId, props.item)}
-        >
-          View
         </Link>
       ) : null}
       {actions.showPublish ? (
@@ -90,6 +101,14 @@ function ArtifactActions(props: {
         >
           Publish
         </button>
+      ) : null}
+      {actions.showView ? (
+        <Link
+          className={viewClass}
+          to={artifactViewPath(props.workId, props.item)}
+        >
+          View
+        </Link>
       ) : null}
     </div>
   );
@@ -208,9 +227,7 @@ export function WorkPage() {
       return;
     }
     if (!etag) {
-      setSaveMessage(
-        "Missing ETag from the last read (client contract error). Reload and retry.",
-      );
+      setSaveMessage(OUT_OF_DATE_MESSAGE);
       return;
     }
     const body = buildRefineBody(work, form);
@@ -226,15 +243,16 @@ export function WorkPage() {
       setWork(response.data);
       setEtag(response.etag);
       setForm(formFromWork(response.data));
-      setSaveMessage(
-        `Saved. This preparation is now at revision ${response.data.aggregate_revision}.`,
-      );
+      setSaveMessage("Saved. Your preparation details have been updated.");
     } catch (error) {
       if (error instanceof ApiError && error.code === "precondition_failed") {
         await loadWork({ silent: true });
-        setSaveMessage(
-          "This preparation changed elsewhere since you loaded it. The latest saved values are shown — review them and save again.",
-        );
+        setSaveMessage(STALE_SAVE_MESSAGE);
+      } else if (
+        error instanceof ApiError &&
+        error.code === "precondition_required"
+      ) {
+        setSaveMessage(OUT_OF_DATE_MESSAGE);
       } else {
         setSaveMessage(userMessageForApiError(error));
       }
@@ -247,9 +265,7 @@ export function WorkPage() {
     if (!work) return;
     if (prepareInFlightRef.current) return;
     if (!etag) {
-      setPrepareMessage(
-        "Missing ETag from the last read (client contract error). Reload and retry.",
-      );
+      setPrepareMessage(OUT_OF_DATE_MESSAGE);
       return;
     }
 
@@ -261,7 +277,7 @@ export function WorkPage() {
       await prepareTeachingWork(work.work_id, etag, idempotencyKey);
       await loadWork({ silent: true });
       setPrepareMessage(
-        "Preparation kit created. Each artifact is waiting for your review — nothing is approved or published yet.",
+        "Preparation kit created. Each resource is waiting for your review — nothing is approved or published yet.",
       );
     } catch (error) {
       const problemCode = problemCodeFromApiError(error);
@@ -273,7 +289,7 @@ export function WorkPage() {
       ) {
         await loadWork({ silent: true });
         setPrepareMessage(
-          "This preparation changed since you loaded it. The latest values are shown — create the preparation kit again from this revision.",
+          "This preparation changed since you loaded it. The latest values are shown — create the preparation kit again.",
         );
       } else if (problemCode === "work_generation_in_progress") {
         setPrepareMessage(
@@ -283,11 +299,11 @@ export function WorkPage() {
         try {
           await loadArtifacts(work.work_id);
           setPrepareMessage(
-            "A preparation kit already exists for this Work. Review the artifacts below.",
+            "A preparation kit already exists for this lesson. Review the resources below.",
           );
         } catch {
           setPrepareMessage(
-            "A preparation kit already exists for this Work. Reload to open it.",
+            "A preparation kit already exists for this lesson. Reload to open it.",
           );
         }
       } else if (problemCode === "preparation_recovery_invariant_violation") {
@@ -311,7 +327,7 @@ export function WorkPage() {
         error instanceof ApiError &&
         error.code === "precondition_required"
       ) {
-        setPrepareMessage(userMessageForApiError(error));
+        setPrepareMessage(OUT_OF_DATE_MESSAGE);
       } else {
         setPrepareMessage(userMessageForApiError(error));
       }
@@ -354,7 +370,7 @@ export function WorkPage() {
         switch (error.reason) {
           case "already_published":
             setPublishMessage(
-              "That exact version is already published. Reloaded the latest artifact states.",
+              "That exact version is already published. Reloaded the latest resource states.",
             );
             break;
           case "version_drift":
@@ -364,13 +380,11 @@ export function WorkPage() {
             break;
           case "not_approved":
             setPublishMessage(
-              "This artifact is no longer approved. Reloaded the latest states.",
+              "This resource is no longer approved. Reloaded the latest states.",
             );
             break;
           case "missing_etag":
-            setPublishMessage(
-              "Missing ETag from Content GET (client contract error). Reload and retry.",
-            );
+            setPublishMessage(OUT_OF_DATE_MESSAGE);
             break;
           default:
             setPublishMessage(
@@ -383,7 +397,7 @@ export function WorkPage() {
       ) {
         await loadWork({ silent: true });
         setPublishMessage(
-          "This content changed since you loaded it. Reloaded the latest state — review and publish again if still eligible.",
+          "This resource changed since you loaded it. Reloaded the latest state — review and publish again if still eligible.",
         );
       } else {
         const problemCode = problemCodeFromApiError(error);
@@ -392,7 +406,7 @@ export function WorkPage() {
           problemCode === "governance_rejected"
         ) {
           setPublishMessage(
-            "Publication was rejected by governance. Adjust the artifact and try again later.",
+            "Publication was rejected by governance. Adjust the resource and try again later.",
           );
         } else {
           setPublishMessage(userMessageForApiError(error));
@@ -427,12 +441,49 @@ export function WorkPage() {
 
   return (
     <article className="stack work-page">
-      <header>
+      <header className="work-hero">
         <p className="muted">
           <Link to="/teacher-os/today">Today&apos;s Mission</Link> ·{" "}
           {workKindLabel}
         </p>
-        <h1>{work ? work.goal_text : workKindLabel}</h1>
+        <h1>{work ? lessonTitle(work) : workKindLabel}</h1>
+        {status === "ready" && work ? (
+          <>
+            {lessonContextLine(work) || work.target_date ? (
+              <p className="work-hero-meta">
+                {isRemediation
+                  ? `${formatImproveIntentLabel(work.intent_type)}${lessonContextLine(work) ? " · " : ""}`
+                  : null}
+                {lessonContextLine(work)}
+                {lessonContextLine(work) && work.target_date ? " · " : ""}
+                {work.target_date
+                  ? `Lesson: ${formatLessonDate(work.target_date)}`
+                  : null}
+              </p>
+            ) : isRemediation ? (
+              <p className="work-hero-meta">
+                {formatImproveIntentLabel(work.intent_type)}
+              </p>
+            ) : null}
+            {work.topic?.trim() ? (
+              <section
+                className="work-hero-outcome"
+                aria-labelledby="work-outcome-heading"
+              >
+                <h2 id="work-outcome-heading">Outcome</h2>
+                <p>{work.goal_text}</p>
+              </section>
+            ) : null}
+            {lifecycleSummary ? (
+              <p
+                className="work-lifecycle-summary"
+                data-testid="work-lifecycle-summary"
+              >
+                {lifecycleSummary}
+              </p>
+            ) : null}
+          </>
+        ) : null}
       </header>
 
       <div className="status-region" aria-live="polite">
@@ -456,159 +507,6 @@ export function WorkPage() {
 
       {status === "ready" && work ? (
         <>
-          <section className="panel" aria-labelledby="work-meta-heading">
-            <h2 id="work-meta-heading">
-              {isRemediation ? "Saved remediation preparation" : "Saved preparation"}
-            </h2>
-            <dl className="work-meta">
-              <div>
-                <dt>Outcome</dt>
-                <dd>{work.goal_text}</dd>
-              </div>
-              <div>
-                <dt>Class</dt>
-                <dd>{work.class_label ?? "Not set"}</dd>
-              </div>
-              <div>
-                <dt>Subject</dt>
-                <dd>{work.subject ?? "Not set"}</dd>
-              </div>
-              <div>
-                <dt>Topic</dt>
-                <dd>{work.topic ?? "Not set"}</dd>
-              </div>
-              <div>
-                <dt>Lesson date</dt>
-                <dd>{work.target_date}</dd>
-              </div>
-              <div>
-                <dt>Locale</dt>
-                <dd>{work.locale}</dd>
-              </div>
-              <div>
-                <dt>Intent</dt>
-                <dd>{formatImproveIntentLabel(work.intent_type)}</dd>
-              </div>
-              <div>
-                <dt>Revision</dt>
-                <dd>{work.aggregate_revision}</dd>
-              </div>
-              <div>
-                <dt>Created</dt>
-                <dd>{work.created_at}</dd>
-              </div>
-              <div>
-                <dt>Updated</dt>
-                <dd>{work.updated_at}</dd>
-              </div>
-            </dl>
-            <p className="muted">
-              These values come from the server on every read. Nothing about
-              this preparation is kept in the browser.
-            </p>
-          </section>
-
-          <section className="panel" aria-labelledby="work-refine-heading">
-            <h2 id="work-refine-heading">Refine this preparation</h2>
-            <form className="work-form" noValidate onSubmit={onSave}>
-              <label htmlFor="work-goal-text">
-                Outcome
-                <textarea
-                  id="work-goal-text"
-                  name="goal_text"
-                  rows={4}
-                  required
-                  maxLength={2000}
-                  value={form.goalText}
-                  onChange={(event) => update("goalText", event.target.value)}
-                />
-              </label>
-              <div className="work-grid">
-                <label htmlFor="work-class-label">
-                  Class
-                  <input
-                    id="work-class-label"
-                    name="class_label"
-                    type="text"
-                    maxLength={255}
-                    value={form.classLabel}
-                    onChange={(event) =>
-                      update("classLabel", event.target.value)
-                    }
-                  />
-                </label>
-                <label htmlFor="work-subject">
-                  Subject
-                  <input
-                    id="work-subject"
-                    name="subject"
-                    type="text"
-                    maxLength={255}
-                    value={form.subject}
-                    onChange={(event) => update("subject", event.target.value)}
-                  />
-                </label>
-                <label htmlFor="work-topic">
-                  Topic
-                  <input
-                    id="work-topic"
-                    name="topic"
-                    type="text"
-                    maxLength={255}
-                    value={form.topic}
-                    onChange={(event) => update("topic", event.target.value)}
-                  />
-                </label>
-                <label htmlFor="work-target-date">
-                  Lesson date
-                  <input
-                    id="work-target-date"
-                    name="target_date"
-                    type="date"
-                    required
-                    value={form.targetDate}
-                    onChange={(event) =>
-                      update("targetDate", event.target.value)
-                    }
-                  />
-                </label>
-                <label htmlFor="work-locale">
-                  Locale
-                  <input
-                    id="work-locale"
-                    name="locale"
-                    type="text"
-                    required
-                    maxLength={255}
-                    value={form.locale}
-                    onChange={(event) => update("locale", event.target.value)}
-                  />
-                </label>
-              </div>
-              <p className="muted">
-                Clearing an optional field removes it. Saving uses the revision
-                you loaded (<code>{etag ?? "missing"}</code>), so a conflicting
-                change elsewhere is reported instead of silently overwritten.
-              </p>
-              <div className="work-actions">
-                <button type="submit" className="btn" disabled={anyBusy}>
-                  Save changes
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  disabled={anyBusy}
-                  onClick={() => void loadWork()}
-                >
-                  Reload from server
-                </button>
-              </div>
-              <p className="status-region" role="status" aria-live="assertive">
-                {saveMessage}
-              </p>
-            </form>
-          </section>
-
           {hasKit ? (
             <section
               className="panel work-kit"
@@ -616,22 +514,15 @@ export function WorkPage() {
             >
               <h2 id="work-kit-heading">Preparation kit</h2>
               <p>
-                Six artifacts were created for this lesson. Review each one,
-                then explicitly Publish when you are ready — nothing is
-                published automatically.
+                Six resources were prepared for this lesson. Review each one,
+                then publish when you are ready — nothing is published
+                automatically.
               </p>
-              {lifecycleSummary ? (
-                <p
-                  className="work-lifecycle-summary"
-                  data-testid="work-lifecycle-summary"
-                >
-                  {lifecycleSummary}
-                </p>
-              ) : null}
               <ul className="work-kit-list">
                 {kitArtifacts.map((item) => {
                   const kindLabel = preparationArtifactLabel(item.artifact_kind);
                   const actions = lifecycleFor(item);
+                  const purpose = artifactPurposeCopy(item.artifact_kind);
                   return (
                     <li key={`${item.content_id}:${item.version_id}`}>
                       <article
@@ -641,41 +532,23 @@ export function WorkPage() {
                         data-lifecycle={actions.kind}
                         data-content-id={item.content_id}
                       >
-                        <h3 id={`kit-${item.artifact_kind}-heading`}>
-                          {kindLabel}
-                        </h3>
-                        <dl className="work-meta">
-                          <div>
-                            <dt>Title</dt>
-                            <dd>{item.title}</dd>
-                          </div>
-                          <div>
-                            <dt>Status</dt>
-                            <dd>{actions.label}</dd>
-                          </div>
-                        </dl>
+                        <div className="work-kit-card-head">
+                          <h3 id={`kit-${item.artifact_kind}-heading`}>
+                            {kindLabel}
+                          </h3>
+                          <StatusBadge
+                            label={actions.label}
+                            kind={actions.kind}
+                          />
+                        </div>
+                        <p className="work-kit-title">{item.title}</p>
+                        {purpose ? (
+                          <p className="work-kit-purpose">{purpose}</p>
+                        ) : null}
                         {item.educational_quality ? (
-                          <div className="work-eq">
-                            <h4 className="work-eq-heading">
-                              Educational checks
-                            </h4>
-                            <p className="muted">
-                              Result: {item.educational_quality.status}
-                            </p>
-                            <ul className="work-eq-list">
-                              {item.educational_quality.checks.map((check) => (
-                                <li key={check.code}>
-                                  <span className="work-eq-code">
-                                    {check.code}
-                                  </span>
-                                  {": "}
-                                  {check.passed ? "passed" : "not passed"}
-                                  {" — "}
-                                  {check.explanation}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
+                          <EducationalQualitySummary
+                            quality={item.educational_quality}
+                          />
                         ) : null}
                         <ArtifactActions
                           item={item}
@@ -707,43 +580,18 @@ export function WorkPage() {
               data-lifecycle={lifecycleFor(legacyArtifact).kind}
               data-content-id={legacyArtifact.content_id}
             >
-              <h2 id="work-artifact-heading">Worksheet draft</h2>
-              {lifecycleSummary ? (
-                <p
-                  className="work-lifecycle-summary"
-                  data-testid="work-lifecycle-summary"
-                >
-                  {lifecycleSummary}
-                </p>
-              ) : null}
-              <dl className="work-meta">
-                <div>
-                  <dt>Status</dt>
-                  <dd>{lifecycleFor(legacyArtifact).label}</dd>
-                </div>
-                <div>
-                  <dt>Title</dt>
-                  <dd>{legacyArtifact.title}</dd>
-                </div>
-              </dl>
+              <div className="work-kit-card-head">
+                <h2 id="work-artifact-heading">Worksheet draft</h2>
+                <StatusBadge
+                  label={lifecycleFor(legacyArtifact).label}
+                  kind={lifecycleFor(legacyArtifact).kind}
+                />
+              </div>
+              <p className="work-kit-title">{legacyArtifact.title}</p>
               {legacyArtifact.educational_quality ? (
-                <div className="work-eq">
-                  <h3 className="work-eq-heading">Educational checks</h3>
-                  <p className="muted">
-                    Result: {legacyArtifact.educational_quality.status}
-                  </p>
-                  <ul className="work-eq-list">
-                    {legacyArtifact.educational_quality.checks.map((check) => (
-                      <li key={check.code}>
-                        <span className="work-eq-code">{check.code}</span>
-                        {": "}
-                        {check.passed ? "passed" : "not passed"}
-                        {" — "}
-                        {check.explanation}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <EducationalQualitySummary
+                  quality={legacyArtifact.educational_quality}
+                />
               ) : null}
               <ArtifactActions
                 item={legacyArtifact}
@@ -786,6 +634,110 @@ export function WorkPage() {
               </p>
             </section>
           ) : null}
+
+          <details className="panel work-edit" open={!hasKit}>
+            <summary className="work-edit-summary">Edit preparation</summary>
+            <section aria-labelledby="work-refine-heading">
+              <h2 id="work-refine-heading">Refine this preparation</h2>
+              <form className="work-form" noValidate onSubmit={onSave}>
+                <label htmlFor="work-goal-text">
+                  Outcome
+                  <textarea
+                    id="work-goal-text"
+                    name="goal_text"
+                    rows={4}
+                    required
+                    maxLength={2000}
+                    value={form.goalText}
+                    onChange={(event) => update("goalText", event.target.value)}
+                  />
+                </label>
+                <div className="work-grid">
+                  <label htmlFor="work-class-label">
+                    Class
+                    <input
+                      id="work-class-label"
+                      name="class_label"
+                      type="text"
+                      maxLength={255}
+                      value={form.classLabel}
+                      onChange={(event) =>
+                        update("classLabel", event.target.value)
+                      }
+                    />
+                  </label>
+                  <label htmlFor="work-subject">
+                    Subject
+                    <input
+                      id="work-subject"
+                      name="subject"
+                      type="text"
+                      maxLength={255}
+                      value={form.subject}
+                      onChange={(event) => update("subject", event.target.value)}
+                    />
+                  </label>
+                  <label htmlFor="work-topic">
+                    Topic
+                    <input
+                      id="work-topic"
+                      name="topic"
+                      type="text"
+                      maxLength={255}
+                      value={form.topic}
+                      onChange={(event) => update("topic", event.target.value)}
+                    />
+                  </label>
+                  <label htmlFor="work-target-date">
+                    Lesson date
+                    <input
+                      id="work-target-date"
+                      name="target_date"
+                      type="date"
+                      required
+                      value={form.targetDate}
+                      onChange={(event) =>
+                        update("targetDate", event.target.value)
+                      }
+                    />
+                  </label>
+                  <label htmlFor="work-locale">
+                    Locale
+                    <input
+                      id="work-locale"
+                      name="locale"
+                      type="text"
+                      required
+                      maxLength={255}
+                      value={form.locale}
+                      onChange={(event) => update("locale", event.target.value)}
+                    />
+                  </label>
+                </div>
+                <div className="work-actions">
+                  <button type="submit" className="btn" disabled={anyBusy}>
+                    Save changes
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={anyBusy}
+                    onClick={() => void loadWork()}
+                  >
+                    Reload from server
+                  </button>
+                </div>
+                <p
+                  className="status-region"
+                  role="status"
+                  aria-live="assertive"
+                  data-testid="work-save-status"
+                >
+                  {saveMessage}
+                </p>
+              </form>
+            </section>
+          </details>
         </>
       ) : null}
     </article>

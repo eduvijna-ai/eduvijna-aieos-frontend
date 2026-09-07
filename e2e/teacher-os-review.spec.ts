@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { worksheetPayload } from "@/features/teacher-os/artifacts/artifactFixtures";
 
 const CONTENT_ID = "11111111-1111-1111-1111-111111111111";
 const VERSION_ID = "22222222-2222-2222-2222-222222222222";
@@ -7,12 +8,12 @@ const queueItem = {
   content_id: CONTENT_ID,
   version_id: VERSION_ID,
   version_number: 1,
-  content_type: "lesson.plan",
+  content_type: "worksheet",
   title: "E2E Photosynthesis",
   description: "E2E draft",
   locale: "en-IN",
-  artifact_status: "In Review",
-  origin: "teacher",
+  artifact_status: "IN_REVIEW",
+  origin: "AI",
   aggregate_revision: 2,
   submitted_at: "2026-08-20T10:00:00Z",
   version_created_at: "2026-08-20T09:00:00Z",
@@ -21,9 +22,9 @@ const queueItem = {
 
 const detail = {
   ...queueItem,
-  schema_id: "lesson.plan",
+  schema_id: "education.worksheet",
   schema_version: 1,
-  payload: { objective: "E2E payload", note: "safe" },
+  payload: worksheetPayload,
   payload_sha256: "deadbeef",
 };
 
@@ -162,9 +163,10 @@ test.describe("Teacher OS review smoke", () => {
     await expect(
       page.getByRole("heading", { name: "Review Queue" }),
     ).toBeVisible();
-    await page.getByRole("link", { name: /Open artifact/i }).click();
+    await page.getByRole("link", { name: /Review E2E Photosynthesis/i }).click();
 
-    await expect(page.getByText("E2E payload")).toBeVisible();
+    await expect(page.getByText("Which fraction is equivalent to 1/2?")).toBeVisible();
+    await expect(page.locator(".safe-json-payload")).toHaveCount(0);
     await page.getByRole("button", { name: "Approve" }).click();
     await expect(
       page.getByRole("heading", { name: "Review Queue" }),
@@ -175,15 +177,15 @@ test.describe("Teacher OS review smoke", () => {
     await mockReviewApis(page);
     await connectDevSession(page);
     await page.getByRole("link", { name: /Open review queue/i }).click();
-    await page.getByRole("link", { name: /Open artifact/i }).click();
+    await page.getByRole("link", { name: /Review E2E Photosynthesis/i }).click();
     await expect(
       page.getByRole("heading", { name: "E2E Photosynthesis" }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Request changes" }).click();
     await page
-      .getByLabel(/Comment \(required\)/i)
+      .getByLabel(/What should be changed/i)
       .fill("Please strengthen the assessment rubric.");
-    await page.getByRole("button", { name: /Submit request changes/i }).click();
+    await page.getByRole("button", { name: /Send change request/i }).click();
     await expect(
       page.getByRole("heading", { name: "Review Queue" }),
     ).toBeVisible();

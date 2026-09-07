@@ -136,7 +136,7 @@ describe("J. Accessibility of the Mission, Intent, and Work surfaces", () => {
     const user = userEvent.setup();
 
     await screen.findByRole("heading", { level: 2, name: /Refine this/i });
-    const live = document.querySelector('[aria-live="assertive"]');
+    const live = screen.getByTestId("work-save-status");
     expect(live).not.toBeNull();
 
     await user.clear(screen.getByLabelText(/^Topic$/i));
@@ -152,10 +152,10 @@ describe("J. Accessibility of the Mission, Intent, and Work surfaces", () => {
     stubWorkReads();
     renderApp(`/teacher-os/work/${WORK_ID}`);
 
-    await screen.findByRole("heading", { level: 2, name: /Saved preparation/i });
+    await screen.findByRole("heading", { level: 1, name: sampleWork.topic ?? "" });
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     for (const name of [
-      /Saved preparation/i,
+      /^Outcome$/i,
       /Refine this preparation/i,
       /Preparation kit/i,
     ]) {

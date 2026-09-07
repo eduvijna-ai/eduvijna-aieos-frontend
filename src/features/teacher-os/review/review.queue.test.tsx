@@ -35,12 +35,18 @@ describe("C. Queue list + cursor pagination + empty", () => {
     expect(
       await screen.findByRole("heading", { name: "Photosynthesis draft" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("lesson.plan")).toBeInTheDocument();
+    expect(screen.getByText("Worksheet")).toBeInTheDocument();
     expect(screen.getByText("In Review")).toBeInTheDocument();
-    expect(screen.getByText("teacher")).toBeInTheDocument();
+    expect(screen.getByText("AI-prepared")).toBeInTheDocument();
+    expect(screen.getByText(/Submitted/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Open artifact/i }),
+      screen.getByRole("link", { name: /Review Photosynthesis draft/i }),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/inspect payload/i)).toBeNull();
+    expect(screen.queryByText(sampleQueueItem.content_id)).toBeNull();
+    expect(screen.queryByText(sampleQueueItem.version_id)).toBeNull();
+    expect(screen.queryByText("IN_REVIEW")).toBeNull();
+    expect(screen.queryByText("worksheet")).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: /Load more/i }));
     await waitFor(() => {

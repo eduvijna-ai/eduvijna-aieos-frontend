@@ -278,11 +278,9 @@ describe("TOS-DEV09-I03 Improve page", () => {
     });
 
     expect(
-      await screen.findByRole("heading", {
-        name: /Re-teach plant parts with guided practice/i,
-      }),
+      await screen.findByRole("heading", { name: /^Leaves$/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Remediate class")).toBeInTheDocument();
+    expect(screen.getByText(/Remediate class/)).toBeInTheDocument();
     expect(
       calls.some((call) => call.url.includes("/actions/generate")),
     ).toBe(false);
@@ -425,7 +423,7 @@ describe("TOS-DEV09-I03 Improve page", () => {
     expect(postsAfterConflict).toHaveLength(1);
     expect(
       screen.queryByRole("heading", {
-        name: /Re-teach plant parts with guided practice/i,
+        name: /^Leaves$/i,
       }),
     ).not.toBeInTheDocument();
 
@@ -450,9 +448,7 @@ describe("TOS-DEV09-I03 Improve page", () => {
       );
     });
     expect(
-      await screen.findByRole("heading", {
-        name: /Re-teach plant parts with guided practice/i,
-      }),
+      await screen.findByRole("heading", { name: /^Leaves$/i }),
     ).toBeInTheDocument();
     },
     15000,
@@ -510,7 +506,7 @@ describe("TOS-DEV09-I03 Improve page", () => {
       expect(posts).toHaveLength(1);
       expect(
         screen.queryByRole("heading", {
-          name: /Re-teach plant parts with guided practice/i,
+          name: /^Leaves$/i,
         }),
       ).not.toBeInTheDocument();
       expect(
@@ -628,7 +624,7 @@ describe("TOS-DEV09-I03 Improve page", () => {
     expect(posts).toHaveLength(0);
     expect(
       screen.queryByRole("heading", {
-        name: /Re-teach plant parts with guided practice/i,
+        name: /^Leaves$/i,
       }),
     ).not.toBeInTheDocument();
   });
@@ -712,16 +708,12 @@ describe("TOS-DEV09-I03 remediate_class Work UX", () => {
     });
     renderApp(`/teacher-os/work/${REMEDIATION_WORK_ID}`);
     expect(
-      await screen.findByRole("heading", {
-        name: /Re-teach plant parts with guided practice/i,
-      }),
+      await screen.findByRole("heading", { name: /^Leaves$/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Remediate class")).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: /Saved remediation preparation/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Remediate class/)).toBeInTheDocument();
+    expect(screen.getByText(/Remediation preparation/)).toBeInTheDocument();
     const page = screen.getByRole("heading", {
-      name: /Re-teach plant parts with guided practice/i,
+      name: /^Leaves$/i,
     }).closest("article");
     expect(page).toBeTruthy();
     expect(within(page!).queryByText(/learner/i)).not.toBeInTheDocument();
