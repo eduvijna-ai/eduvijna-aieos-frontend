@@ -43,6 +43,7 @@ const REQUIRED_OPERATION_IDS = [
   "teacher_os_memory_get",
   "teacher_os_memory_create",
   "teacher_os_memory_update",
+  "teacher_os_assistant_respond",
 ] as const;
 
 describe("TOS-DEV10-I03 OpenAPI consumer contract", () => {
@@ -52,10 +53,10 @@ describe("TOS-DEV10-I03 OpenAPI consumer contract", () => {
       "utf8",
     );
     expect(syncScript).toContain(
-      "070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0",
+      "a6a1cbb5a83fc9feec6a6f5077fcc5e60f60ab24",
     );
     expect(syncScript).toContain(
-      "ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB",
+      "4BF6C88B662D99F1E0E21E6F0AF2D267B39644300D85D99A859A7720F1568411",
     );
   });
 
@@ -66,11 +67,11 @@ describe("TOS-DEV10-I03 OpenAPI consumer contract", () => {
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB",
+      "4BF6C88B662D99F1E0E21E6F0AF2D267B39644300D85D99A859A7720F1568411",
     );
   });
 
-  it("snapshot and generated types include Memory + Assessment + remediation operationIds", () => {
+  it("snapshot and generated types include Assistant + Memory + Assessment + remediation operationIds", () => {
     const snapshot = readFileSync(snapshotPath, "utf8");
     const generated = readFileSync(generatedPath, "utf8");
     for (const operationId of REQUIRED_OPERATION_IDS) {

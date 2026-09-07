@@ -1,17 +1,17 @@
 # Product E2E
 
 Real-stack Playwright lane proving Assignment regression, TeachingExecution
-regression, ClassroomAssessment, Improve (remediation create), Library, and Teacher
-Memory (Settings preferences) product journeys against live HTTP — **no `/api`
-Playwright mocks**.
+regression, ClassroomAssessment, Improve (remediation create), Library, Teacher
+Memory (Settings preferences), and Contextual AI Assistant product journeys
+against live HTTP — **no `/api` Playwright mocks**.
 
 ## Governed pins (TOS-DEV10 Backend authority)
 
 | Artifact | SHA |
 |----------|-----|
 | Frontend base | `08887e3f6a427e8e3f5aed852fb3d9a4031a9ff4` |
-| Backend read-only pin | `070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0` |
-| OpenAPI authority | `ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB` |
+| Backend read-only pin | `a6a1cbb5a83fc9feec6a6f5077fcc5e60f60ab24` |
+| OpenAPI authority | `4BF6C88B662D99F1E0E21E6F0AF2D267B39644300D85D99A859A7720F1568411` |
 | Migration head | `tosd100001` |
 
 ## Non-production boundary
@@ -85,6 +85,7 @@ Scenario markers:
 | `e2e-product/teacher-os-improve.product.spec.ts` | DEV09 Improve Assess→Improve→remediation Work (TOS-DEV09-I04) |
 | `e2e-product/teacher-os-library.product.spec.ts` | DEV10 Library publish→list→filter→open (TOS-DEV10-I02) |
 | `e2e-product/teacher-os-memory.product.spec.ts` | DEV10 Teacher Memory Settings preferences persistence + ETag update |
+| `e2e-product/teacher-os-assistant.product.spec.ts` | DEV10 Contextual AI Assistant Backend respond + session clear (TOS-DEV10-I04) |
 
 Assessment journey (CASE A):
 
@@ -112,9 +113,15 @@ Settings → Teaching preferences → defaults (404 / not saved yet) → change 
 Save (create) → reload → same values → change one → Save (If-Match update) →
 reload → same. No Teacher Memory primary nav item.
 
+Assistant journey (TOS-DEV10-I04):
+
+AI Assistant → ask “What should I focus on today?” → real
+`POST /api/v1/teacher-os/assistant` (Fake Model Gateway) → answer visible →
+New conversation / Clear clears session-only history. Zero `page.route` mocks.
+
 ## CI
 
-The `product-e2e` workflow job checks out Backend `070e479…`, verifies the pin
+The `product-e2e` workflow job checks out Backend `6293083…`, verifies the pin
 SHA, provisions PostgreSQL 18, migrates to `tosd100001`, starts the development
 app, and runs `pnpm test:e2e:product` (Assignment + TeachingExecution +
-ClassroomAssessment + Improve + Library + Memory product specs).
+ClassroomAssessment + Improve + Library + Memory + Assistant product specs).

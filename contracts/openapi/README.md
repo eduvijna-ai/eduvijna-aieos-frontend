@@ -10,18 +10,24 @@ This directory holds a **consumer snapshot** of the AIEOS HTTP contract for fron
 - The file `aieos-v1.consumer-snapshot.json` in this frontend repo is **NON-AUTHORITATIVE**.
   It must not be treated as the source of truth for API behaviour.
 
-## Snapshot provenance (TOS-DEV10-I03R3)
+## Snapshot provenance (TOS-DEV10-I04)
 
 | Field | Value |
 |-------|--------|
 | Source repo | `eduvijna-aieos-backend` |
 | Source path | `contracts/openapi/aieos-v1.json` |
-| Source SHA | `070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0` |
-| Authoritative OpenAPI SHA-256 | `ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB` |
+| Source SHA | `a6a1cbb5a83fc9feec6a6f5077fcc5e60f60ab24` |
+| Authoritative OpenAPI SHA-256 | `4BF6C88B662D99F1E0E21E6F0AF2D267B39644300D85D99A859A7720F1568411` |
 | Consumer file | `contracts/openapi/aieos-v1.consumer-snapshot.json` |
-| Consumer file SHA-256 | `ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB` |
+| Consumer file SHA-256 | `4BF6C88B662D99F1E0E21E6F0AF2D267B39644300D85D99A859A7720F1568411` |
 
-Operations consumed by this frontend at this SHA (Teacher Memory / Settings preferences):
+Operations consumed by this frontend at this SHA (Contextual AI Assistant):
+
+| Operation ID | Method | Path |
+|--------------|--------|------|
+| `teacher_os_assistant_respond` | POST | `/api/v1/teacher-os/assistant` |
+
+Also retained from prior slices (Teacher Memory / Settings preferences):
 
 | Operation ID | Method | Path |
 |--------------|--------|------|
@@ -126,14 +132,14 @@ overrides when the default location or pinned SHA is not current:
 
 ```bash
 AIEOS_BACKEND_ROOT=../eduvijna-aieos-backend \
-AIEOS_BACKEND_OPENAPI_SHA=070e479f405f6246a43f1b0fac0aaf5cdd4a1ac0 \
+AIEOS_BACKEND_OPENAPI_SHA=a6a1cbb5a83fc9feec6a6f5077fcc5e60f60ab24 \
   pnpm sync:openapi
 ```
 
 Verify the consumer file hash after sync:
 
 ```bash
-# Expected: ECA7264BAD37D235967D6E4895749777D7D4F9B19FB0D79D79726430D8C57DFB
+# Expected: 4BF6C88B662D99F1E0E21E6F0AF2D267B39644300D85D99A859A7720F1568411
 ```
 
 See `scripts/sync-openapi-snapshot.mjs` for how to refresh from a known backend checkout/SHA.
