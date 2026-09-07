@@ -121,7 +121,8 @@ New conversation / Clear clears session-only history. Zero `page.route` mocks.
 
 ## CI
 
-The `product-e2e` workflow job checks out Backend `6293083…`, verifies the pin
-SHA, provisions PostgreSQL 18, migrates to `tosd100001`, starts the development
-app, and runs `pnpm test:e2e:product` (Assignment + TeachingExecution +
-ClassroomAssessment + Improve + Library + Memory + Assistant product specs).
+The `product-e2e` workflow job checks out Backend
+`a6a1cbb5a83fc9feec6a6f5077fcc5e60f60ab24`, verifies the pin SHA, provisions
+PostgreSQL 18, migrates to `tosd100001`, starts the development app, and runs
+`pnpm test:e2e:product` (Assignment + TeachingExecution + ClassroomAssessment +
+Improve + Library + Memory + Assistant product specs).
