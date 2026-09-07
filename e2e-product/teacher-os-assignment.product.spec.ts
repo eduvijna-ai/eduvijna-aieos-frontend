@@ -80,8 +80,23 @@ async function fetchAssignment(
   }>;
 }
 
-function publishedVersionCode(page: import("@playwright/test").Page) {
-  return page.locator("dt", { hasText: "Published version" }).locator("+ dd code");
+function metadataValue(
+  page: import("@playwright/test").Page,
+  label: string,
+) {
+  return page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Artifact", exact: true }) })
+    .locator("dt", { hasText: new RegExp(`^${label}$`) })
+    .locator("xpath=following-sibling::dd[1]");
+}
+
+function publicationValue(page: import("@playwright/test").Page) {
+  return metadataValue(page, "Publication");
+}
+
+function statusValue(page: import("@playwright/test").Page) {
+  return metadataValue(page, "Status");
 }
 
 test.describe("TOS-DEV06-I05 Assignment Product E2E", () => {
@@ -104,24 +119,29 @@ test.describe("TOS-DEV06-I05 Assignment Product E2E", () => {
 
     const contentBefore = await fetchContent(page);
     if (contentBefore.published_version_id === f.version_id) {
-      await expect(publishedVersionCode(page)).toHaveText(f.version_id);
+      await expect(statusValue(page)).toHaveText("Approved");
+      await expect(publicationValue(page)).toHaveText("Published");
       await expect(page.getByRole("button", { name: "Assign to class" })).toBeVisible();
+      expect(contentBefore.published_version_id).toBe(f.version_id);
       state.publishedVersionId = contentBefore.published_version_id;
       return;
     }
 
+    await expect(statusValue(page)).toHaveText("Approved");
+    await expect(publicationValue(page)).not.toHaveText("Published");
+    await expect(publicationValue(page)).toHaveText("Approved");
     await expect(page.getByRole("button", { name: "Publish" })).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Assign to class" }),
     ).toHaveCount(0);
-    await expect(publishedVersionCode(page)).toHaveText("none");
 
     await page.getByRole("button", { name: "Publish" }).click();
     await expect(
       page.getByText(/Published\. This version is now the published pointer/i),
     ).toBeVisible();
 
-    await expect(publishedVersionCode(page)).toHaveText(f.version_id);
+    await expect(statusValue(page)).toHaveText("Approved");
+    await expect(publicationValue(page)).toHaveText("Published");
     await expect(page.getByRole("button", { name: "Assign to class" })).toBeVisible();
 
     const content = await fetchContent(page);
@@ -130,6 +150,7 @@ test.describe("TOS-DEV06-I05 Assignment Product E2E", () => {
 
     await page.reload();
     await connectDevSession(page);
+    await expect(publicationValue(page)).toHaveText("Published");
     await expect(page.getByRole("button", { name: "Assign to class" })).toBeVisible();
     const afterReload = await fetchContent(page);
     expect(afterReload.published_version_id).toBe(f.version_id);

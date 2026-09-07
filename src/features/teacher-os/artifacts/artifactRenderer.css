@@ -1,0 +1,229 @@
+.artifact-host {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.artifact-document {
+  max-width: 42rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  color: var(--color-ink);
+}
+
+.artifact-kicker {
+  margin: 0 0 var(--space-2);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.artifact-document > h2 {
+  margin: 0 0 var(--space-5);
+  font-size: 1.5rem;
+  line-height: 1.3;
+}
+
+.artifact-lede {
+  margin: 0 0 var(--space-5);
+  color: var(--color-ink-muted);
+  font-size: 1.02rem;
+}
+
+.artifact-section {
+  margin: 0 0 var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.artifact-section:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.artifact-section > h3 {
+  margin: 0 0 var(--space-3);
+  font-size: 1.05rem;
+}
+
+.artifact-section p,
+.artifact-prose {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.artifact-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.artifact-question-list {
+  margin: 0;
+  padding-left: 1.5rem;
+  display: grid;
+  gap: var(--space-5);
+}
+
+.artifact-question {
+  min-width: 0;
+}
+
+.artifact-question-prompt {
+  margin: 0 0 var(--space-3);
+  font-weight: 600;
+}
+
+.artifact-question-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+}
+
+.artifact-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-ink);
+  font-size: 0.75rem;
+  letter-spacing: 0.01em;
+}
+
+.artifact-visual {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+}
+
+.artifact-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.artifact-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.artifact-option-mark {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.2rem;
+  border: 1.5px solid var(--color-ink-muted);
+  border-radius: 50%;
+  background: var(--color-surface);
+}
+
+.artifact-option-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.artifact-lesson-section {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+}
+
+.artifact-lesson-section h4 {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+
+.artifact-minutes {
+  margin: 0 0 var(--space-3);
+  color: var(--color-ink-muted);
+  font-size: 0.9rem;
+}
+
+.artifact-pair {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+@media (min-width: 768px) {
+  .artifact-pair {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.artifact-pair h5 {
+  margin: 0 0 var(--space-2);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.artifact-pair p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.artifact-answer-group {
+  margin: 0 0 var(--space-5);
+}
+
+.artifact-answer-group h3 {
+  margin: 0 0 var(--space-3);
+}
+
+.artifact-answer-item {
+  margin: 0 0 var(--space-4);
+}
+
+.artifact-answer-item h4 {
+  margin: 0 0 var(--space-2);
+  font-size: 1rem;
+}
+
+.artifact-answer {
+  margin: 0 0 var(--space-2);
+}
+
+.artifact-explanation {
+  margin: 0;
+  color: var(--color-ink-muted);
+}
+
+.artifact-notes {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.artifact-notes li {
+  line-height: 1.55;
+}
+
+.artifact-unsupported {
+  max-width: 36rem;
+}
+
+.artifact-document--quiz .artifact-question-list {
+  gap: var(--space-4);
+}
+
+.artifact-document--quiz .artifact-question-prompt {
+  font-weight: 500;
+}

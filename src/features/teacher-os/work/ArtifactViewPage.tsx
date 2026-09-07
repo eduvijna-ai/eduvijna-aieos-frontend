@@ -22,7 +22,8 @@ import {
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ErrorState } from "@/shared/components/ErrorState";
 import { LoadingState } from "@/shared/components/LoadingState";
-import { SafeJsonPayload } from "@/features/teacher-os/review/SafeJsonPayload";
+import { ArtifactRenderer } from "@/features/teacher-os/artifacts/ArtifactRenderer";
+import { stewardshipLabel } from "@/features/teacher-os/artifacts/artifactLabels";
 import { preparationArtifactLabel } from "./preparationKit";
 import {
   publicationStatusLabel,
@@ -224,8 +225,8 @@ export function ArtifactViewPage() {
                 <dd>{actions?.label}</dd>
               </div>
               <div>
-                <dt>Stewardship</dt>
-                <dd>{content.stewardship_state}</dd>
+                <dt>Status</dt>
+                <dd>{stewardshipLabel(content.stewardship_state)}</dd>
               </div>
               <div>
                 <dt>Publication</dt>
@@ -234,42 +235,24 @@ export function ArtifactViewPage() {
                 </dd>
               </div>
               <div>
-                <dt>Content</dt>
-                <dd>
-                  <code>{content.content_id}</code>
-                </dd>
-              </div>
-              <div>
-                <dt>Version</dt>
-                <dd>
-                  <code>{version.version_id}</code>
-                </dd>
-              </div>
-              <div>
                 <dt>Version number</dt>
                 <dd>{version.version_number}</dd>
               </div>
-              <div>
-                <dt>Published version</dt>
-                <dd>
-                  <code>{content.published_version_id ?? "none"}</code>
-                </dd>
-              </div>
-              <div>
-                <dt>Origin</dt>
-                <dd>{version.origin}</dd>
-              </div>
             </dl>
             <p className="muted">
-              Loaded from Generic Content. This view does not use the Review
-              Queue pending-review projection. Published means this exact
-              version is the published pointer — not a stewardship state.
+              Preview this teaching resource. Publication means this exact
+              version is the one currently published — not a status label.
             </p>
           </section>
 
-          <section className="panel" aria-labelledby="artifact-payload-heading">
-            <h2 id="artifact-payload-heading">Generated payload</h2>
-            <SafeJsonPayload payload={version.payload} />
+          <section className="panel" aria-labelledby="artifact-document-heading">
+            <h2 id="artifact-document-heading" className="sr-only">
+              Teaching resource
+            </h2>
+            <ArtifactRenderer
+              contentType={content.content_type}
+              payload={version.payload}
+            />
           </section>
 
           <section className="panel" aria-labelledby="artifact-actions-heading">
