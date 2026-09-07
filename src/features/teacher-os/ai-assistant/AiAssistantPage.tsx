@@ -13,6 +13,7 @@ import {
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ErrorState } from "@/shared/components/ErrorState";
 import { LoadingState } from "@/shared/components/LoadingState";
+import { localToday } from "@/shared/time/calendarDate";
 import "./assistant.css";
 
 type ChatTurn = {
@@ -59,6 +60,9 @@ export function AiAssistantPage() {
   }, [sessionReady, turns.length]);
 
   function clearConversation() {
+    if (busy) {
+      return;
+    }
     setTurns([]);
     setLastResponse(null);
     setErrorMessage(null);
@@ -66,21 +70,37 @@ export function AiAssistantPage() {
     setStatus(sessionReady ? "idle" : "unavailable");
   }
 
-  async function submitMessage(message: string) {
+  async function submitMessage(
+    message: string,
+    options: { retry?: boolean } = {},
+  ) {
     const trimmed = message.trim();
     if (!trimmed || busy || !sessionReady) {
       return;
     }
+    const retry = options.retry === true;
+
     setBusy(true);
     setStatus("loading");
     setErrorMessage(null);
 
-    const history: TeacherOsAssistantHistoryTurn[] = turns
+    // Retry must not re-append the failed optimistic user turn, and must not
+    // include that current message twice in the Backend history payload.
+    let priorTurns = turns;
+    if (retry) {
+      const last = turns[turns.length - 1];
+      if (last?.role === "user" && last.content === trimmed) {
+        priorTurns = turns.slice(0, -1);
+      }
+    } else {
+      const optimistic: ChatTurn = { role: "user", content: trimmed };
+      setTurns((current) => [...current, optimistic]);
+    }
+
+    const history: TeacherOsAssistantHistoryTurn[] = priorTurns
       .slice(-MAX_SESSION_HISTORY)
       .map((turn) => ({ role: turn.role, content: turn.content }));
 
-    const optimistic: ChatTurn = { role: "user", content: trimmed };
-    setTurns((current) => [...current, optimistic]);
     setDraft("");
 
     try {
@@ -88,7 +108,7 @@ export function AiAssistantPage() {
         message: trimmed,
         history,
         teaching_work_id: teachingWorkId || null,
-        mission_date: null,
+        mission_date: localToday(),
       });
       const body = response.data;
       setLastResponse(body);
@@ -155,6 +175,7 @@ export function AiAssistantPage() {
             type="button"
             className="btn-secondary"
             onClick={clearConversation}
+            disabled={busy}
           >
             New conversation
           </button>
@@ -239,7 +260,7 @@ export function AiAssistantPage() {
             message={errorMessage}
             onRetry={() => {
               const lastUser = [...turns].reverse().find((t) => t.role === "user");
-              void submitMessage(lastUser?.content ?? draft);
+              void submitMessage(lastUser?.content ?? draft, { retry: true });
             }}
           />
         ) : null}
@@ -264,7 +285,7 @@ export function AiAssistantPage() {
               type="button"
               className="btn-secondary"
               onClick={clearConversation}
-              disabled={busy && turns.length === 0}
+              disabled={busy}
             >
               Clear conversation
             </button>

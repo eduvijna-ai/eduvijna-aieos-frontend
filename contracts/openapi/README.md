@@ -16,7 +16,7 @@ This directory holds a **consumer snapshot** of the AIEOS HTTP contract for fron
 |-------|--------|
 | Source repo | `eduvijna-aieos-backend` |
 | Source path | `contracts/openapi/aieos-v1.json` |
-| Source SHA | `62930830cbd9b54721a0d0dc6ab61860622d3422` |
+| Source SHA | `a6a1cbb5a83fc9feec6a6f5077fcc5e60f60ab24` |
 | Authoritative OpenAPI SHA-256 | `4BF6C88B662D99F1E0E21E6F0AF2D267B39644300D85D99A859A7720F1568411` |
 | Consumer file | `contracts/openapi/aieos-v1.consumer-snapshot.json` |
 | Consumer file SHA-256 | `4BF6C88B662D99F1E0E21E6F0AF2D267B39644300D85D99A859A7720F1568411` |
@@ -132,7 +132,7 @@ overrides when the default location or pinned SHA is not current:
 
 ```bash
 AIEOS_BACKEND_ROOT=../eduvijna-aieos-backend \
-AIEOS_BACKEND_OPENAPI_SHA=62930830cbd9b54721a0d0dc6ab61860622d3422 \
+AIEOS_BACKEND_OPENAPI_SHA=a6a1cbb5a83fc9feec6a6f5077fcc5e60f60ab24 \
   pnpm sync:openapi
 ```
 

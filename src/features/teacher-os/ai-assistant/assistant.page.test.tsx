@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { localToday } from "@/shared/time/calendarDate";
 import {
   mockJsonResponse,
   mockProblemResponse,
@@ -45,7 +46,7 @@ describe("AiAssistantPage", () => {
     expect(screen.queryByText(/Not implemented yet/i)).not.toBeInTheDocument();
   });
 
-  it("submits a message and renders the assistant response", async () => {
+  it("submits a message with localToday mission_date and renders the assistant response", async () => {
     const user = userEvent.setup();
     const calls = stubFetch((call) => {
       if (isAssistantPost(call)) {
@@ -71,8 +72,92 @@ describe("AiAssistantPage", () => {
       message: FOCUS_QUESTION,
       history: [],
       teaching_work_id: null,
-      mission_date: null,
+      mission_date: localToday(),
     });
+  });
+
+  it("retries a failed request without duplicating the teacher turn", async () => {
+    const user = userEvent.setup();
+    let attempt = 0;
+    const calls = stubFetch((call) => {
+      if (isAssistantPost(call)) {
+        attempt += 1;
+        if (attempt === 1) {
+          return mockProblemResponse(
+            503,
+            "model_provider_unavailable",
+            "Unavailable",
+          );
+        }
+        return mockJsonResponse(sampleAssistantResponse());
+      }
+      return mockJsonResponse({ title: "unexpected", status: 404 }, { status: 404 });
+    });
+
+    renderApp("/teacher-os/ai-assistant");
+    await user.type(screen.getByLabelText(/^Message$/i), FOCUS_QUESTION);
+    await user.click(screen.getByRole("button", { name: /^Send$/i }));
+
+    expect(
+      await screen.findByText(/Assistant request failed/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(FOCUS_QUESTION)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^Retry$/i }));
+    expect(await screen.findByText(SAMPLE_ANSWER)).toBeInTheDocument();
+
+    const assistantPosts = calls.filter(isAssistantPost);
+    expect(assistantPosts).toHaveLength(2);
+    expect(assistantPosts[0]?.body).toMatchObject({
+      message: FOCUS_QUESTION,
+      history: [],
+      mission_date: localToday(),
+    });
+    expect(assistantPosts[1]?.body).toMatchObject({
+      message: FOCUS_QUESTION,
+      history: [],
+      mission_date: localToday(),
+    });
+
+    expect(screen.getAllByText("You")).toHaveLength(1);
+    expect(screen.getAllByText("Assistant")).toHaveLength(1);
+    expect(screen.getAllByText(FOCUS_QUESTION)).toHaveLength(1);
+    expect(screen.getAllByText(SAMPLE_ANSWER)).toHaveLength(1);
+  });
+
+  it("disables New/Clear conversation while a request is in flight", async () => {
+    const user = userEvent.setup();
+    let resolveResponse: ((value: Response) => void) | undefined;
+    const pending = new Promise<Response>((resolve) => {
+      resolveResponse = resolve;
+    });
+    stubFetch((call) => {
+      if (isAssistantPost(call)) {
+        return pending;
+      }
+      return mockJsonResponse({ title: "unexpected", status: 404 }, { status: 404 });
+    });
+
+    renderApp("/teacher-os/ai-assistant");
+    await user.type(screen.getByLabelText(/^Message$/i), FOCUS_QUESTION);
+    await user.click(screen.getByRole("button", { name: /^Send$/i }));
+
+    expect(await screen.findByText(/Thinking/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /New conversation/i }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /Clear conversation/i }),
+    ).toBeDisabled();
+
+    resolveResponse?.(mockJsonResponse(sampleAssistantResponse()));
+    expect(await screen.findByText(SAMPLE_ANSWER)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /New conversation/i }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: /Clear conversation/i }),
+    ).toBeEnabled();
   });
 
   it("lets suggested prompts resubmit via the same Backend path", async () => {

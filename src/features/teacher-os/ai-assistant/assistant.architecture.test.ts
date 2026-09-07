@@ -33,7 +33,7 @@ describe("TOS-DEV10-I04 Assistant architecture", () => {
 
   it("pins Backend I04 OpenAPI digest", () => {
     const sync = read("scripts/sync-openapi-snapshot.mjs");
-    expect(sync).toContain("62930830cbd9b54721a0d0dc6ab61860622d3422");
+    expect(sync).toContain("a6a1cbb5a83fc9feec6a6f5077fcc5e60f60ab24");
     const digest = createHash("sha256")
       .update(
         readFileSync(
