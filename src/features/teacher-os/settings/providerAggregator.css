@@ -1,0 +1,74 @@
+.provider-aggregator-page {
+  max-width: var(--content-max);
+}
+
+.provider-runtime-mode {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+  font-weight: 600;
+  margin: 0 0 var(--space-4);
+}
+
+.provider-runtime-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.provider-runtime-facts dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-muted);
+}
+
+.provider-runtime-facts dd {
+  margin: 0.2rem 0 0;
+}
+
+.provider-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.provider-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.provider-card-header h3 {
+  margin: 0;
+}
+
+.provider-routing-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.provider-routing-table th,
+.provider-routing-table td {
+  text-align: left;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.provider-routing-table tbody tr:last-child th,
+.provider-routing-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.settings-dev-link {
+  display: inline-flex;
+  margin-top: var(--space-2);
+}
