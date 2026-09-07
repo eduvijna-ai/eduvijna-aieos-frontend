@@ -162,11 +162,12 @@ test.describe("TOS-DEV09-I03 Improve UX", () => {
 
     await expect(page).toHaveURL(new RegExp(`/teacher-os/work/${WORK_ID}`));
     await expect(
-      page.getByRole("heading", {
-        name: /Rebuild confidence with plant-part practice/i,
-      }),
+      page.getByRole("heading", { name: /^Leaves$/i }),
     ).toBeVisible();
-    await expect(page.getByText("Remediate class")).toBeVisible();
+    await expect(
+      page.locator(".work-hero-outcome p"),
+    ).toHaveText(/Rebuild confidence with plant-part practice/i);
+    await expect(page.getByText(/Remediate class/)).toBeVisible();
 
     expect(creates).toHaveLength(1);
     expect(creates[0]).toEqual({

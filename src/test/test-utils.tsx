@@ -39,6 +39,7 @@ import type {
   ContentVersionResponse,
   PublicationResponse,
 } from "@/services/api/contentApi";
+import { worksheetPayload } from "@/features/teacher-os/artifacts/artifactFixtures";
 
 export const DEV_SESSION: DevSession = {
   apiOrigin: "http://127.0.0.1:8080",
@@ -126,12 +127,12 @@ export const sampleQueueItem = {
   content_id: "11111111-1111-1111-1111-111111111111",
   version_id: "22222222-2222-2222-2222-222222222222",
   version_number: 1,
-  content_type: "lesson.plan",
+  content_type: "worksheet",
   title: "Photosynthesis draft",
   description: "Draft for review",
   locale: "en-IN",
-  artifact_status: "In Review",
-  origin: "teacher",
+  artifact_status: "IN_REVIEW",
+  origin: "AI",
   aggregate_revision: 2,
   submitted_at: "2026-08-20T10:00:00Z",
   version_created_at: "2026-08-20T09:00:00Z",
@@ -140,12 +141,9 @@ export const sampleQueueItem = {
 
 export const sampleDetail = {
   ...sampleQueueItem,
-  schema_id: "lesson.plan",
+  schema_id: "education.worksheet",
   schema_version: 1,
-  payload: {
-    objective: "Explain photosynthesis",
-    steps: ["Observe", "Model"],
-  },
+  payload: worksheetPayload,
   payload_sha256: "abc123",
 };
 

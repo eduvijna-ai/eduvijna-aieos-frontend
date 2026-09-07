@@ -424,7 +424,7 @@ describe("TOS-DEV05R1 Work lifecycle UX", () => {
 
     expect(
       await screen.findByTestId("work-lifecycle-summary"),
-    ).toHaveTextContent(/6 artifacts · 5 in review · 1 approved/);
+    ).toHaveTextContent(/6 resources prepared · 5 awaiting review · 1 approved/);
 
     const card = await screen.findByRole("heading", { name: "Worksheet" });
     const article = card.closest("article")!;
@@ -454,7 +454,7 @@ describe("TOS-DEV05R1 Work lifecycle UX", () => {
     expect(article.querySelector('a[href*="/artifacts/"]')).not.toBeNull();
 
     expect(screen.getByTestId("work-lifecycle-summary")).toHaveTextContent(
-      /6 artifacts · 5 in review · 1 published/,
+      /6 resources prepared · 5 awaiting review · 1 published/,
     );
     expect(screen.getByTestId("work-lifecycle-summary")).not.toHaveTextContent(
       /1 approved/,
@@ -601,11 +601,11 @@ describe("TOS-DEV05 Review return continuity", () => {
     await userEvent.click(screen.getByRole("button", { name: "Approve" }));
 
     expect(
-      await screen.findByRole("heading", { name: /Saved preparation/i }),
+      await screen.findByRole("heading", { name: sampleWork.topic ?? "" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: sampleWork.goal_text }),
-    ).toBeInTheDocument();
+      screen.getAllByText(sampleWork.goal_text).length,
+    ).toBeGreaterThan(0);
   });
 
   it("17. Review entered from Review Queue retains queue-return behavior", async () => {

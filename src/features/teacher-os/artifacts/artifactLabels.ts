@@ -22,8 +22,16 @@ const BLOOM_LABELS: Record<string, string> = {
   create: "Create",
 };
 
+/** Normalize dotted historical types (lesson.plan) to canonical kinds. */
+export function canonicalContentType(
+  contentType: string | null | undefined,
+): string {
+  return (contentType ?? "").trim().replace(/\./g, "_");
+}
+
 export function artifactTypeLabel(contentType: string | null | undefined): string {
-  return preparationArtifactLabel(contentType);
+  const canonical = canonicalContentType(contentType);
+  return preparationArtifactLabel(canonical || contentType);
 }
 
 export function stewardshipLabel(state: string | null | undefined): string {

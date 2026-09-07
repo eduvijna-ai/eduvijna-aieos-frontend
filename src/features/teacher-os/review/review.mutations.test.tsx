@@ -94,11 +94,11 @@ describe("E–H. Review detail mutations", () => {
       screen.getByRole("button", { name: "Request changes" }),
     );
     await userEvent.type(
-      screen.getByLabelText(/Comment \(required\)/i),
+      screen.getByLabelText(/What should be changed/i),
       "Please clarify step 2",
     );
     await userEvent.click(
-      screen.getByRole("button", { name: /Submit request changes/i }),
+      screen.getByRole("button", { name: /Send change request/i }),
     );
     expect(
       await screen.findByRole("heading", { name: "Review Queue" }),
@@ -133,12 +133,12 @@ describe("E–H. Review detail mutations", () => {
     await userEvent.click(screen.getByRole("button", { name: "Reject" }));
 
     const confirmReject = screen.getByRole("button", {
-      name: /Confirm reject/i,
+      name: /Reject this resource/i,
     });
     expect(confirmReject).toBeDisabled();
 
     await userEvent.click(
-      screen.getByLabelText(/I confirm I want to reject/i),
+      screen.getByLabelText(/I understand this resource will be rejected/i),
     );
     expect(confirmReject).toBeEnabled();
     await userEvent.click(confirmReject);
@@ -182,7 +182,7 @@ describe("E–H. Review detail mutations", () => {
     await userEvent.click(screen.getByRole("button", { name: "Approve" }));
 
     expect(
-      await screen.findByText(/changed since you loaded it/i),
+      await screen.findByText(/updated elsewhere/i),
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(detailCalls).toBeGreaterThanOrEqual(2);

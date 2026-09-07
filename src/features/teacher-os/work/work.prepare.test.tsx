@@ -258,7 +258,8 @@ describe("TOS-DEV04-I09 Work preparation kit", () => {
       await screen.findByRole("heading", { name: /Worksheet draft/i }),
     ).toBeInTheDocument();
     expect(screen.getAllByText(/In Review/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/age_appropriate/i)).toBeInTheDocument();
+    expect(screen.queryByText(/age_appropriate/i)).toBeNull();
+    expect(screen.getByText(/2 quality checks passed/i)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Review draft/i }),
     ).toBeInTheDocument();
@@ -308,7 +309,7 @@ describe("TOS-DEV04-I09 Work preparation kit", () => {
     );
 
     expect(
-      await screen.findByText(/create the preparation kit again from this revision/i),
+      await screen.findByText(/create the preparation kit again/i),
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByLabelText(/^Topic$/i)).toHaveValue("Chlorophyll");

@@ -2,7 +2,6 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
-  calendarDate,
   emptyWorkArtifacts,
   isWorkArtifactsPath,
   isWorkGetPath,
@@ -50,15 +49,15 @@ describe("F. Work detail reads from the server", () => {
     renderApp(WORK_ROUTE);
 
     expect(
-      await screen.findByRole("heading", { level: 2, name: /Saved preparation/i }),
+      await screen.findByRole("heading", { level: 1, name: sampleWork.topic ?? "" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Grade 5B")).toBeInTheDocument();
-    expect(screen.getByText("Science")).toBeInTheDocument();
-    expect(screen.getByText("Photosynthesis")).toBeInTheDocument();
-    expect(screen.getByText(calendarDate(1))).toBeInTheDocument();
-    expect(screen.getByText("en-IN")).toBeInTheDocument();
-    expect(screen.getByText(sampleWork.created_at)).toBeInTheDocument();
-    expect(screen.getByText(sampleWork.updated_at)).toBeInTheDocument();
+    expect(screen.getByText(/Grade 5B/)).toBeInTheDocument();
+    expect(screen.getByText(/Science/)).toBeInTheDocument();
+    expect(screen.getAllByText(sampleWork.goal_text).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Lesson:/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Locale$/i)).toHaveValue("en-IN");
+    expect(screen.queryByText(sampleWork.created_at)).not.toBeInTheDocument();
+    expect(screen.queryByText(sampleWork.updated_at)).not.toBeInTheDocument();
   });
 
   it("offers Create preparation kit when no artifact exists", async () => {
@@ -127,7 +126,7 @@ describe("G. Work refinement uses If-Match and Idempotency-Key", () => {
     expect(patch?.headers.get("Idempotency-Key")).toBeTruthy();
     expect(patch?.body).toEqual({ topic: "Photosynthesis in leaves" });
 
-    expect(await screen.findByText(/Saved\. This preparation is now at revision 2/i))
+    expect(await screen.findByText(/Saved\. Your preparation details have been updated/i))
       .toBeInTheDocument();
     expect(screen.getByLabelText(/^Topic$/i)).toHaveValue(
       "Photosynthesis basics",
@@ -165,7 +164,7 @@ describe("G. Work refinement uses If-Match and Idempotency-Key", () => {
     const user = userEvent.setup();
 
     await screen.findByRole("heading", { level: 2, name: /Refine this/i });
-    await user.clear(screen.getByLabelText(/^Outcome$/i));
+    await user.clear(screen.getByRole("textbox", { name: /^Outcome$/i }));
     await user.click(screen.getByRole("button", { name: /Save changes/i }));
 
     expect(
@@ -212,7 +211,7 @@ describe("G. Work refinement uses If-Match and Idempotency-Key", () => {
     await user.click(screen.getByRole("button", { name: /Save changes/i }));
 
     expect(
-      await screen.findByText(/changed elsewhere since you loaded it/i),
+      await screen.findByText(/updated elsewhere\. We've loaded the latest version/i),
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByLabelText(/^Topic$/i)).toHaveValue("Chlorophyll");
@@ -237,7 +236,7 @@ describe("G. Work refinement uses If-Match and Idempotency-Key", () => {
     await user.click(screen.getByRole("button", { name: /Save changes/i }));
 
     expect(
-      await screen.findByText(/required precondition header was missing/i),
+      await screen.findByText(/This page is out of date/i),
     ).toBeInTheDocument();
   });
 
@@ -270,7 +269,7 @@ describe("H. Work has no browser-side authority", () => {
     await user.clear(screen.getByLabelText(/^Topic$/i));
     await user.type(screen.getByLabelText(/^Topic$/i), "Leaf pigments");
     await user.click(screen.getByRole("button", { name: /Save changes/i }));
-    await screen.findByText(/revision 2/i);
+    await screen.findByText(/Saved\. Your preparation details have been updated/i);
 
     expect(localSet).not.toHaveBeenCalled();
     expect(sessionSet).not.toHaveBeenCalled();

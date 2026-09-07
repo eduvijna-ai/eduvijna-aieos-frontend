@@ -161,7 +161,7 @@ describe("D. Prepare is a real Teaching Intent flow", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("heading", { level: 2, name: /Saved preparation/i }),
+        screen.getByRole("heading", { level: 1, name: sampleWork.topic ?? "" }),
       ).toBeInTheDocument();
     });
   });
