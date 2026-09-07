@@ -10,6 +10,12 @@ import { userMessageForApiError } from "@/shared/errors/ApiError";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ErrorState } from "@/shared/components/ErrorState";
 import { LoadingState } from "@/shared/components/LoadingState";
+import { ArtifactRenderer } from "@/features/teacher-os/artifacts/ArtifactRenderer";
+import {
+  artifactTypeLabel,
+  publicationLabel,
+  stewardshipLabel,
+} from "@/features/teacher-os/artifacts/artifactLabels";
 import { artifactViewPath } from "@/features/teacher-os/work/lifecycle";
 import "./library.css";
 
@@ -80,7 +86,7 @@ export function LibraryDetailPage() {
         </p>
         <h1>{detail?.title ?? "Library item"}</h1>
         <p className="muted">
-          Owner-scoped open/preview for an exact governed version.
+          Preview the published resource and use it in your teaching workflow.
         </p>
       </header>
 
@@ -104,20 +110,30 @@ export function LibraryDetailPage() {
       </div>
 
       {status === "ready" && detail ? (
-        <section className="panel stack">
+        <section className="panel stack library-detail">
           <dl className="library-meta">
             <div>
               <dt>Type</dt>
-              <dd>{detail.content_type}</dd>
-            </div>
-            <div>
-              <dt>State</dt>
-              <dd>{detail.stewardship_state}</dd>
-            </div>
-            <div>
-              <dt>Published</dt>
               <dd>
-                {detail.published_version_id ? "Published" : "Not published"}
+                <span className="library-chip">
+                  {artifactTypeLabel(detail.content_type)}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>
+                <span className="library-chip">
+                  {stewardshipLabel(detail.stewardship_state)}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt>Publication</dt>
+              <dd>
+                <span className="library-chip">
+                  {publicationLabel(detail.published_version_id)}
+                </span>
               </dd>
             </div>
           </dl>
@@ -142,9 +158,12 @@ export function LibraryDetailPage() {
             ) : null}
           </div>
           {version ? (
-            <pre className="library-payload" data-testid="library-version-payload">
-              {JSON.stringify(version.payload, null, 2)}
-            </pre>
+            <div className="library-artifact" data-testid="library-artifact">
+              <ArtifactRenderer
+                contentType={detail.content_type}
+                payload={version.payload}
+              />
+            </div>
           ) : (
             <p className="muted">No version is available to open yet.</p>
           )}

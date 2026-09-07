@@ -1,5 +1,10 @@
 .work-page {
   max-width: var(--content-max);
+  min-width: 0;
+}
+
+.work-page .artifact-document {
+  min-width: 0;
 }
 
 .work-page h1 {

@@ -45,6 +45,81 @@ const CANONICAL_LABELS = [
   "Teacher Notes",
 ] as const;
 
+function e2eArtifactPayload(contentType: string, title: string) {
+  const objectives = [{ id: "obj-1", text: "Name leaf parts" }];
+  const questions = [
+    {
+      id: "q-1",
+      prompt: "Name one part of a leaf",
+      question_type: "short_answer",
+      difficulty: "easy",
+      bloom_level: "remember",
+      objective_ids: ["obj-1"],
+      options: [],
+      answer: "blade",
+      explanation: "The blade is the broad part of the leaf.",
+      visual_description: null,
+    },
+  ];
+  switch (contentType) {
+    case "lesson_plan":
+      return {
+        title,
+        learning_objectives: objectives,
+        objective_ids: ["obj-1"],
+        materials: ["leaf diagram"],
+        opening: "Look closely at a real leaf.",
+        sections: [
+          {
+            id: "sec-1",
+            title: "Observe",
+            objective_ids: ["obj-1"],
+            teacher_actions: "Point to leaf parts.",
+            learner_actions: "Name one part of a leaf",
+            estimated_minutes: 8,
+          },
+        ],
+        closure: "Recap the parts named.",
+        formative_check: "Ask each pair to name one part.",
+      };
+    case "worksheet":
+      return {
+        title,
+        teacher_summary: "Quick leaf-part practice.",
+        learning_objectives: objectives,
+        instructions: "Answer the questions.",
+        questions,
+      };
+    case "quiz":
+    case "homework":
+      return {
+        title,
+        learning_objectives: objectives,
+        instructions: "Answer independently.",
+        questions,
+      };
+    case "answer_key":
+      return {
+        title,
+        entries: [
+          {
+            source_artifact_kind: "worksheet",
+            source_question_id: "q-1",
+            answer: "blade",
+            explanation: "The blade is the broad part of the leaf.",
+          },
+        ],
+      };
+    case "teacher_notes":
+      return {
+        title,
+        notes: ["Invite students to name one part of a leaf before drawing."],
+      };
+    default:
+      return { prompt: "Name one part of a leaf", note: "safe" };
+  }
+}
+
 function calendarDate(offsetDays: number): string {
   const now = new Date();
   const date = new Date(
@@ -327,7 +402,7 @@ async function mockTeachingApis(page: Page) {
             published_version_id: null,
             schema_id: contentType,
             schema_version: 1,
-            payload: { prompt: "Name one part of a leaf", note: "safe" },
+            payload: e2eArtifactPayload(contentType, title),
             payload_sha256: "deadbeef",
           }),
         });
@@ -406,7 +481,7 @@ async function mockTeachingApis(page: Page) {
             version_number: 1,
             schema_id: contentType,
             schema_version: 1,
-            payload: { prompt: "Name one part of a leaf", note: "safe" },
+            payload: e2eArtifactPayload(contentType, title),
             payload_sha256: "deadbeef",
             origin: "AI",
             parent_version_id: null,
@@ -623,8 +698,11 @@ test.describe("Teacher OS mission → intent → work smoke", () => {
         `/teacher-os/work/${WORK_ID}/artifacts/${CONTENT_IDS[1]}/versions/${VERSION_IDS[1]}$`,
       ),
     );
-    await expect(page.getByText(/does not use the Review Queue/i)).toBeVisible();
+    await expect(
+      page.getByText(/Preview this teaching resource/i),
+    ).toBeVisible();
     await expect(page.getByText("Name one part of a leaf")).toBeVisible();
+    await expect(page.getByText("The blade is the broad part of the leaf.")).toHaveCount(0);
 
     await page.getByRole("link", { name: /Back to preparation/i }).click();
     await expect(page).toHaveURL(new RegExp(`/teacher-os/work/${WORK_ID}$`));

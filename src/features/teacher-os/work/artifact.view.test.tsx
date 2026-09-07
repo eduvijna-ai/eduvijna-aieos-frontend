@@ -1,5 +1,6 @@
 import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { worksheetPayload } from "@/features/teacher-os/artifacts/artifactFixtures";
 import {
   CONTENT_ID,
   isContentGetPath,
@@ -28,7 +29,9 @@ describe("TOS-DEV05R1 Artifact viewer", () => {
         );
       }
       if (isContentVersionGetPath(call.url, CONTENT_ID, VERSION_ID)) {
-        return mockJsonResponse(sampleContentVersionResponse());
+        return mockJsonResponse(
+          sampleContentVersionResponse({ payload: worksheetPayload }),
+        );
       }
       if (call.url.includes("/teacher-os/review-queue/")) {
         throw new Error("Review Queue detail must not be used for durable view");
@@ -49,9 +52,15 @@ describe("TOS-DEV05R1 Artifact viewer", () => {
     expect(
       screen.getByRole("heading", { name: "Artifact" }).closest("section"),
     ).toHaveTextContent("Approved");
-    expect(screen.getByText("Name one part of a leaf")).toBeInTheDocument();
     expect(
-      screen.getByText(/does not use the Review Queue/i),
+      screen.getByText("Which fraction is equivalent to 1/2?"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Two quarters equal one half."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Generated payload")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Preview this teaching resource/i),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Publish" })).toBeInTheDocument();
 
@@ -88,7 +97,9 @@ describe("TOS-DEV05R1 Artifact viewer", () => {
         );
       }
       if (isContentVersionGetPath(call.url, CONTENT_ID, VERSION_ID)) {
-        return mockJsonResponse(sampleContentVersionResponse());
+        return mockJsonResponse(
+          sampleContentVersionResponse({ payload: worksheetPayload }),
+        );
       }
       return mockJsonResponse(
         { title: "Not Found", status: 404 },
@@ -104,7 +115,7 @@ describe("TOS-DEV05R1 Artifact viewer", () => {
       "section",
     );
     expect(meta).toHaveTextContent("Published");
-    expect(meta).toHaveTextContent("APPROVED");
+    expect(meta).toHaveTextContent("Approved");
     expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
   });
 });
