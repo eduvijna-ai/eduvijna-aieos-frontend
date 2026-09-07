@@ -44,6 +44,7 @@ const REQUIRED_OPERATION_IDS = [
   "teacher_os_memory_create",
   "teacher_os_memory_update",
   "teacher_os_assistant_respond",
+  "platform_ai_providers_get",
 ] as const;
 
 describe("TOS-DEV10-I03 OpenAPI consumer contract", () => {
@@ -53,10 +54,10 @@ describe("TOS-DEV10-I03 OpenAPI consumer contract", () => {
       "utf8",
     );
     expect(syncScript).toContain(
-      "a6a1cbb5a83fc9feec6a6f5077fcc5e60f60ab24",
+      "ac19985b6da3ac98569f0c39cf661b99002fa748",
     );
     expect(syncScript).toContain(
-      "4BF6C88B662D99F1E0E21E6F0AF2D267B39644300D85D99A859A7720F1568411",
+      "D5CC3A53C789406C69D0207CB0A8778C2730FBE9544C567503EB256BDA92CEFB",
     );
   });
 
@@ -67,7 +68,7 @@ describe("TOS-DEV10-I03 OpenAPI consumer contract", () => {
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "4BF6C88B662D99F1E0E21E6F0AF2D267B39644300D85D99A859A7720F1568411",
+      "D5CC3A53C789406C69D0207CB0A8778C2730FBE9544C567503EB256BDA92CEFB",
     );
   });
 

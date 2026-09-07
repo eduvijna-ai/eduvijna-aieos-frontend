@@ -36,3 +36,8 @@
 .settings-page .settings-confirm {
   color: var(--color-accent, inherit);
 }
+
+.settings-dev-link {
+  display: inline-flex;
+  font-weight: 600;
+}

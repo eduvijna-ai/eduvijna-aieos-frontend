@@ -33,7 +33,7 @@ describe("TOS-DEV10-I04 Assistant architecture", () => {
 
   it("pins Backend I04 OpenAPI digest", () => {
     const sync = read("scripts/sync-openapi-snapshot.mjs");
-    expect(sync).toContain("a6a1cbb5a83fc9feec6a6f5077fcc5e60f60ab24");
+    expect(sync).toContain("ac19985b6da3ac98569f0c39cf661b99002fa748");
     const digest = createHash("sha256")
       .update(
         readFileSync(
@@ -43,7 +43,7 @@ describe("TOS-DEV10-I04 Assistant architecture", () => {
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "4BF6C88B662D99F1E0E21E6F0AF2D267B39644300D85D99A859A7720F1568411",
+      "D5CC3A53C789406C69D0207CB0A8778C2730FBE9544C567503EB256BDA92CEFB",
     );
   });
 });

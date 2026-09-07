@@ -178,6 +178,25 @@ export function SettingsPage() {
         </section>
       ) : null}
 
+      {!isProduction ? (
+        <section
+          className="panel"
+          aria-labelledby="settings-ai-development-heading"
+        >
+          <h2 id="settings-ai-development-heading">AI development</h2>
+          <p className="muted">
+            View the active AI provider and capability routing. This is a
+            development observability surface, not a teacher preference.
+          </p>
+          <Link
+            className="settings-dev-link"
+            to="/teacher-os/settings/provider-aggregator"
+          >
+            Provider Aggregator
+          </Link>
+        </section>
+      ) : null}
+
       {status === "unavailable" ? (
         <EmptyState
           title="Connect a session"
