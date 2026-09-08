@@ -13,6 +13,7 @@ export default tseslint.config(
       "test-results/**",
       "node_modules/**",
       "src/services/api/generated/**",
+      "tmp/**",
     ],
   },
   js.configs.recommended,

@@ -20,6 +20,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:product": "playwright test --config playwright.product.config.ts",
+    "test:e2e:student-product": "playwright test --config playwright.student-product.config.ts",
     "sync:openapi": "node scripts/sync-openapi-snapshot.mjs",
     "generate:api-types": "openapi-typescript contracts/openapi/aieos-v1.consumer-snapshot.json -o src/services/api/generated/aieos-v1.ts"
   },

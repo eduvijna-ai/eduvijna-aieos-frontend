@@ -30,7 +30,9 @@
     "src/features/teacher-os/teach/assignment.contract.test.ts",
     "src/features/teacher-os/improve/improve.architecture.test.ts",
     "src/features/teacher-os/ai-assistant/assistant.architecture.test.ts",
+    "src/features/student-os/student-os.architecture.test.ts",
     "src/localDev.portAlignment.test.ts",
-    "src/productE2e.pins.test.ts"
+    "src/productE2e.pins.test.ts",
+    "src/studentProductE2e.pins.test.ts"
   ]
 }
