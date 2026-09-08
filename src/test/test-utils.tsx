@@ -26,7 +26,7 @@ import { PreparePage } from "@/features/teacher-os/prepare/PreparePage";
 import { WorkPage } from "@/features/teacher-os/work/WorkPage";
 import { ArtifactViewPage } from "@/features/teacher-os/work/ArtifactViewPage";
 import { TeachPage } from "@/features/teacher-os/teach/TeachPage";
-import { AssignmentDetailPage } from "@/features/teacher-os/teach/AssignmentDetailPage";
+import { AssignmentDetailPage as TeacherAssignmentDetailPage } from "@/features/teacher-os/teach/AssignmentDetailPage";
 import { ExecutionDetailPage } from "@/features/teacher-os/teach/ExecutionDetailPage";
 import { AssessPage } from "@/features/teacher-os/assess/AssessPage";
 import { ImprovePage } from "@/features/teacher-os/improve/ImprovePage";
@@ -35,6 +35,11 @@ import { LibraryDetailPage } from "@/features/teacher-os/library/LibraryDetailPa
 import { AiAssistantPage } from "@/features/teacher-os/ai-assistant/AiAssistantPage";
 import { SettingsPage } from "@/features/teacher-os/settings/SettingsPage";
 import { ProviderAggregatorPage } from "@/features/teacher-os/settings/ProviderAggregatorPage";
+import { StudentOsShell } from "@/features/student-os/shell/StudentOsShell";
+import { StudentHomePage } from "@/features/student-os/home/StudentHomePage";
+import { AssignmentsPage } from "@/features/student-os/assignments/AssignmentsPage";
+import { AssignmentDetailPage as StudentAssignmentDetailPage } from "@/features/student-os/assignments/AssignmentDetailPage";
+import { AttemptPage } from "@/features/student-os/attempts/AttemptPage";
 import type {
   ContentResponse,
   ContentVersionResponse,
@@ -89,6 +94,15 @@ export function renderApp(
     <SessionProvider>
       <MemoryRouter initialEntries={[route]}>
         <Routes>
+          <Route path="/student-os" element={<StudentOsShell />}>
+            <Route path="home" element={<StudentHomePage />} />
+            <Route path="assignments" element={<AssignmentsPage />} />
+            <Route
+              path="assignments/:assignmentId"
+              element={<StudentAssignmentDetailPage />}
+            />
+            <Route path="attempts/:attemptId" element={<AttemptPage />} />
+          </Route>
           <Route path="/teacher-os" element={<TeacherOsShell />}>
             <Route path="today" element={<TodayPage />} />
             <Route path="review" element={<ReviewQueuePage />} />
@@ -105,7 +119,7 @@ export function renderApp(
             <Route path="teach" element={<TeachPage />} />
             <Route
               path="teach/assignments/:assignmentId"
-              element={<AssignmentDetailPage />}
+              element={<TeacherAssignmentDetailPage />}
             />
             <Route
               path="teach/executions/:executionId"
