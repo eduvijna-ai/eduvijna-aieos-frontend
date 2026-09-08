@@ -57,6 +57,7 @@ dist/
 coverage/
 playwright-report/
 playwright-product-report/
+playwright-student-product-report/
 test-results/
 blob-report/
 .tmp/
