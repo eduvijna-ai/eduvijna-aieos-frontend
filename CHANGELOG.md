@@ -9,6 +9,13 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- AIEOS360-S01-I04R1: Additive Student real-stack product E2E
+  (`pnpm test:e2e:student-product`, CI job `student-product-e2e`) against
+  merged I03 backend `921d35eb08890a4e1d86cf95daf9d38cdfc4a13c`, migration
+  `a360s010002`, OpenAPI
+  `4691D6BADA2157D436435BB5CCDD6797EA670D1A87543D42CA39A478F940F330`;
+  preserves Teacher OS `product-e2e` on backend
+  `a6a1cbb5a83fc9feec6a6f5077fcc5e60f60ab24`.
 - AIEOS360-S01-I04: Student OS assignment consumption and learner attempt
   experience against the frozen I03 contract — Student Home uses exact
   `current_assignment_count`, opaque `next_cursor` pagination, assignment

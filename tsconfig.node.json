@@ -18,5 +18,12 @@
     "noUncheckedSideEffectImports": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "playwright.config.ts", "eslint.config.js"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "playwright.product.config.ts",
+    "playwright.student-product.config.ts",
+    "eslint.config.js"
+  ]
 }
