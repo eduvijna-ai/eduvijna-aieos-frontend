@@ -81,6 +81,21 @@ describe("AIEOS360-S01-I05-E2E pin consistency", () => {
     expect(ci).toContain("pnpm test:e2e:product");
     expect(ci).toContain("pnpm test:e2e:student-product");
 
+    const i05Job = ci.slice(ci.indexOf("aieos360-s01-i05-e2e:"));
+    const nextJob = i05Job.search(/\n {2}[a-z0-9-]+:\n/);
+    const i05JobBlock =
+      nextJob === -1 ? i05Job : i05Job.slice(0, nextJob);
+    expect(i05JobBlock).toMatch(
+      /aieos360-s01-i05-e2e:[\s\S]*?permissions:\s*\n\s{2,}contents:\s*read/,
+    );
+    expect(i05JobBlock).not.toMatch(/actions:\s*write/);
+    expect(i05JobBlock).not.toMatch(/checks:\s*write/);
+    expect(i05JobBlock).not.toMatch(/contents:\s*write/);
+    expect(i05JobBlock).not.toMatch(/pull-requests:\s*write/);
+    expect(i05JobBlock).not.toMatch(/packages:\s*write/);
+    expect(i05JobBlock).not.toMatch(/id-token:\s*write/);
+    expect(i05JobBlock).not.toMatch(/security-events:\s*write/);
+
     const teacherConstants = read("scripts/product-e2e/constants.mjs");
     expect(teacherConstants).toContain(TEACHER_BACKEND);
     expect(teacherConstants).not.toContain(EXPECTED_BACKEND);

@@ -274,6 +274,8 @@ test.describe("[AIEOS360-S01-I05-E2E] Real student→assessment→teacher→impr
       },
     );
     expect(ensureDenied.ok()).toBeFalsy();
+    expect([401, 403, 404, 501, 503]).toContain(ensureDenied.status());
+    expect(ensureDenied.status()).not.toBe(500);
 
     await page.context().close();
   });

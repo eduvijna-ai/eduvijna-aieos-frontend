@@ -246,6 +246,8 @@ jobs:
     name: aieos360-s01-i05-e2e
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
     env:
       AIEOS_BACKEND_ROOT: ${{ github.workspace }}/backend
       AIEOS_BACKEND_PIN_SHA: 3d25bb2d7ae3a6a95affdf075a75f20db48a6959
