@@ -54,10 +54,10 @@ describe("TOS-DEV10-I03 OpenAPI consumer contract", () => {
       "utf8",
     );
     expect(syncScript).toContain(
-      "921d35eb08890a4e1d86cf95daf9d38cdfc4a13c",
+      "3d25bb2d7ae3a6a95affdf075a75f20db48a6959",
     );
     expect(syncScript).toContain(
-      "4691D6BADA2157D436435BB5CCDD6797EA670D1A87543D42CA39A478F940F330",
+      "7B51CE21725651B8D556B9DD6D264473DF0A2E7CAF30D722E1CC776C651FAFBB",
     );
   });
 
@@ -68,7 +68,7 @@ describe("TOS-DEV10-I03 OpenAPI consumer contract", () => {
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "4691D6BADA2157D436435BB5CCDD6797EA670D1A87543D42CA39A478F940F330",
+      "7B51CE21725651B8D556B9DD6D264473DF0A2E7CAF30D722E1CC776C651FAFBB",
     );
   });
 

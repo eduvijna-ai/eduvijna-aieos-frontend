@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
+  ensureAssignmentEvaluations,
+  getAssignmentAssessmentIntelligence,
+  type TeacherAssessmentIntelligenceResponse,
+} from "@/services/api/assessmentIntelligenceApi";
+import {
   correctClassroomAssessment,
   getClassroomAssessment,
   listClassroomAssessments,
@@ -8,6 +13,10 @@ import {
   voidClassroomAssessment,
   type ClassroomAssessmentResponse,
 } from "@/services/api/classroomAssessmentsApi";
+import {
+  getTeachingAssignment,
+  type TeachingAssignmentResponse,
+} from "@/services/api/teachingAssignmentsApi";
 import {
   getTeachingExecution,
   type TeachingExecutionContentBindingResponse,
@@ -22,9 +31,11 @@ import {
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ErrorState } from "@/shared/components/ErrorState";
 import { LoadingState } from "@/shared/components/LoadingState";
+import { AssignmentIntelligencePanel } from "./AssignmentIntelligencePanel";
 import {
   clearIdempotencyAssociation,
   correctAssessmentMaterial,
+  ensureEvaluationsMaterial,
   recordAssessmentMaterial,
   resolveRevisionSensitiveIdempotencyKey,
   retainOrMintIdempotencyKey,
@@ -56,7 +67,8 @@ type PageStatus =
   | "error"
   | "recording"
   | "correcting"
-  | "voiding";
+  | "voiding"
+  | "ensuring";
 
 function normalizeNote(raw: string): string | null {
   const trimmed = raw.trim();
@@ -72,6 +84,7 @@ export function AssessPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const executionIdParam = searchParams.get("execution_id");
   const assessmentIdParam = searchParams.get("assessment_id");
+  const assignmentIdParam = searchParams.get("assignment_id");
 
   const [status, setStatus] = useState<PageStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -81,6 +94,13 @@ export function AssessPage() {
   const [execution, setExecution] = useState<TeachingExecutionResponse | null>(
     null,
   );
+  const [assignment, setAssignment] =
+    useState<TeachingAssignmentResponse | null>(null);
+  const [intelligence, setIntelligence] =
+    useState<TeacherAssessmentIntelligenceResponse | null>(null);
+  /** Historical TeachingAssignment GET denied; B3 evidence may still be authorized. */
+  const [assignmentOwnerUnavailable, setAssignmentOwnerUnavailable] =
+    useState(false);
   const [eligibleBindings, setEligibleBindings] = useState<
     TeachingExecutionContentBindingResponse[]
   >([]);
@@ -95,6 +115,9 @@ export function AssessPage() {
 
   const [resultLevel, setResultLevel] =
     useState<ClassResultLevel>("DEMONSTRATED");
+  /** Assignment-intelligence path requires deliberate judgment selection. */
+  const [assignmentJudgmentChosen, setAssignmentJudgmentChosen] =
+    useState(false);
   const [resultNote, setResultNote] = useState("");
   const [confirmVoid, setConfirmVoid] = useState(false);
   const [voidBasisRevision, setVoidBasisRevision] = useState<number | null>(
@@ -108,6 +131,8 @@ export function AssessPage() {
   const correctMaterialRef = useRef<string | null>(null);
   const voidKeyRef = useRef<string | null>(null);
   const voidMaterialRef = useRef<string | null>(null);
+  const ensureKeyRef = useRef<string | null>(null);
+  const ensureMaterialRef = useRef<string | null>(null);
   const mutationInFlightRef = useRef(false);
 
   const selectedBinding = useMemo(() => {
@@ -120,7 +145,7 @@ export function AssessPage() {
   }, [eligibleBindings, selectedBindingKey]);
 
   const clearMutationAssociation = useCallback(
-    (operation: "record" | "correct" | "void") => {
+    (operation: "record" | "correct" | "void" | "ensure") => {
       switch (operation) {
         case "record":
           clearIdempotencyAssociation(recordKeyRef, recordMaterialRef);
@@ -130,6 +155,9 @@ export function AssessPage() {
           break;
         case "void":
           clearIdempotencyAssociation(voidKeyRef, voidMaterialRef);
+          break;
+        case "ensure":
+          clearIdempotencyAssociation(ensureKeyRef, ensureMaterialRef);
           break;
       }
     },
@@ -154,6 +182,9 @@ export function AssessPage() {
     if (!session) {
       setStatus("unavailable");
       setExecution(null);
+      setAssignment(null);
+      setIntelligence(null);
+      setAssignmentOwnerUnavailable(false);
       setHistory([]);
       setSelected(null);
       return;
@@ -166,9 +197,93 @@ export function AssessPage() {
 
     try {
       let loadedExecution: TeachingExecutionResponse | null = null;
+      let loadedAssignment: TeachingAssignmentResponse | null = null;
+      let loadedIntelligence: TeacherAssessmentIntelligenceResponse | null =
+        null;
       let bindings: TeachingExecutionContentBindingResponse[] = [];
 
+      if (assignmentIdParam) {
+        setExecution(null);
+        setEligibleBindings([]);
+        setSelectedBindingKey(null);
+        setAssignmentJudgmentChosen(false);
+
+        // B3 intelligence is authoritative for learner-evidence read.
+        // Do NOT gate it on historical TeachingAssignment ownership.
+        try {
+          const intelligenceResponse =
+            await getAssignmentAssessmentIntelligence(assignmentIdParam);
+          loadedIntelligence = intelligenceResponse.data;
+          setIntelligence(loadedIntelligence);
+        } catch (intelligenceError) {
+          setAssignment(null);
+          setIntelligence(null);
+          setAssignmentOwnerUnavailable(false);
+          setHistory([]);
+          setSelected(null);
+          setSelectedEtag(null);
+          setStatus("error");
+          setErrorMessage(messageForAssessError(intelligenceError));
+          return;
+        }
+
+        try {
+          const assignmentResponse =
+            await getTeachingAssignment(assignmentIdParam);
+          loadedAssignment = assignmentResponse.data;
+          setAssignment(loadedAssignment);
+          setAssignmentOwnerUnavailable(false);
+        } catch (assignmentError) {
+          loadedAssignment = null;
+          setAssignment(null);
+          // Soft-fail optional TeachingAssignment context (including historical
+          // owner 403). Authorized B3 intelligence already succeeded above.
+          setAssignmentOwnerUnavailable(true);
+          void assignmentError;
+        }
+
+        let items: ClassroomAssessmentResponse[] = [];
+        try {
+          const listResponse = await listClassroomAssessments({
+            assignmentId: assignmentIdParam,
+            limit: 50,
+          });
+          items = listResponse.data.items;
+          setHistory(items);
+        } catch {
+          setHistory([]);
+        }
+
+        if (assessmentIdParam) {
+          try {
+            const detail = await getClassroomAssessment(assessmentIdParam);
+            applySelectedAssessment(detail.data, detail.etag);
+          } catch {
+            setSelected(null);
+            setSelectedEtag(null);
+          }
+        } else if (
+          items.length === 1 &&
+          items[0]?.assignment_id === assignmentIdParam &&
+          loadedAssignment
+        ) {
+          // Auto-select only on owner-readable assignment context.
+          const detail = await getClassroomAssessment(items[0]!.assessment_id);
+          applySelectedAssessment(detail.data, detail.etag);
+        } else if (!assessmentIdParam) {
+          setSelected(null);
+          setSelectedEtag(null);
+        }
+
+        setStatus("ready");
+        return;
+      }
+
+      setAssignmentOwnerUnavailable(false);
+
       if (executionIdParam) {
+        setAssignment(null);
+        setIntelligence(null);
         const executionResponse = await getTeachingExecution(executionIdParam);
         loadedExecution = executionResponse.data;
         setExecution(loadedExecution);
@@ -185,6 +300,8 @@ export function AssessPage() {
         });
       } else {
         setExecution(null);
+        setAssignment(null);
+        setIntelligence(null);
         setEligibleBindings([]);
         setSelectedBindingKey(null);
       }
@@ -206,7 +323,7 @@ export function AssessPage() {
       ) {
         const detail = await getClassroomAssessment(items[0]!.assessment_id);
         applySelectedAssessment(detail.data, detail.etag);
-      } else {
+      } else if (!assessmentIdParam) {
         setSelected(null);
         setSelectedEtag(null);
       }
@@ -220,6 +337,7 @@ export function AssessPage() {
     session,
     executionIdParam,
     assessmentIdParam,
+    assignmentIdParam,
     applySelectedAssessment,
   ]);
 
@@ -233,8 +351,120 @@ export function AssessPage() {
     return detail;
   }
 
+  async function onEnsureEvaluations() {
+    if (!session || !assignmentIdParam || mutationInFlightRef.current) return;
+
+    const material = ensureEvaluationsMaterial(assignmentIdParam);
+    const key = retainOrMintIdempotencyKey(
+      material,
+      ensureKeyRef,
+      ensureMaterialRef,
+    );
+
+    mutationInFlightRef.current = true;
+    setBusy(true);
+    setStatus("ensuring");
+    setActionMessage(null);
+    setErrorMessage(null);
+    try {
+      await ensureAssignmentEvaluations(assignmentIdParam, key);
+      clearMutationAssociation("ensure");
+      const intelligenceResponse =
+        await getAssignmentAssessmentIntelligence(assignmentIdParam);
+      setIntelligence(intelligenceResponse.data);
+      setActionMessage(
+        "Submitted work evaluated under the current policy. Review the updated evidence — no ClassroomAssessment or Improve was created.",
+      );
+      setStatus("ready");
+    } catch (error) {
+      setStatus("ready");
+      await handleMutationError(error, { invalidate: "ensure" });
+    } finally {
+      mutationInFlightRef.current = false;
+      setBusy(false);
+    }
+  }
+
   async function onRecord() {
-    if (!session || !execution || !selectedBinding || mutationInFlightRef.current) {
+    if (mutationInFlightRef.current) return;
+
+    if (assignment && assignmentIdParam) {
+      if (!assignmentJudgmentChosen) {
+        setActionMessage(
+          "Choose a class result deliberately. Assessment intelligence does not select the judgment for you.",
+        );
+        return;
+      }
+      if (resultNote.length > CLASS_RESULT_NOTE_MAX) {
+        setActionMessage(
+          `Class result note must be at most ${CLASS_RESULT_NOTE_MAX} characters.`,
+        );
+        return;
+      }
+
+      const note = normalizeNote(resultNote);
+      const body = {
+        class_ref: assignment.class_ref,
+        content_id: assignment.content_id,
+        content_version_id: assignment.content_version_id,
+        class_result_level: resultLevel,
+        class_result_note: note,
+        execution_id: null,
+        work_id: assignment.source_work_id ?? null,
+        assignment_id: assignment.assignment_id,
+      };
+      const material = recordAssessmentMaterial({
+        classRef: body.class_ref,
+        contentId: body.content_id,
+        contentVersionId: body.content_version_id,
+        classResultLevel: body.class_result_level,
+        classResultNote: note,
+        executionId: null,
+        workId: body.work_id,
+        assignmentId: body.assignment_id,
+      });
+      const key = retainOrMintIdempotencyKey(
+        material,
+        recordKeyRef,
+        recordMaterialRef,
+      );
+
+      mutationInFlightRef.current = true;
+      setBusy(true);
+      setStatus("recording");
+      setActionMessage(null);
+      setErrorMessage(null);
+      try {
+        const response = await recordClassroomAssessment(body, key);
+        clearMutationAssociation("record");
+        applySelectedAssessment(response.data, response.etag);
+        setSearchParams(
+          {
+            assignment_id: assignment.assignment_id,
+            assessment_id: response.data.assessment_id,
+          },
+          { replace: true },
+        );
+        setActionMessage(
+          "Classroom assessment recorded from assignment evidence. This is class-level teacher judgment — not mastery and not automatic Improve.",
+        );
+        const listResponse = await listClassroomAssessments({
+          assignmentId: assignment.assignment_id,
+          limit: 50,
+        });
+        setHistory(listResponse.data.items);
+        setStatus("ready");
+      } catch (error) {
+        setStatus("ready");
+        await handleMutationError(error, { invalidate: "record" });
+      } finally {
+        mutationInFlightRef.current = false;
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (!session || !execution || !selectedBinding) {
       return;
     }
     if (execution.lifecycle_state !== "COMPLETED") {
@@ -396,7 +626,8 @@ export function AssessPage() {
       applySelectedAssessment(response.data, response.etag);
       setActionMessage("Classroom assessment corrected.");
       const listResponse = await listClassroomAssessments({
-        executionId: executionIdParam,
+        executionId: assignmentIdParam ? null : executionIdParam,
+        assignmentId: assignmentIdParam,
         limit: 50,
       });
       setHistory(listResponse.data.items);
@@ -479,7 +710,8 @@ export function AssessPage() {
         "Classroom assessment voided. VOIDED is terminal and remains visible history.",
       );
       const listResponse = await listClassroomAssessments({
-        executionId: executionIdParam,
+        executionId: assignmentIdParam ? null : executionIdParam,
+        assignmentId: assignmentIdParam,
         limit: 50,
       });
       setHistory(listResponse.data.items);
@@ -499,7 +731,7 @@ export function AssessPage() {
   async function handleMutationError(
     error: unknown,
     options: {
-      invalidate: "record" | "correct" | "void";
+      invalidate: "record" | "correct" | "void" | "ensure";
       resetConfirm?: boolean;
     },
   ) {
@@ -525,10 +757,14 @@ export function AssessPage() {
       (error.status === 403 ||
         code === "assessment_capability_forbidden" ||
         code === "class_ref_not_assignable" ||
-        code === "classroom_assessment_forbidden")
+        code === "classroom_assessment_forbidden" ||
+        code === "forbidden")
     ) {
-      if (options.invalidate === "record") {
-        clearMutationAssociation("record");
+      if (
+        options.invalidate === "record" ||
+        options.invalidate === "ensure"
+      ) {
+        clearMutationAssociation(options.invalidate);
       }
       setErrorMessage(
         "You are not authorized for this Assessment action right now. Server authority denied the request.",
@@ -539,8 +775,12 @@ export function AssessPage() {
       error instanceof ApiError &&
       (error.status === 503 ||
         code === "authorization_unavailable" ||
-        code === "school_context_unavailable")
+        code === "school_context_unavailable" ||
+        code === "authentication_unavailable")
     ) {
+      if (options.invalidate === "ensure") {
+        clearMutationAssociation("ensure");
+      }
       setErrorMessage(
         "Assessment authority is temporarily unavailable. No mutation was assumed. Retry when the service recovers.",
       );
@@ -587,10 +827,16 @@ export function AssessPage() {
     setErrorMessage(messageForAssessError(error));
   }
 
-  const canRecord =
+  const canRecordExecution =
     Boolean(execution) &&
     execution?.lifecycle_state === "COMPLETED" &&
     Boolean(selectedBinding) &&
+    !selected;
+
+  const canRecordAssignment =
+    Boolean(assignment) &&
+    Boolean(assignmentIdParam) &&
+    Boolean(intelligence) &&
     !selected;
 
   const showExecutionEmptyEligible =
@@ -655,13 +901,15 @@ export function AssessPage() {
 
       {status !== "unavailable" && status !== "loading" ? (
         <>
-          {!executionIdParam && !assessmentIdParam ? (
+          {!executionIdParam && !assessmentIdParam && !assignmentIdParam ? (
             <section className="panel" aria-labelledby="assess-start-heading">
-              <h2 id="assess-start-heading">Start from a completed lesson</h2>
+              <h2 id="assess-start-heading">Start from a completed lesson or assignment</h2>
               <p className="muted">
                 Open a COMPLETED TeachingExecution in Teach and choose{" "}
-                <strong>Assess this class</strong>. That navigation is advisory
-                only — it does not create an Assessment.
+                <strong>Assess this class</strong>, or open a TeachingAssignment
+                and choose <strong>Review assessment intelligence</strong>. That
+                navigation is advisory only — it does not create an Assessment
+                or evaluate learners.
               </p>
               <p>
                 <Link className="btn btn-secondary" to="/teacher-os/teach">
@@ -669,6 +917,83 @@ export function AssessPage() {
                 </Link>
               </p>
             </section>
+          ) : null}
+
+          {assignment ? (
+            <section
+              className="panel"
+              aria-labelledby="assess-assignment-context-heading"
+            >
+              <h2 id="assess-assignment-context-heading">Assignment context</h2>
+              <dl className="work-meta">
+                <div>
+                  <dt>Assignment</dt>
+                  <dd>
+                    <Link
+                      to={`/teacher-os/teach/assignments/${assignment.assignment_id}`}
+                    >
+                      <code>{assignment.assignment_id}</code>
+                    </Link>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Lifecycle</dt>
+                  <dd>
+                    <span
+                      className="lifecycle-pill"
+                      data-state={assignment.lifecycle_state}
+                    >
+                      {assignment.lifecycle_state}
+                    </span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>ClassRef</dt>
+                  <dd>
+                    <code>{assignment.class_ref}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Content / version</dt>
+                  <dd>
+                    <code>{assignment.content_id}</code> /{" "}
+                    <code>{assignment.content_version_id}</code>
+                  </dd>
+                </div>
+                {assignment.source_work_id ? (
+                  <div>
+                    <dt>Source work</dt>
+                    <dd>
+                      <code>{assignment.source_work_id}</code>
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+              <p className="muted">
+                Evidence ≠ teacher judgment. Assessment Intelligence ≠
+                ClassroomAssessment. ClassroomAssessment ≠ Improve.
+              </p>
+            </section>
+          ) : null}
+
+          {assignmentOwnerUnavailable && intelligence ? (
+            <p
+              className="muted status-region"
+              role="status"
+              data-testid="assignment-owner-unavailable-notice"
+            >
+              Assessment evidence is available under current class authority.
+              Historical TeachingAssignment details are not available to this
+              teacher.
+            </p>
+          ) : null}
+
+          {intelligence ? (
+            <AssignmentIntelligencePanel
+              intelligence={intelligence}
+              busy={busy}
+              onEvaluateSubmittedWork={() => void onEnsureEvaluations()}
+            />
           ) : null}
 
           {execution ? (
@@ -727,7 +1052,7 @@ export function AssessPage() {
             </section>
           ) : null}
 
-          {canRecord && selectedBinding ? (
+          {canRecordExecution && selectedBinding ? (
             <section className="panel" aria-labelledby="assess-record-heading">
               <h2 id="assess-record-heading">Record class result</h2>
               <p className="muted">
@@ -824,6 +1149,103 @@ export function AssessPage() {
                   className="btn"
                   disabled={busy}
                   aria-busy={busy || status === "recording"}
+                  onClick={() => void onRecord()}
+                >
+                  Record class assessment
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          {canRecordAssignment && assignment ? (
+            <section
+              className="panel"
+              aria-labelledby="assess-assignment-record-heading"
+              data-testid="assignment-record-panel"
+            >
+              <h2 id="assess-assignment-record-heading">
+                Record class result from assignment evidence
+              </h2>
+              <p className="muted">
+                You choose the class-level ClassroomAssessment judgment. Learner
+                evaluation evidence above does not select or create this result
+                automatically.
+              </p>
+              <dl className="work-meta">
+                <div>
+                  <dt>Assignment</dt>
+                  <dd>
+                    <code>{assignment.assignment_id}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>ClassRef</dt>
+                  <dd>
+                    <code>{assignment.class_ref}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Content / version</dt>
+                  <dd>
+                    <code>{assignment.content_id}</code> /{" "}
+                    <code>{assignment.content_version_id}</code>
+                  </dd>
+                </div>
+              </dl>
+
+              <fieldset
+                className="assess-result-fieldset"
+                disabled={busy}
+                data-testid="assignment-judgment-fieldset"
+              >
+                <legend>Class result (required deliberate choice)</legend>
+                {CLASS_RESULT_LEVELS.map((option) => (
+                  <label key={option.value} className="assess-result-option">
+                    <input
+                      type="radio"
+                      name="assignment_class_result_level"
+                      value={option.value}
+                      checked={
+                        assignmentJudgmentChosen &&
+                        resultLevel === option.value
+                      }
+                      onChange={() => {
+                        setResultLevel(option.value);
+                        setAssignmentJudgmentChosen(true);
+                      }}
+                    />
+                    <span>
+                      <strong>{option.label}</strong>
+                      <span className="muted"> ({option.value})</span>
+                      <br />
+                      <span className="muted">{option.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+
+              <label className="assign-field">
+                <span>Class result note (optional)</span>
+                <textarea
+                  aria-label="Class result note"
+                  value={resultNote}
+                  maxLength={CLASS_RESULT_NOTE_MAX}
+                  rows={4}
+                  disabled={busy}
+                  onChange={(event) => setResultNote(event.target.value)}
+                />
+              </label>
+              <p className="muted assess-privacy-reminder">
+                {CLASS_RESULT_NOTE_PRIVACY_REMINDER}
+              </p>
+
+              <div className="detail-actions">
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={busy || !assignmentJudgmentChosen}
+                  aria-busy={busy || status === "recording"}
+                  data-testid="record-assignment-assessment"
                   onClick={() => void onRecord()}
                 >
                   Record class assessment
@@ -1066,6 +1488,9 @@ export function AssessPage() {
                                 ...(item.execution_id
                                   ? { execution_id: item.execution_id }
                                   : {}),
+                                ...(item.assignment_id
+                                  ? { assignment_id: item.assignment_id }
+                                  : {}),
                                 assessment_id: item.assessment_id,
                               },
                               { replace: false },
@@ -1092,11 +1517,20 @@ function messageForAssessError(error: unknown): string {
   if (code === "assessment_capability_forbidden") {
     return "Assessment capability denied by current server authority.";
   }
+  if (code === "class_ref_not_assignable") {
+    return "Current ClassRef authority denied this Assessment request.";
+  }
   if (code === "school_context_unavailable") {
     return "School Context authority is temporarily unavailable.";
   }
   if (code === "authorization_unavailable") {
     return "Authorization is temporarily unavailable.";
+  }
+  if (code === "forbidden") {
+    return "Server authority denied this request (including HUMAN principal classification when required).";
+  }
+  if (error instanceof ApiError && error.status === 404) {
+    return "Assignment or assessment was not found for this request.";
   }
   return userMessageForApiError(error);
 }

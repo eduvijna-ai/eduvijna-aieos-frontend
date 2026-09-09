@@ -25,6 +25,7 @@ import {
   formatAssignmentInstant,
   isActiveAssignment,
 } from "./assignmentPresentation";
+import { assessHrefForAssignment } from "../assess/assessmentPresentation";
 import "./teach.css";
 
 const TERMINAL_STATE_NOTICE =
@@ -409,6 +410,30 @@ export function AssignmentDetailPage() {
             <p className="muted">
               Creating or updating an Assignment does not imply learner
               delivery, LMS publish, roster snapshot, or grading.
+            </p>
+          </section>
+
+          <section
+            className="panel"
+            aria-labelledby="assignment-intelligence-entry-heading"
+          >
+            <h2 id="assignment-intelligence-entry-heading">
+              Assessment intelligence
+            </h2>
+            <p className="muted">
+              Review derived learner evidence for this assignment, then
+              deliberately record a class-level ClassroomAssessment and choose
+              Improve when appropriate. Opening Assess does not evaluate
+              learners or create judgment.
+            </p>
+            <p>
+              <Link
+                className="btn"
+                to={assessHrefForAssignment(assignment.assignment_id)}
+                data-testid="review-assessment-intelligence"
+              >
+                Review assessment intelligence
+              </Link>
             </p>
           </section>
 

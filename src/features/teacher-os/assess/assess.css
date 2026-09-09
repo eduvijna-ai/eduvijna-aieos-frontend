@@ -18,6 +18,35 @@
   font-weight: 500;
 }
 
+.assess-page .assess-intelligence-block {
+  margin-top: 1.25rem;
+}
+
+.assess-page .assess-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.assess-page .assess-intelligence-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.assess-page .assess-intelligence-table th,
+.assess-page .assess-intelligence-table td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  vertical-align: top;
+}
+
+.assess-page .assess-learner-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+}
+
 .lifecycle-pill[data-state="RECORDED"] {
   color: var(--color-accent);
 }

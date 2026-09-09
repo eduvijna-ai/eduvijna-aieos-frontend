@@ -124,3 +124,7 @@ export function assessHrefForExecution(executionId: string): string {
 export function assessHrefForAssessment(assessmentId: string): string {
   return `/teacher-os/assess?assessment_id=${encodeURIComponent(assessmentId)}`;
 }
+
+export function assessHrefForAssignment(assignmentId: string): string {
+  return `/teacher-os/assess?assignment_id=${encodeURIComponent(assignmentId)}`;
+}
