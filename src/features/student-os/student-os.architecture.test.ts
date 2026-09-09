@@ -41,9 +41,9 @@ const REQUIRED_OPERATION_IDS = [
 ] as const;
 
 describe("AIEOS360-S01-I04 Student OS architecture", () => {
-  it("pins the merged I03 OpenAPI digest", () => {
+  it("pins the AIEOS360-S01-I05-F1 OpenAPI digest", () => {
     const sync = read("scripts/sync-openapi-snapshot.mjs");
-    expect(sync).toContain("921d35eb08890a4e1d86cf95daf9d38cdfc4a13c");
+    expect(sync).toContain("3d25bb2d7ae3a6a95affdf075a75f20db48a6959");
     const digest = createHash("sha256")
       .update(
         readFileSync(
@@ -53,7 +53,7 @@ describe("AIEOS360-S01-I04 Student OS architecture", () => {
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "4691D6BADA2157D436435BB5CCDD6797EA670D1A87543D42CA39A478F940F330",
+      "7B51CE21725651B8D556B9DD6D264473DF0A2E7CAF30D722E1CC776C651FAFBB",
     );
   });
 

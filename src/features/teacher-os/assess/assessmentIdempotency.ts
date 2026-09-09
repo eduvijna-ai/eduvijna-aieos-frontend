@@ -57,3 +57,11 @@ export function voidAssessmentMaterial(input: {
     action: "void",
   });
 }
+
+/** Material for assignment-scoped ensure-evaluations (explicit teacher action). */
+export function ensureEvaluationsMaterial(assignmentId: string): string {
+  return JSON.stringify({
+    action: "ensure-evaluations",
+    assignment_id: assignmentId,
+  });
+}

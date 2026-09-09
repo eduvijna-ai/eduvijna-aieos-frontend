@@ -101,6 +101,25 @@ describe("TOS-DEV06-I04 Teach list", () => {
 });
 
 describe("TOS-DEV06-I04 Assignment detail mutations", () => {
+  it("exposes Review assessment intelligence entry to Assess assignment_id", async () => {
+    stubFetch((call) => {
+      if (
+        call.method === "GET" &&
+        call.url.endsWith(`/api/v1/teaching/assignments/${ASSIGNMENT_ID}`)
+      ) {
+        return mockJsonResponse(sampleAssignment(), { etag: '"r0"' });
+      }
+      return mockJsonResponse({ title: "x", status: 404 }, { status: 404 });
+    });
+
+    renderApp(`/teacher-os/teach/assignments/${ASSIGNMENT_ID}`);
+    const link = await screen.findByTestId("review-assessment-intelligence");
+    expect(link).toHaveAttribute(
+      "href",
+      `/teacher-os/assess?assignment_id=${ASSIGNMENT_ID}`,
+    );
+  });
+
   it("ACTIVE exposes due/close/cancel; fresh GET precedes PATCH with fresh If-Match", async () => {
     const user = userEvent.setup();
     let detailGets = 0;

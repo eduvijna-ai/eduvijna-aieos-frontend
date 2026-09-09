@@ -10,18 +10,25 @@ This directory holds a **consumer snapshot** of the AIEOS HTTP contract for fron
 - The file `aieos-v1.consumer-snapshot.json` in this frontend repo is **NON-AUTHORITATIVE**.
   It must not be treated as the source of truth for API behaviour.
 
-## Snapshot provenance (AIEOS360-S01-I04)
+## Snapshot provenance (AIEOS360-S01-I05-F1)
 
 | Field | Value |
 |-------|--------|
 | Source repo | `eduvijna-aieos-backend` |
 | Source path | `contracts/openapi/aieos-v1.json` |
-| Source SHA | `921d35eb08890a4e1d86cf95daf9d38cdfc4a13c` |
-| Authoritative OpenAPI SHA-256 | `4691D6BADA2157D436435BB5CCDD6797EA670D1A87543D42CA39A478F940F330` |
+| Source SHA | `3d25bb2d7ae3a6a95affdf075a75f20db48a6959` |
+| Authoritative OpenAPI SHA-256 | `7B51CE21725651B8D556B9DD6D264473DF0A2E7CAF30D722E1CC776C651FAFBB` |
 | Consumer file | `contracts/openapi/aieos-v1.consumer-snapshot.json` |
-| Consumer file SHA-256 | `4691D6BADA2157D436435BB5CCDD6797EA670D1A87543D42CA39A478F940F330` |
+| Consumer file SHA-256 | `7B51CE21725651B8D556B9DD6D264473DF0A2E7CAF30D722E1CC776C651FAFBB` |
 
-Operations consumed by this frontend at this SHA (Student OS / Learning):
+Operations consumed by this frontend at this SHA (Teacher Assessment Intelligence):
+
+| Operation ID | Method | Path |
+|--------------|--------|------|
+| `assessment_assignment_intelligence` | GET | `/api/v1/assessment/assignments/{assignment_id}/intelligence` |
+| `assessment_assignment_evaluations_ensure` | POST | `/api/v1/assessment/assignments/{assignment_id}/actions/ensure-evaluations` |
+
+Also retained from prior slices (Student OS / Learning):
 
 | Operation ID | Method | Path |
 |--------------|--------|------|
@@ -151,14 +158,14 @@ overrides when the default location or pinned SHA is not current:
 
 ```bash
 AIEOS_BACKEND_ROOT=../eduvijna-aieos-backend \
-AIEOS_BACKEND_OPENAPI_SHA=921d35eb08890a4e1d86cf95daf9d38cdfc4a13c \
+AIEOS_BACKEND_OPENAPI_SHA=3d25bb2d7ae3a6a95affdf075a75f20db48a6959 \
   pnpm sync:openapi
 ```
 
 Verify the consumer file hash after sync:
 
 ```bash
-# Expected: 4691D6BADA2157D436435BB5CCDD6797EA670D1A87543D42CA39A478F940F330
+# Expected: 7B51CE21725651B8D556B9DD6D264473DF0A2E7CAF30D722E1CC776C651FAFBB
 ```
 
 See `scripts/sync-openapi-snapshot.mjs` for how to refresh from a known backend checkout/SHA.
