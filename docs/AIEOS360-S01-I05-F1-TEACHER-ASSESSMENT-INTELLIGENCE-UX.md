@@ -15,6 +15,9 @@ review B3 intelligence → deliberate ClassroomAssessment record → existing Im
 - ClassroomAssessment ≠ Improve
 - GET intelligence never ensures/evaluates
 - No auto ClassroomAssessment / Improve / mastery claims
+- B3 intelligence read is independent of historical TeachingAssignment ownership
+  (F1R1): TeachingAssignment GET 403 must not mask authorized intelligence
+- Assignment-origin ClassroomAssessment RECORD remains owner-bound Case B only
 
 ## Contract
 

@@ -98,6 +98,9 @@ export function AssessPage() {
     useState<TeachingAssignmentResponse | null>(null);
   const [intelligence, setIntelligence] =
     useState<TeacherAssessmentIntelligenceResponse | null>(null);
+  /** Historical TeachingAssignment GET denied; B3 evidence may still be authorized. */
+  const [assignmentOwnerUnavailable, setAssignmentOwnerUnavailable] =
+    useState(false);
   const [eligibleBindings, setEligibleBindings] = useState<
     TeachingExecutionContentBindingResponse[]
   >([]);
@@ -181,6 +184,7 @@ export function AssessPage() {
       setExecution(null);
       setAssignment(null);
       setIntelligence(null);
+      setAssignmentOwnerUnavailable(false);
       setHistory([]);
       setSelected(null);
       return;
@@ -199,20 +203,85 @@ export function AssessPage() {
       let bindings: TeachingExecutionContentBindingResponse[] = [];
 
       if (assignmentIdParam) {
-        const assignmentResponse =
-          await getTeachingAssignment(assignmentIdParam);
-        loadedAssignment = assignmentResponse.data;
-        setAssignment(loadedAssignment);
         setExecution(null);
         setEligibleBindings([]);
         setSelectedBindingKey(null);
         setAssignmentJudgmentChosen(false);
 
-        const intelligenceResponse =
-          await getAssignmentAssessmentIntelligence(assignmentIdParam);
-        loadedIntelligence = intelligenceResponse.data;
-        setIntelligence(loadedIntelligence);
-      } else if (executionIdParam) {
+        // B3 intelligence is authoritative for learner-evidence read.
+        // Do NOT gate it on historical TeachingAssignment ownership.
+        try {
+          const intelligenceResponse =
+            await getAssignmentAssessmentIntelligence(assignmentIdParam);
+          loadedIntelligence = intelligenceResponse.data;
+          setIntelligence(loadedIntelligence);
+        } catch (intelligenceError) {
+          setAssignment(null);
+          setIntelligence(null);
+          setAssignmentOwnerUnavailable(false);
+          setHistory([]);
+          setSelected(null);
+          setSelectedEtag(null);
+          setStatus("error");
+          setErrorMessage(messageForAssessError(intelligenceError));
+          return;
+        }
+
+        try {
+          const assignmentResponse =
+            await getTeachingAssignment(assignmentIdParam);
+          loadedAssignment = assignmentResponse.data;
+          setAssignment(loadedAssignment);
+          setAssignmentOwnerUnavailable(false);
+        } catch (assignmentError) {
+          loadedAssignment = null;
+          setAssignment(null);
+          // Soft-fail optional TeachingAssignment context (including historical
+          // owner 403). Authorized B3 intelligence already succeeded above.
+          setAssignmentOwnerUnavailable(true);
+          void assignmentError;
+        }
+
+        let items: ClassroomAssessmentResponse[] = [];
+        try {
+          const listResponse = await listClassroomAssessments({
+            assignmentId: assignmentIdParam,
+            limit: 50,
+          });
+          items = listResponse.data.items;
+          setHistory(items);
+        } catch {
+          setHistory([]);
+        }
+
+        if (assessmentIdParam) {
+          try {
+            const detail = await getClassroomAssessment(assessmentIdParam);
+            applySelectedAssessment(detail.data, detail.etag);
+          } catch {
+            setSelected(null);
+            setSelectedEtag(null);
+          }
+        } else if (
+          items.length === 1 &&
+          items[0]?.assignment_id === assignmentIdParam &&
+          loadedAssignment
+        ) {
+          // Auto-select only on owner-readable assignment context.
+          const detail = await getClassroomAssessment(items[0]!.assessment_id);
+          applySelectedAssessment(detail.data, detail.etag);
+        } else if (!assessmentIdParam) {
+          setSelected(null);
+          setSelectedEtag(null);
+        }
+
+        setStatus("ready");
+        return;
+      }
+
+      setAssignmentOwnerUnavailable(false);
+
+      if (executionIdParam) {
         setAssignment(null);
         setIntelligence(null);
         const executionResponse = await getTeachingExecution(executionIdParam);
@@ -238,8 +307,7 @@ export function AssessPage() {
       }
 
       const listResponse = await listClassroomAssessments({
-        executionId: assignmentIdParam ? null : executionIdParam,
-        assignmentId: assignmentIdParam,
+        executionId: executionIdParam,
         limit: 50,
       });
       const items = listResponse.data.items;
@@ -250,16 +318,8 @@ export function AssessPage() {
         applySelectedAssessment(detail.data, detail.etag);
       } else if (
         executionIdParam &&
-        !assignmentIdParam &&
         items.length === 1 &&
         items[0]?.execution_id === executionIdParam
-      ) {
-        const detail = await getClassroomAssessment(items[0]!.assessment_id);
-        applySelectedAssessment(detail.data, detail.etag);
-      } else if (
-        assignmentIdParam &&
-        items.length === 1 &&
-        items[0]?.assignment_id === assignmentIdParam
       ) {
         const detail = await getClassroomAssessment(items[0]!.assessment_id);
         applySelectedAssessment(detail.data, detail.etag);
@@ -914,6 +974,18 @@ export function AssessPage() {
                 ClassroomAssessment. ClassroomAssessment ≠ Improve.
               </p>
             </section>
+          ) : null}
+
+          {assignmentOwnerUnavailable && intelligence ? (
+            <p
+              className="muted status-region"
+              role="status"
+              data-testid="assignment-owner-unavailable-notice"
+            >
+              Assessment evidence is available under current class authority.
+              Historical TeachingAssignment details are not available to this
+              teacher.
+            </p>
           ) : null}
 
           {intelligence ? (

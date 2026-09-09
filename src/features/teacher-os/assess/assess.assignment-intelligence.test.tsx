@@ -476,4 +476,193 @@ describe("AIEOS360-S01-I05-F1 assignment Assess intelligence", () => {
     expect(state).toHaveAttribute("data-currently-evaluated", "false");
     expect(state).toHaveTextContent(/Not evaluated under current policy/i);
   });
+
+  it("F1R1: historical non-owner TeachingAssignment 403 does not mask B3 intelligence", async () => {
+    const calls: FetchCall[] = [];
+    stubFetch((call) => {
+      calls.push(call);
+      if (call.url.endsWith(`/api/v1/teaching/assignments/${ASSIGNMENT_ID}`)) {
+        return mockProblemResponse(403, "forbidden");
+      }
+      if (
+        call.method === "GET" &&
+        call.url.endsWith(
+          `/api/v1/assessment/assignments/${ASSIGNMENT_ID}/intelligence`,
+        )
+      ) {
+        return mockJsonResponse(sampleIntelligence());
+      }
+      if (call.url.includes("/api/v1/assessment/classroom-assessments")) {
+        return mockJsonResponse({ items: [] });
+      }
+      if (call.url.includes("ensure-evaluations")) {
+        throw new Error("must not auto-ensure");
+      }
+      if (call.url.includes("/api/v1/teaching/works/from-classroom-assessment")) {
+        throw new Error("must not auto-improve");
+      }
+      return mockJsonResponse({ title: "x", status: 404 }, { status: 404 });
+    });
+
+    renderApp(`/teacher-os/assess?assignment_id=${ASSIGNMENT_ID}`);
+
+    expect(
+      await screen.findByTestId("assignment-intelligence-panel"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("intelligence-submitted-count")).toHaveTextContent(
+      "2",
+    );
+    expect(screen.getByTestId("intelligence-evaluated-count")).toHaveTextContent(
+      "1",
+    );
+    expect(screen.getByTestId("frequently-missed-item")).toBeInTheDocument();
+    expect(screen.getByText(/Insufficient evidence/i)).toBeInTheDocument();
+    expect(
+      screen.getByTestId("assignment-owner-unavailable-notice"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Could not load Assess/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("assignment-record-panel")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Lifecycle/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Source work/i)).not.toBeInTheDocument();
+    expect(
+      calls.filter((c) => c.url.includes("ensure-evaluations")),
+    ).toHaveLength(0);
+  });
+
+  it("F1R1: owner happy path still offers assignment-origin record controls", async () => {
+    stubFetch((call) => {
+      if (call.url.endsWith(`/api/v1/teaching/assignments/${ASSIGNMENT_ID}`)) {
+        return mockJsonResponse(sampleAssignment());
+      }
+      if (call.url.includes(`/assignments/${ASSIGNMENT_ID}/intelligence`)) {
+        return mockJsonResponse(
+          sampleIntelligence({
+            evaluated_learner_count: 2,
+            learners: [
+              {
+                ...sampleIntelligence().learners[0],
+                evaluation_state: "EVALUATED_UNDER_CURRENT_POLICY",
+              },
+              {
+                ...sampleIntelligence().learners[1],
+                evaluation_state: "EVALUATED_UNDER_CURRENT_POLICY",
+                evaluation_id: "33333333-3333-7333-8333-333333333301",
+              },
+            ],
+          }),
+        );
+      }
+      if (call.url.includes("/api/v1/assessment/classroom-assessments")) {
+        return mockJsonResponse({ items: [] });
+      }
+      return mockJsonResponse({ title: "x", status: 404 }, { status: 404 });
+    });
+
+    renderApp(`/teacher-os/assess?assignment_id=${ASSIGNMENT_ID}`);
+    expect(
+      await screen.findByTestId("assignment-record-panel"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("assignment-owner-unavailable-notice"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/ACTIVE/i)).toBeInTheDocument();
+  });
+
+  it("F1R1: B3 intelligence 403 remains fail-closed even if TeachingAssignment GET succeeds", async () => {
+    stubFetch((call) => {
+      if (call.url.endsWith(`/api/v1/teaching/assignments/${ASSIGNMENT_ID}`)) {
+        return mockJsonResponse(sampleAssignment());
+      }
+      if (call.url.includes(`/assignments/${ASSIGNMENT_ID}/intelligence`)) {
+        return mockProblemResponse(403, "forbidden");
+      }
+      return mockJsonResponse({ items: [] });
+    });
+
+    renderApp(`/teacher-os/assess?assignment_id=${ASSIGNMENT_ID}`);
+    expect(
+      await screen.findByText(/Could not load Assess/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("assignment-intelligence-panel"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("F1R1: B3 intelligence 503 is fail-closed with no empty-success evidence", async () => {
+    stubFetch((call) => {
+      if (call.url.endsWith(`/api/v1/teaching/assignments/${ASSIGNMENT_ID}`)) {
+        return mockJsonResponse(sampleAssignment());
+      }
+      if (call.url.includes(`/assignments/${ASSIGNMENT_ID}/intelligence`)) {
+        return mockProblemResponse(503, "authorization_unavailable");
+      }
+      return mockJsonResponse({ items: [] });
+    });
+
+    renderApp(`/teacher-os/assess?assignment_id=${ASSIGNMENT_ID}`);
+    expect(
+      await screen.findByText(/Could not load Assess/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("assignment-intelligence-panel"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("intelligence-submitted-count"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("F1R1: ensure denial in non-owner evidence state keeps intelligence and surfaces error", async () => {
+    const user = userEvent.setup();
+    const calls: FetchCall[] = [];
+    stubFetch((call) => {
+      calls.push(call);
+      if (call.url.endsWith(`/api/v1/teaching/assignments/${ASSIGNMENT_ID}`)) {
+        return mockProblemResponse(403, "forbidden");
+      }
+      if (
+        call.method === "GET" &&
+        call.url.includes(`/assignments/${ASSIGNMENT_ID}/intelligence`)
+      ) {
+        return mockJsonResponse(sampleIntelligence());
+      }
+      if (
+        call.method === "POST" &&
+        call.url.includes("ensure-evaluations")
+      ) {
+        return mockProblemResponse(403, "assessment_capability_forbidden");
+      }
+      if (call.url.includes("/api/v1/assessment/classroom-assessments")) {
+        return mockJsonResponse({ items: [] });
+      }
+      if (call.url.includes("/api/v1/teaching/works/from-classroom-assessment")) {
+        throw new Error("Improve must not be created from ensure denial");
+      }
+      return mockJsonResponse({ title: "x", status: 404 }, { status: 404 });
+    });
+
+    renderApp(`/teacher-os/assess?assignment_id=${ASSIGNMENT_ID}`);
+    expect(
+      await screen.findByTestId("assignment-intelligence-panel"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByTestId("evaluate-submitted-work"));
+    expect(
+      await screen.findByText(/not authorized for this Assessment action/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("assignment-intelligence-panel"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("assignment-record-panel")).not.toBeInTheDocument();
+    expect(
+      calls.filter((c) =>
+        c.url.includes("/api/v1/teaching/works/from-classroom-assessment"),
+      ),
+    ).toHaveLength(0);
+    expect(
+      calls.filter(
+        (c) =>
+          c.method === "POST" &&
+          c.url.endsWith("/api/v1/assessment/classroom-assessments"),
+      ),
+    ).toHaveLength(0);
+  });
 });
