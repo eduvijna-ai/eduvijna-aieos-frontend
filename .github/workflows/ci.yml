@@ -241,3 +241,99 @@ jobs:
             tmp/student-product-e2e-fixture.json
             tmp/student-product-e2e-db.json
           retention-days: 7
+
+  aieos360-s01-i05-e2e:
+    name: aieos360-s01-i05-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      AIEOS_BACKEND_ROOT: ${{ github.workspace }}/backend
+      AIEOS_BACKEND_PIN_SHA: 3d25bb2d7ae3a6a95affdf075a75f20db48a6959
+      AIEOS_TEST_BOOTSTRAP_DATABASE_URL: postgresql+psycopg://aieos_bootstrap:aieos_test@127.0.0.1:5432/aieos
+      AIEOS_TEST_DATABASE_URL: postgresql+psycopg://aieos_migrator:aieos_test@127.0.0.1:5432/aieos
+      AIEOS_TEST_RUNTIME_DATABASE_URL: postgresql+psycopg://aieos_runtime:aieos_test@127.0.0.1:5432/aieos
+      AIEOS360_I05_E2E_TEACHER_BACKEND_PORT: "8002"
+      AIEOS360_I05_E2E_STUDENT_BACKEND_PORT: "8003"
+      AIEOS360_I05_E2E_TEACHER_FRONTEND_PORT: "5183"
+      AIEOS360_I05_E2E_STUDENT_FRONTEND_PORT: "5184"
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: aieos_bootstrap
+          POSTGRES_PASSWORD: aieos_test
+          POSTGRES_DB: aieos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aieos_bootstrap -d aieos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout frontend
+        uses: actions/checkout@v4
+
+      - name: Checkout backend at exact I05 pin SHA
+        uses: actions/checkout@v4
+        with:
+          repository: eduvijna-ai/eduvijna-aieos-backend
+          ref: 3d25bb2d7ae3a6a95affdf075a75f20db48a6959
+          path: backend
+          token: ${{ secrets.AIEOS_CI_READ_TOKEN }}
+
+      - name: Verify backend pin SHA and migration head expectation
+        run: |
+          cd backend
+          HEAD="$(git rev-parse HEAD)"
+          if [ "$HEAD" != "$AIEOS_BACKEND_PIN_SHA" ]; then
+            echo "Backend HEAD $HEAD != pin $AIEOS_BACKEND_PIN_SHA"
+            exit 1
+          fi
+          echo "Expected I05 migration head: a360s010004"
+          echo "Expected OpenAPI SHA: 7B51CE21725651B8D556B9DD6D264473DF0A2E7CAF30D722E1CC776C651FAFBB"
+
+      - name: Setup uv (backend)
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.4"
+          python-version: "3.14"
+
+      - name: Install backend locked dependencies
+        working-directory: backend
+        run: uv sync --locked --group dev
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.24.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install frontend dependencies (frozen)
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: AIEOS360 I05 cross-role E2E (shared PostgreSQL)
+        run: pnpm test:e2e:aieos360-i05
+
+      - name: Upload AIEOS360 I05 Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-aieos360-i05-report
+          path: |
+            playwright-aieos360-i05-report/
+            test-results/
+            tmp/aieos360-i05-e2e-fixture.json
+            tmp/aieos360-i05-e2e-db.json
+          retention-days: 7

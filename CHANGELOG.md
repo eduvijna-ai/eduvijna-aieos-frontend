@@ -9,6 +9,14 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- AIEOS360-S01-I05-E2E: Additive cross-role real-stack Playwright suite
+  (`pnpm test:e2e:aieos360-i05`, CI job `aieos360-s01-i05-e2e`) proving Teacher
+  Assign → Student SUBMIT → Assessment Intelligence (GET read-only) → deliberate
+  Ensure → ClassroomAssessment → Improve remediation TeachingWork against backend
+  `3d25bb2d7ae3a6a95affdf075a75f20db48a6959`, migration `a360s010004`, OpenAPI
+  `7B51CE21725651B8D556B9DD6D264473DF0A2E7CAF30D722E1CC776C651FAFBB`; shared
+  PostgreSQL 18 with Teacher `:8002/:5183` and Student `:8003/:5184`; preserves
+  historical `product-e2e` (`a6a1cbb5…`) and `student-product-e2e` (`921d35eb…`).
 - AIEOS360-S01-I04R1: Additive Student real-stack product E2E
   (`pnpm test:e2e:student-product`, CI job `student-product-e2e`) against
   merged I03 backend `921d35eb08890a4e1d86cf95daf9d38cdfc4a13c`, migration

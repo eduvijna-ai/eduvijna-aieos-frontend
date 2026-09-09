@@ -58,6 +58,7 @@ coverage/
 playwright-report/
 playwright-product-report/
 playwright-student-product-report/
+playwright-aieos360-i05-report/
 test-results/
 blob-report/
 .tmp/
