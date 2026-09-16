@@ -366,6 +366,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/principal-os/school-intelligence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Principal Os School Intelligence Get */
+        get: operations["principal_os_school_intelligence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/student-os/assignments": {
         parameters: {
             query?: never;
@@ -892,6 +909,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AssignmentLifecycleResponse */
+        AssignmentLifecycleResponse: {
+            /** Active */
+            active: number;
+            /** Cancelled */
+            cancelled: number;
+            /** Closed */
+            closed: number;
+        };
         /** AttemptResponse */
         AttemptResponse: {
             /** Aggregate Revision */
@@ -1226,6 +1252,13 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** EvaluationCoverageAmongSubmittedResponse */
+        EvaluationCoverageAmongSubmittedResponse: {
+            /** Current Policy Evaluated Count */
+            current_policy_evaluated_count: number;
+            /** Submitted Count */
+            submitted_count: number;
+        };
         /** GeneratedArtifactResponse */
         GeneratedArtifactResponse: {
             /** Aggregate Revision */
@@ -1423,6 +1456,75 @@ export interface components {
         PreparationStatusResponse: {
             /** Status */
             status: string;
+        };
+        /** PrincipalSchoolIntelligenceClassCardResponse */
+        PrincipalSchoolIntelligenceClassCardResponse: {
+            assignment_lifecycle: components["schemas"]["AssignmentLifecycleResponse"];
+            /** Assignments With Recorded Classroom Assessment Count */
+            assignments_with_recorded_classroom_assessment_count: number;
+            /** Class Ref */
+            class_ref: string;
+            /** Completed Teaching Execution Count */
+            completed_teaching_execution_count: number;
+            /** Current Policy Evaluation Count */
+            current_policy_evaluation_count: number;
+            /** Display Label */
+            display_label: string;
+            evaluation_coverage_among_submitted: components["schemas"]["EvaluationCoverageAmongSubmittedResponse"];
+            /** Has Assignment Activity */
+            has_assignment_activity: boolean;
+            /** Has Recorded Classroom Assessment */
+            has_recorded_classroom_assessment: boolean;
+            /** Learner Submission Count */
+            learner_submission_count: number;
+            /** Remediation Activity Count */
+            remediation_activity_count: number;
+            /** Submitted But Not Current Policy Evaluated Count */
+            submitted_but_not_current_policy_evaluated_count: number;
+            /** Teaching Assignment Count */
+            teaching_assignment_count: number;
+        };
+        /** PrincipalSchoolIntelligenceResponse */
+        PrincipalSchoolIntelligenceResponse: {
+            /** Classes */
+            classes: components["schemas"]["PrincipalSchoolIntelligenceClassCardResponse"][];
+            evaluation_policy: components["schemas"]["SchoolIntelligenceEvaluationPolicyResponse"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Projection Mode */
+            projection_mode: string;
+            /** Sources */
+            sources: string[];
+            summary: components["schemas"]["PrincipalSchoolIntelligenceSummaryResponse"];
+            time_window: components["schemas"]["SchoolIntelligenceTimeWindowResponse"];
+        };
+        /** PrincipalSchoolIntelligenceSummaryResponse */
+        PrincipalSchoolIntelligenceSummaryResponse: {
+            assignment_lifecycle: components["schemas"]["AssignmentLifecycleResponse"];
+            /** Assignments With Recorded Classroom Assessment Count */
+            assignments_with_recorded_classroom_assessment_count: number;
+            /** Classes With Assignment Activity Count */
+            classes_with_assignment_activity_count: number;
+            /** Classes With Recorded Classroom Assessment Count */
+            classes_with_recorded_classroom_assessment_count: number;
+            /** Completed Teaching Execution Count */
+            completed_teaching_execution_count: number;
+            /** Current Policy Evaluation Count */
+            current_policy_evaluation_count: number;
+            evaluation_coverage_among_submitted: components["schemas"]["EvaluationCoverageAmongSubmittedResponse"];
+            /** In Scope Class Count */
+            in_scope_class_count: number;
+            /** Learner Submission Count */
+            learner_submission_count: number;
+            /** Remediation Activity Count */
+            remediation_activity_count: number;
+            /** Submitted But Not Current Policy Evaluated Count */
+            submitted_but_not_current_policy_evaluated_count: number;
+            /** Teaching Assignment Count */
+            teaching_assignment_count: number;
         };
         /** ProblemDetails */
         ProblemDetails: {
@@ -1654,6 +1756,25 @@ export interface components {
         SchoolContextClassesResponse: {
             /** Items */
             items: components["schemas"]["SchoolContextClassItemResponse"][];
+        };
+        /** SchoolIntelligenceEvaluationPolicyResponse */
+        SchoolIntelligenceEvaluationPolicyResponse: {
+            /** Policy Id */
+            policy_id: string;
+            /** Policy Version */
+            policy_version: number;
+        };
+        /** SchoolIntelligenceTimeWindowResponse */
+        SchoolIntelligenceTimeWindowResponse: {
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /** Mode */
+            mode: string;
+            /** Start */
+            start: string | null;
         };
         /** StudentAssignmentListResponse */
         StudentAssignmentListResponse: {
@@ -5849,6 +5970,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderAggregatorResponse"];
+                };
+            };
+            /** @description RFC 9457 Problem Details */
+            400: {
+                headers: {
+                    /** @description Correlation identifier preserved or generated by the server. */
+                    "X-AIEOS-Correlation-ID"?: string;
+                    /** @description Server-generated UUIDv7 request identifier. Callers cannot choose it. */
+                    "X-AIEOS-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description RFC 9457 Problem Details */
+            401: {
+                headers: {
+                    /** @description Correlation identifier preserved or generated by the server. */
+                    "X-AIEOS-Correlation-ID"?: string;
+                    /** @description Server-generated UUIDv7 request identifier. Callers cannot choose it. */
+                    "X-AIEOS-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description RFC 9457 Problem Details */
+            403: {
+                headers: {
+                    /** @description Correlation identifier preserved or generated by the server. */
+                    "X-AIEOS-Correlation-ID"?: string;
+                    /** @description Server-generated UUIDv7 request identifier. Callers cannot choose it. */
+                    "X-AIEOS-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description RFC 9457 Problem Details */
+            422: {
+                headers: {
+                    /** @description Correlation identifier preserved or generated by the server. */
+                    "X-AIEOS-Correlation-ID"?: string;
+                    /** @description Server-generated UUIDv7 request identifier. Callers cannot choose it. */
+                    "X-AIEOS-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description RFC 9457 Problem Details */
+            500: {
+                headers: {
+                    /** @description Correlation identifier preserved or generated by the server. */
+                    "X-AIEOS-Correlation-ID"?: string;
+                    /** @description Server-generated UUIDv7 request identifier. Callers cannot choose it. */
+                    "X-AIEOS-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description RFC 9457 Problem Details */
+            503: {
+                headers: {
+                    /** @description Correlation identifier preserved or generated by the server. */
+                    "X-AIEOS-Correlation-ID"?: string;
+                    /** @description Server-generated UUIDv7 request identifier. Callers cannot choose it. */
+                    "X-AIEOS-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    principal_os_school_intelligence_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-AIEOS-Tenant-ID"?: string | null;
+                /** @description Optional correlation identifier. Malformed values are rejected. The server generates a UUIDv7 when absent. Distinct from request_id. */
+                "X-AIEOS-Correlation-ID"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    /** @description Correlation identifier preserved or generated by the server. */
+                    "X-AIEOS-Correlation-ID"?: string;
+                    /** @description Server-generated UUIDv7 request identifier. Callers cannot choose it. */
+                    "X-AIEOS-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrincipalSchoolIntelligenceResponse"];
                 };
             };
             /** @description RFC 9457 Problem Details */

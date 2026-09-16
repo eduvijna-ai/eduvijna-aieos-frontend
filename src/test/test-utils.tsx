@@ -40,6 +40,8 @@ import { StudentHomePage } from "@/features/student-os/home/StudentHomePage";
 import { AssignmentsPage } from "@/features/student-os/assignments/AssignmentsPage";
 import { AssignmentDetailPage as StudentAssignmentDetailPage } from "@/features/student-os/assignments/AssignmentDetailPage";
 import { AttemptPage } from "@/features/student-os/attempts/AttemptPage";
+import { PrincipalOsShell } from "@/features/principal-os/shell/PrincipalOsShell";
+import { SchoolIntelligencePage } from "@/features/principal-os/school-intelligence/SchoolIntelligencePage";
 import type {
   ContentResponse,
   ContentVersionResponse,
@@ -94,6 +96,9 @@ export function renderApp(
     <SessionProvider>
       <MemoryRouter initialEntries={[route]}>
         <Routes>
+          <Route path="/principal-os" element={<PrincipalOsShell />}>
+            <Route index element={<SchoolIntelligencePage />} />
+          </Route>
           <Route path="/student-os" element={<StudentOsShell />}>
             <Route path="home" element={<StudentHomePage />} />
             <Route path="assignments" element={<AssignmentsPage />} />

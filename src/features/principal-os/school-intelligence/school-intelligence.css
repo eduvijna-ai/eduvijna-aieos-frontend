@@ -1,0 +1,104 @@
+.pos-page {
+  max-width: var(--content-max);
+  min-width: 0;
+}
+
+.pos-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.pos-page-header h1 {
+  margin-bottom: var(--space-2);
+}
+
+.pos-scope {
+  margin: 0;
+}
+
+.pos-summary-grid,
+.pos-class-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.pos-summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.pos-stat,
+.pos-class-card {
+  min-width: 0;
+}
+
+.pos-stat h3,
+.pos-class-card h3 {
+  margin: 0 0 var(--space-2);
+  font-size: 1rem;
+}
+
+.pos-stat-value {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.pos-class-ref {
+  margin: 0 0 var(--space-3);
+  font-size: 0.85rem;
+}
+
+.pos-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.pos-facts dt {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.pos-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.pos-data-basis {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.pos-data-basis h2 {
+  font-size: 1rem;
+}
+
+.pos-source-list {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+@media (max-width: 48rem) {
+  .tos-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .tos-nav {
+    padding: var(--space-4);
+  }
+
+  .tos-nav-list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}

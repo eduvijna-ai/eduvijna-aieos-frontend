@@ -9,6 +9,13 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- AIEOS360-S02-I03: Principal OS School Intelligence frontend read journey at
+  `/principal-os` consuming exact `GET /api/v1/principal-os/school-intelligence`
+  against Backend `e2bfce86afece6772eaf7c2f1eb18e2dd2240f1b`, OpenAPI
+  `BE60CC2A4612F77AB333088D264B9501B9AB842995AEC1539DA89EA0E8462B47`; privacy-safe
+  counts only, submitted-evidence coverage without percentages, no Principal
+  mutation, no AI, no persistence; historical S01/Teacher/Student E2E pins
+  remain unchanged. Real-stack Principal E2E is deferred.
 - AIEOS360-S01-I05-E2E: Additive cross-role real-stack Playwright suite
   (`pnpm test:e2e:aieos360-i05`, CI job `aieos360-s01-i05-e2e`) proving Teacher
   Assign → Student SUBMIT → Assessment Intelligence (GET read-only) → deliberate
