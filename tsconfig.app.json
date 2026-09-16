@@ -35,6 +35,9 @@
     "src/localDev.portAlignment.test.ts",
     "src/productE2e.pins.test.ts",
     "src/studentProductE2e.pins.test.ts",
-    "src/aieos360I05E2e.pins.test.ts"
+    "src/aieos360I05E2e.pins.test.ts",
+    "src/aieos360S02I03.pins.test.ts",
+    "src/features/principal-os/principal-os.architecture.test.ts",
+    "src/services/api/principalSchoolIntelligenceApi.test.ts"
   ]
 }

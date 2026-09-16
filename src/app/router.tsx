@@ -21,11 +21,16 @@ import { StudentHomePage } from "@/features/student-os/home/StudentHomePage";
 import { AssignmentsPage } from "@/features/student-os/assignments/AssignmentsPage";
 import { AssignmentDetailPage as StudentAssignmentDetailPage } from "@/features/student-os/assignments/AssignmentDetailPage";
 import { AttemptPage } from "@/features/student-os/attempts/AttemptPage";
+import { PrincipalOsShell } from "@/features/principal-os/shell/PrincipalOsShell";
+import { SchoolIntelligencePage } from "@/features/principal-os/school-intelligence/SchoolIntelligencePage";
 
 export function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/teacher-os/today" replace />} />
+      <Route path="/principal-os" element={<PrincipalOsShell />}>
+        <Route index element={<SchoolIntelligencePage />} />
+      </Route>
       <Route path="/student-os" element={<StudentOsShell />}>
         <Route index element={<Navigate to="home" replace />} />
         <Route path="home" element={<StudentHomePage />} />
