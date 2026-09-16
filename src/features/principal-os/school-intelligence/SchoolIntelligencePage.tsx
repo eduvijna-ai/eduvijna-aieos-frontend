@@ -17,6 +17,9 @@ import {
   formatActivityPresence,
   formatCoverageAmongSubmitted,
   formatCurrentFactsAsOf,
+  formatProjectionCopy,
+  formatTimeBasisCopy,
+  GENERIC_SOURCE_PROVENANCE,
   isAuthorizedScopeEmpty,
 } from "./schoolIntelligencePresentation";
 import "./school-intelligence.css";
@@ -109,7 +112,6 @@ export function SchoolIntelligencePage() {
           <p className="muted">
             In-scope classes: {data.summary.in_scope_class_count}
           </p>
-          <p className="muted">Facts are current as of this request.</p>
         </div>
         <button type="button" className="btn btn-secondary" onClick={() => void load()}>
           Refresh
@@ -336,19 +338,14 @@ function DataBasisSection({
     >
       <h2 id="data-basis-heading">Data basis</h2>
       <p className="muted">
-        Projection: {data.projection_mode}. Time window: {data.time_window.mode}.
+        Projection: {formatProjectionCopy(data.projection_mode)}. Time basis:{" "}
+        {formatTimeBasisCopy(data.time_window.mode)}.
       </p>
       <p className="muted">
         Evaluation policy {data.evaluation_policy.policy_id}, version{" "}
         {data.evaluation_policy.policy_version}.
       </p>
-      {data.sources.length > 0 ? (
-        <ul className="pos-source-list muted">
-          {data.sources.map((source) => (
-            <li key={source}>{source}</li>
-          ))}
-        </ul>
-      ) : null}
+      <p className="muted">{GENERIC_SOURCE_PROVENANCE}</p>
     </section>
   );
 }

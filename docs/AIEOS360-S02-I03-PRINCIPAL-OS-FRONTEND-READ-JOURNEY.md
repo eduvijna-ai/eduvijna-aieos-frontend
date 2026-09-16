@@ -113,10 +113,12 @@ GET only.
 
 ## Freshness
 
-The page shows `Current facts as of <generated_at>`. Provenance
-(`projection_mode`, `time_window`, evaluation policy, `sources`) appears in a
-subdued Data basis area. I03 has no custom date range and does not claim live
-streaming semantics.
+The page shows `Current facts as of <generated_at>`. Data basis presents
+human-facing projection and time-basis wording (`Derived on request`,
+`Current facts as of this request`) and evaluation-policy provenance. Backend
+`sources[]` remains in the contract and payload but is not enumerated in the
+Principal UI. I03 has no custom date range and does not claim live streaming
+semantics.
 
 ## Explicit non-implementations
 

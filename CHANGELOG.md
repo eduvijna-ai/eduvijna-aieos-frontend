@@ -7,6 +7,13 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- AIEOS360-S02-I03 correction: Principal School Intelligence Data basis no
+  longer renders raw `sources[]` authority identifiers or projection /
+  time-window enum tokens; human-facing wording only. Consumer OpenAPI pin
+  unchanged.
+
 ### Added
 
 - AIEOS360-S02-I03: Principal OS School Intelligence frontend read journey at

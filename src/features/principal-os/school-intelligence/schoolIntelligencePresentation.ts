@@ -7,6 +7,19 @@ export function formatCurrentFactsAsOf(generatedAt: string): string {
   return `Current facts as of ${generatedAt}`;
 }
 
+export function formatProjectionCopy(mode: string): string {
+  void mode;
+  return "Derived on request";
+}
+
+export function formatTimeBasisCopy(mode: string): string {
+  void mode;
+  return "Current facts as of this request";
+}
+
+export const GENERIC_SOURCE_PROVENANCE =
+  "Derived from current authorized AIEOS source domains.";
+
 export function formatCoverageAmongSubmitted(
   coverage: EvaluationCoverageAmongSubmittedResponse,
 ): string {

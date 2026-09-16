@@ -90,6 +90,42 @@ describe("AIEOS360-S02-I03 Principal OS architecture", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("does not present raw source-authority identifiers or projection enum tokens", () => {
+    const presentationFiles = PRINCIPAL_FILES.filter(
+      (file) => !file.includes("schoolIntelligence.fixtures.ts"),
+    );
+    const forbiddenVisible = [
+      "SCHOOL_CONTEXT",
+      "TEACHING_ASSIGNMENT",
+      "TEACHING_EXECUTION",
+      "LEARNER_SUBMISSION",
+      "LEARNER_ASSESSMENT_EVALUATION",
+      "CLASSROOM_ASSESSMENT",
+      "TEACHING_WORK_REMEDIATION_ORIGIN",
+      "DERIVED_ON_REQUEST",
+      "CURRENT_FACTS_AS_OF_REQUEST",
+      ".sources.map",
+    ];
+    const offenders: string[] = [];
+    for (const file of presentationFiles) {
+      const text = readFileSync(file, "utf8");
+      for (const token of forbiddenVisible) {
+        if (text.includes(token)) {
+          offenders.push(`${path.relative(repoRoot, file)}:${token}`);
+        }
+      }
+    }
+    const page = read(
+      "src/features/principal-os/school-intelligence/SchoolIntelligencePage.tsx",
+    );
+    expect(page).toContain("formatProjectionCopy");
+    expect(page).toContain("formatTimeBasisCopy");
+    expect(page).toContain("GENERIC_SOURCE_PROVENANCE");
+    expect(page).not.toContain("{data.projection_mode}");
+    expect(page).not.toContain("{data.time_window.mode}");
+    expect(offenders).toEqual([]);
+  });
+
   it("Principal API module is the exact School Intelligence GET", () => {
     const api = read("src/services/api/principalSchoolIntelligenceApi.ts");
     expect(api).toContain("/api/v1/principal-os/school-intelligence");

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   formatCoverageAmongSubmitted,
   formatCurrentFactsAsOf,
+  formatProjectionCopy,
+  formatTimeBasisCopy,
+  GENERIC_SOURCE_PROVENANCE,
   isAuthorizedScopeEmpty,
 } from "./schoolIntelligencePresentation";
 import { emptyAuthorizedScope, sampleSchoolIntelligence } from "../schoolIntelligence.fixtures";
@@ -10,6 +13,22 @@ describe("School Intelligence presentation", () => {
   it("formats freshness as current facts as of the backend timestamp", () => {
     expect(formatCurrentFactsAsOf("2026-01-15T12:00:00Z")).toBe(
       "Current facts as of 2026-01-15T12:00:00Z",
+    );
+  });
+
+  it("humanizes projection and time-basis without echoing Backend enum tokens", () => {
+    expect(formatProjectionCopy("DERIVED_ON_REQUEST")).toBe("Derived on request");
+    expect(formatTimeBasisCopy("CURRENT_FACTS_AS_OF_REQUEST")).toBe(
+      "Current facts as of this request",
+    );
+    expect(GENERIC_SOURCE_PROVENANCE).toBe(
+      "Derived from current authorized AIEOS source domains.",
+    );
+    expect(formatProjectionCopy("DERIVED_ON_REQUEST")).not.toContain(
+      "DERIVED_ON_REQUEST",
+    );
+    expect(formatTimeBasisCopy("CURRENT_FACTS_AS_OF_REQUEST")).not.toContain(
+      "CURRENT_FACTS_AS_OF_REQUEST",
     );
   });
 

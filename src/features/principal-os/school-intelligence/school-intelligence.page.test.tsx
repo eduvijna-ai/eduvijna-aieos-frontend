@@ -17,6 +17,16 @@ import {
 const SCHOOL_INTELLIGENCE_PATH =
   "/api/v1/principal-os/school-intelligence";
 
+const RAW_SOURCE_AUTHORITIES = [
+  "SCHOOL_CONTEXT",
+  "TEACHING_ASSIGNMENT",
+  "TEACHING_EXECUTION",
+  "LEARNER_SUBMISSION",
+  "LEARNER_ASSESSMENT_EVALUATION",
+  "CLASSROOM_ASSESSMENT",
+  "TEACHING_WORK_REMEDIATION_ORIGIN",
+] as const;
+
 const FORBIDDEN_RENDERED = [
   "learner_principal_id",
   "learner_name",
@@ -127,7 +137,13 @@ describe("Principal OS School Intelligence page", () => {
     expect(
       screen.getByText(/aieos\.learner_assessment\.deterministic/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/DERIVED_ON_REQUEST/)).toBeInTheDocument();
+    expect(screen.getByText(/Derived on request/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Current facts as of this request/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Derived from current authorized AIEOS source domains."),
+    ).toBeInTheDocument();
 
     const summary = screen
       .getByRole("heading", { name: "School summary" })
@@ -181,6 +197,35 @@ describe("Principal OS School Intelligence page", () => {
     expect(screen.getByTestId("class-card-class-6a")).toHaveTextContent(
       "Current-policy evaluations: 5 of 7 submitted evidence records",
     );
+  });
+
+  it("keeps Backend sources and enum tokens in the payload without rendering them", async () => {
+    const data = sampleSchoolIntelligence();
+    expect(data.sources).toEqual([...RAW_SOURCE_AUTHORITIES]);
+    expect(data.projection_mode).toBe("DERIVED_ON_REQUEST");
+    expect(data.time_window.mode).toBe("CURRENT_FACTS_AS_OF_REQUEST");
+
+    stubSchoolIntelligence(data);
+    const { container } = renderApp("/principal-os");
+    await screen.findByText(`Current facts as of ${GENERATED_AT}`);
+    expect(screen.getByText(/Derived on request/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Current facts as of this request/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Derived from current authorized AIEOS source domains."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/aieos\.learner_assessment\.deterministic/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/version 1/)).toBeInTheDocument();
+
+    const text = container.textContent ?? "";
+    for (const token of RAW_SOURCE_AUTHORITIES) {
+      expect(text).not.toContain(token);
+    }
+    expect(text).not.toContain("DERIVED_ON_REQUEST");
+    expect(text).not.toContain("CURRENT_FACTS_AS_OF_REQUEST");
   });
 
   it("does not calculate a percentage or rate from coverage counts", async () => {
@@ -316,6 +361,16 @@ describe("Principal OS School Intelligence page", () => {
     expect(localSet).not.toHaveBeenCalled();
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
+  });
+
+  it("renders Principal output without raw source-authority identifiers", async () => {
+    stubSchoolIntelligence();
+    const { container } = renderApp("/principal-os");
+    await screen.findByText("Grade 6A");
+    const text = container.textContent ?? "";
+    for (const token of RAW_SOURCE_AUTHORITIES) {
+      expect(text).not.toContain(token);
+    }
   });
 
   it("rendered Principal output contains none of the forbidden identity or outcome concepts", async () => {
