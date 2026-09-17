@@ -25,6 +25,7 @@
     "playwright.product.config.ts",
     "playwright.student-product.config.ts",
     "playwright.aieos360-i05.config.ts",
+    "playwright.aieos360-s02-i04.config.ts",
     "eslint.config.js"
   ]
 }
