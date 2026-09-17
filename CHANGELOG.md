@@ -16,6 +16,16 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- AIEOS360-S03-I03: Parent OS read-only frontend journey at `/parent-os` and
+  `/parent-os/children/:learnerPrincipalId` consuming exact
+  `GET /api/v1/parent-os/home` and
+  `GET /api/v1/parent-os/children/{learner_principal_id}` against Backend
+  `138f37bfa7a44c33b206c6b78118154bbb9bc8eb`, OpenAPI
+  `4042FB2725DA70A02A70EE09563B7698AE2E5DA82927614CAF1B5F7E6AA7C1D0`, Alembic
+  `a360s010004`; current-facts presentation only, 404 concealment, zero-child
+  empty state, no Parent mutation, no AI, no persistence/polling; historical
+  S02/S01/Teacher/Student E2E pins remain unchanged. Real-stack Parent E2E
+  (I04) is deferred.
 - AIEOS360-S02-I04: Additive Principal OS real-stack E2E
   (`pnpm test:e2e:aieos360-s02-i04`, CI job `aieos360-s02-i04-e2e`) proving
   Teacher Publish/Assign → Student START/SAVE/SUBMIT → no auto-evaluation →

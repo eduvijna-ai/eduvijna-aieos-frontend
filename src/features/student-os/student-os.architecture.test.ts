@@ -53,7 +53,7 @@ describe("AIEOS360-S01-I04 Student OS architecture", () => {
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "BE60CC2A4612F77AB333088D264B9501B9AB842995AEC1539DA89EA0E8462B47",
+      "4042FB2725DA70A02A70EE09563B7698AE2E5DA82927614CAF1B5F7E6AA7C1D0",
     );
   });
 

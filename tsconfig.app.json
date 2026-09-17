@@ -38,7 +38,10 @@
     "src/aieos360I05E2e.pins.test.ts",
     "src/aieos360S02I03.pins.test.ts",
     "src/aieos360S02I04E2e.pins.test.ts",
+    "src/aieos360S03I03.pins.test.ts",
     "src/features/principal-os/principal-os.architecture.test.ts",
-    "src/services/api/principalSchoolIntelligenceApi.test.ts"
+    "src/features/parent-os/parent-os.architecture.test.ts",
+    "src/services/api/principalSchoolIntelligenceApi.test.ts",
+    "src/services/api/parentIntelligenceApi.test.ts"
   ]
 }
