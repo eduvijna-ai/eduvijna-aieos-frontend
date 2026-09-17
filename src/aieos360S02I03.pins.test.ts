@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,20 +24,11 @@ function read(relativePath: string): string {
 }
 
 describe("AIEOS360-S02-I03 Principal OS consumer contract pin", () => {
-  it("pins the I02-closed Backend OpenAPI as the active consumer snapshot", () => {
+  it("documents the S02-I03 Backend OpenAPI as a previous consumer pin", () => {
     const sync = read("scripts/sync-openapi-snapshot.mjs");
-    expect(sync).toContain(`const PINNED_SHA = "${I03_BACKEND}"`);
+    expect(sync).toContain(I03_BACKEND);
     expect(sync).toContain(I03_OPENAPI);
-
-    const digest = createHash("sha256")
-      .update(
-        readFileSync(
-          path.join(repoRoot, "contracts/openapi/aieos-v1.consumer-snapshot.json"),
-        ),
-      )
-      .digest("hex")
-      .toUpperCase();
-    expect(digest).toBe(I03_OPENAPI);
+    expect(sync).not.toContain(`const PINNED_SHA = "${I03_BACKEND}"`);
 
     const readme = read("contracts/openapi/README.md");
     expect(readme).toContain(I03_BACKEND);
