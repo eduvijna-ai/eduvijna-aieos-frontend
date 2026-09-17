@@ -337,3 +337,115 @@ jobs:
             tmp/aieos360-i05-e2e-fixture.json
             tmp/aieos360-i05-e2e-db.json
           retention-days: 7
+
+  aieos360-s02-i04-e2e:
+    name: aieos360-s02-i04-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      AIEOS_BACKEND_ROOT: ${{ github.workspace }}/backend
+      AIEOS_BACKEND_PIN_SHA: e2bfce86afece6772eaf7c2f1eb18e2dd2240f1b
+      AIEOS_TEST_BOOTSTRAP_DATABASE_URL: postgresql+psycopg://aieos_bootstrap:aieos_test@127.0.0.1:5432/aieos
+      AIEOS_TEST_DATABASE_URL: postgresql+psycopg://aieos_migrator:aieos_test@127.0.0.1:5432/aieos
+      AIEOS_TEST_RUNTIME_DATABASE_URL: postgresql+psycopg://aieos_runtime:aieos_test@127.0.0.1:5432/aieos
+      AIEOS360_S02_I04_E2E_TEACHER_BACKEND_PORT: "8004"
+      AIEOS360_S02_I04_E2E_STUDENT_BACKEND_PORT: "8005"
+      AIEOS360_S02_I04_E2E_PRINCIPAL_BACKEND_PORT: "8006"
+      AIEOS360_S02_I04_E2E_TEACHER_FRONTEND_PORT: "5185"
+      AIEOS360_S02_I04_E2E_STUDENT_FRONTEND_PORT: "5186"
+      AIEOS360_S02_I04_E2E_PRINCIPAL_FRONTEND_PORT: "5187"
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: aieos_bootstrap
+          POSTGRES_PASSWORD: aieos_test
+          POSTGRES_DB: aieos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aieos_bootstrap -d aieos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout frontend
+        uses: actions/checkout@v4
+
+      - name: Checkout backend at exact I04 pin SHA
+        uses: actions/checkout@v4
+        with:
+          repository: eduvijna-ai/eduvijna-aieos-backend
+          ref: e2bfce86afece6772eaf7c2f1eb18e2dd2240f1b
+          path: backend
+          token: ${{ secrets.AIEOS_CI_READ_TOKEN }}
+
+      - name: Verify backend pin SHA, migration head, and OpenAPI digest
+        run: |
+          cd backend
+          HEAD="$(git rev-parse HEAD)"
+          if [ "$HEAD" != "$AIEOS_BACKEND_PIN_SHA" ]; then
+            echo "Backend HEAD $HEAD != pin $AIEOS_BACKEND_PIN_SHA"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          expected = "BE60CC2A4612F77AB333088D264B9501B9AB842995AEC1539DA89EA0E8462B47"
+          expected_head = "a360s010004"
+          digest = hashlib.sha256(Path("contracts/openapi/aieos-v1.json").read_bytes()).hexdigest().upper()
+          if digest != expected:
+              raise SystemExit(f"OpenAPI SHA-256 {digest} != {expected}")
+          print(f"Computed OpenAPI SHA-256: {digest}")
+          versions = list(Path("migrations/versions").glob("*.py"))
+          if not any(expected_head in path.name or expected_head in path.read_text(encoding="utf-8") for path in versions):
+              raise SystemExit(f"Alembic versions do not include {expected_head}")
+          print(f"Expected I04 migration head: {expected_head}")
+          PY
+
+      - name: Setup uv (backend)
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.4"
+          python-version: "3.14"
+
+      - name: Install backend locked dependencies
+        working-directory: backend
+        run: uv sync --locked --group dev
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.24.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install frontend dependencies (frozen)
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: AIEOS360 S02 I04 Principal OS real-stack E2E
+        run: pnpm test:e2e:aieos360-s02-i04
+
+      - name: Upload AIEOS360 S02 I04 Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-aieos360-s02-i04-report
+          path: |
+            playwright-aieos360-s02-i04-report/
+            test-results/
+            tmp/aieos360-s02-i04-e2e-fixture.json
+            tmp/aieos360-s02-i04-e2e-db.json
+            tmp/aieos360-s02-i04-e2e-persistence.json
+          retention-days: 7

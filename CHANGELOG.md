@@ -16,6 +16,17 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- AIEOS360-S02-I04: Additive Principal OS real-stack E2E
+  (`pnpm test:e2e:aieos360-s02-i04`, CI job `aieos360-s02-i04-e2e`) proving
+  Teacher Publish/Assign → Student START/SAVE/SUBMIT → no auto-evaluation →
+  Teacher pre-ensure read → deliberate Ensure → HUMAN ClassroomAssessment →
+  Improve/RemediationOrigin → Principal `/principal-os` consuming real
+  `GET /api/v1/principal-os/school-intelligence` against one shared PostgreSQL 18
+  database and Backend `e2bfce86afece6772eaf7c2f1eb18e2dd2240f1b`, OpenAPI
+  `BE60CC2A4612F77AB333088D264B9501B9AB842995AEC1539DA89EA0E8462B47`, migration
+  `a360s010004`; harness-local Principal School Context for `class-5a`/`class-5b`
+  without modifying canonical Backend development adapters; no `/api` Playwright
+  mocks; historical I05/Teacher/Student E2E pins remain unchanged.
 - AIEOS360-S02-I03: Principal OS School Intelligence frontend read journey at
   `/principal-os` consuming exact `GET /api/v1/principal-os/school-intelligence`
   against Backend `e2bfce86afece6772eaf7c2f1eb18e2dd2240f1b`, OpenAPI
