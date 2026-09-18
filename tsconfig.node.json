@@ -27,6 +27,7 @@
     "playwright.aieos360-i05.config.ts",
     "playwright.aieos360-s02-i04.config.ts",
     "playwright.aieos360-s03-i04.config.ts",
+    "playwright.aieos360-s04-i03.config.ts",
     "eslint.config.js"
   ]
 }
