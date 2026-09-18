@@ -7,6 +7,20 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- AIEOS360-S04-I03: Additive integrated cross-role real-stack E2E
+  (`pnpm test:e2e:aieos360-s04-i03`, CI job `aieos360-s04-i03-e2e`) proving
+  Teacher + Student + Principal + Parent against one coherent
+  `DevelopmentCoherentSchoolContextProvider` story and one shared PostgreSQL 18
+  database at Backend `637583f42b7c475ef83f6f99bca7e65e665a253d`, OpenAPI
+  `4042FB2725DA70A02A70EE09563B7698AE2E5DA82927614CAF1B5F7E6AA7C1D0`, Alembic
+  `a360s010004`, Architecture `b167bfd951cf9acecb6ff2470ed0fb8c1925097e`;
+  zero `/api` Playwright mocks; no harness-local School Context authority maps;
+  Admin/ERP Context = current-authority boundary, not Admin OS; historical
+  S03/S02/S01/Teacher/Student E2E pins unchanged. NON_PRODUCTION development
+  proof only — not production ERP/SIS integration.
+
 ### Changed
 
 - AIEOS360-S02-I03 correction: Principal School Intelligence Data basis no
