@@ -3,7 +3,7 @@ import { classifyDockerInspectResult } from "./docker_inspect.mjs";
 
 const cases = [
   {
-    name: "daemon_error",
+    name: "daemon_permission_error",
     input: {
       status: 1,
       stdout: "",
@@ -12,7 +12,16 @@ const cases = [
     expect: "error",
   },
   {
-    name: "not_found",
+    name: "missing_docker_context_not_found",
+    input: {
+      status: 1,
+      stdout: "",
+      stderr: 'context "missing-context": not found',
+    },
+    expect: "error",
+  },
+  {
+    name: "missing_container_exact",
     input: {
       status: 1,
       stdout: "",
@@ -25,12 +34,24 @@ const cases = [
     input: { status: 0, stdout: "not-json", stderr: "" },
     expect: "error",
   },
+  {
+    name: "successful_empty_array",
+    input: { status: 0, stdout: "[]", stderr: "" },
+    expect: "error",
+  },
+  {
+    name: "successful_empty_object",
+    input: { status: 0, stdout: "{}", stderr: "" },
+    expect: "error",
+  },
 ];
 
 for (const item of cases) {
   const result = classifyDockerInspectResult(item.input);
   if (result.state !== item.expect) {
-    console.error(`expected ${item.expect} for ${item.name}, got ${result.state}`);
+    console.error(
+      `expected ${item.expect} for ${item.name}, got ${result.state}`,
+    );
     process.exit(1);
   }
 }

@@ -124,11 +124,18 @@ describe("AIEOS360-CX01-I01 showcase rehearsal pin and safety consistency", () =
     const start = read("scripts/aieos360-cx01-i01-showcase-rehearsal/start.mjs");
     expect(start).toContain('AIEOS360_CX01_I01_SHOWCASE_START_MODE === "managed"');
     expect(start).toContain("process.exit(0)");
+    expect(start).toContain("executeCanonicalShutdown");
     expect(lifecycle).toContain("AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE");
 
     const stop = read("scripts/aieos360-cx01-i01-showcase-rehearsal/stop.mjs");
-    expect(stop).toContain("writeOperatorStatus");
-    expect(stop).toContain('"stopped"');
+    expect(stop).toContain("executeCanonicalShutdown");
+    expect(stop).toContain("stopped: true");
+
+    const shutdown = read(
+      "scripts/aieos360-cx01-i01-showcase-rehearsal/canonical_shutdown.mjs",
+    );
+    expect(shutdown).toContain("writeOperatorStatus");
+    expect(shutdown).toContain("descendant_exit_records");
   });
 
   it("keeps CX01 integration proofs opt-in only (not generic CI/Docker)", () => {

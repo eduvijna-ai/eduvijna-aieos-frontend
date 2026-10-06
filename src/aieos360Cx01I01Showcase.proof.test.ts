@@ -90,6 +90,17 @@ describe("AIEOS360-CX01-I01 showcase rehearsal proofs", () => {
       }
       expect(failures.status).toBe(0);
 
+      const interactiveShutdown = spawnSync(
+        "node",
+        [path.join(scriptDir, "interactive_shutdown_proof.mjs")],
+        { cwd: repoRoot, env: process.env, encoding: "utf8" },
+      );
+      if (interactiveShutdown.status !== 0) {
+        console.error(interactiveShutdown.stdout);
+        console.error(interactiveShutdown.stderr);
+      }
+      expect(interactiveShutdown.status).toBe(0);
+
       const injected = spawnSync(
         "node",
         [path.join(scriptDir, "injected_failure_proof.mjs")],

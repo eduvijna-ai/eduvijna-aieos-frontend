@@ -2,7 +2,7 @@
 /** Operator failure-path proofs with asserted outcomes (not hardcoded pass). */
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_TEACHER_BACKEND_PORT } from "./constants.mjs";
 import { canonicalStop, runNodeSync } from "./proof_orchestration.mjs";
@@ -14,7 +14,7 @@ import {
   verifyRegistryEntryOwnership,
 } from "./process_identity.mjs";
 import { isPidAlive, readProcessRegistry, writeProcessRegistry } from "./process_registry.mjs";
-import { tmpDir } from "./paths.mjs";
+import { statusPath, tmpDir } from "./paths.mjs";
 
 const results = [];
 const cleanupPids = [];
@@ -148,15 +148,15 @@ try {
     resistant_alive: resistantAlive,
   });
 
-  if (process.platform === "linux") {
+  if (process.platform === "linux" || process.platform === "win32" || process.platform === "darwin") {
     const treeToken = newChildOwnershipToken();
     const treeParent = spawn(
       process.execPath,
       [
         "-e",
         "const {spawn}=require('node:child_process');" +
-          "const child=spawn(process.execPath,['-e',\"process.on('SIGTERM',()=>{});setInterval(()=>{},1e6)\"],{env:process.env,stdio:'ignore',detached:true});" +
-          "child.unref();setInterval(()=>{},1e6);",
+          "for (let i=0;i<3;i++) spawn(process.execPath,['-e',\"process.on('SIGTERM',()=>{});setInterval(()=>{},1e6)\"],{env:process.env,stdio:'ignore',detached:true});" +
+          "process.on('SIGTERM',()=>{}); setInterval(()=>{},1e6);",
       ],
       {
         env: { ...process.env, [CHILD_OWNERSHIP_ENV]: treeToken },
@@ -166,7 +166,7 @@ try {
     );
     treeParent.unref();
     cleanupPids.push(treeParent.pid);
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 700));
     const treeEntry = buildChildRegistryEntry({
       script: "cx01-failure-proof-tree-supervisor",
       role: "student-backend",
@@ -178,18 +178,19 @@ try {
     const treeStop = runNodeSync("stop.mjs", {
       AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER: "0",
     });
+    const treeStatus = JSON.parse(readFileSync(statusPath, "utf8"));
+    const descendantExit =
+      treeStatus.descendant_exit_records?.[0]?.descendant_exit ?? [];
+    const nonRoot = descendantExit.filter((row) => !row.is_root);
+    assertCase("multi_descendant_exit_recorded", nonRoot.length >= 2, {
+      recorded: nonRoot.length,
+    });
     assertCase("owned_descendant_tree_cleanup", treeStop.status === 0, {
       status: treeStop.status,
       parent_alive: isPidAlive(treeParent.pid),
+      descendant_exit: descendantExit,
     });
     assertCase("owned_descendant_tree_parent_dead", !isPidAlive(treeParent.pid));
-  } else {
-    results.push({
-      case: "owned_descendant_tree_cleanup",
-      ok: true,
-      skipped: true,
-      reason: "linux-only descendant tree reproduction",
-    });
   }
 
   const repeatStop = runNodeSync("stop.mjs", {

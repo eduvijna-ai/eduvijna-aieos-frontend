@@ -101,6 +101,17 @@ describe("AIEOS360-CX01-I01 docker inspect classification (non-destructive)", ()
   });
 });
 
+describe("AIEOS360-CX01-I01 process tree deadlines (non-destructive)", () => {
+  it("uses one shared grace window for multiple PIDs", () => {
+    const result = spawnSync(
+      "node",
+      [path.join(scriptDir, "process_tree_deadline_selftest.mjs")],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+  });
+});
+
 describe("AIEOS360-CX01-I01 process ownership (non-destructive)", () => {
   it("verifies birth identity and ownership token on live child", () => {
     const result = spawnSync(

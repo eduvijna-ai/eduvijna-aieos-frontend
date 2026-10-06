@@ -41,7 +41,7 @@ import {
   PARENT_RUN_ENV,
   verifyRegistryEntryOwnership,
 } from "./process_identity.mjs";
-import { terminateOwnedProcessTree } from "./process_tree.mjs";
+import { executeCanonicalShutdown } from "./canonical_shutdown.mjs";
 
 const scriptDir = join(repoRoot, "scripts/aieos360-cx01-i01-showcase-rehearsal");
 const ownedLauncherPath = join(scriptDir, "owned_child_launcher.mjs");
@@ -145,11 +145,27 @@ writeProcessRegistry({ children: [], parentRunId });
 const spawned = [];
 
 async function cleanupOwned(reason) {
-  for (const entry of spawned) {
-    if (!entry?.pid) {
-      continue;
-    }
-    await terminateOwnedProcessTree(entry);
+  const shutdown = await executeCanonicalShutdown({
+    expectContainer: false,
+  });
+  if (shutdown.phase !== "stopped") {
+    writeOperatorStatus({
+      phase: "start_failed",
+      classification: "NON_PRODUCTION",
+      failure_reason: reason,
+      shutdown_phase: shutdown.phase,
+      partial_children: spawned.map(({ pid, role, script }) => ({
+        pid,
+        role,
+        script,
+      })),
+      failed_at: new Date().toISOString(),
+    });
+    writeProcessRegistry({
+      parentRunId,
+      children: spawned.filter((e) => isPidAlive(e.pid)),
+    });
+    return;
   }
   writeOperatorStatus({
     phase: "start_failed",
@@ -161,10 +177,6 @@ async function cleanupOwned(reason) {
       script,
     })),
     failed_at: new Date().toISOString(),
-  });
-  writeProcessRegistry({
-    parentRunId,
-    children: spawned.filter((e) => isPidAlive(e.pid)),
   });
 }
 
@@ -355,18 +367,24 @@ try {
 }
 
 if (startMode === "interactive") {
-  process.on("SIGINT", () => {
-    for (const entry of spawned) {
-      const identity = verifyRegistryEntryOwnership(entry.pid, entry);
-      if (!identity.ok) {
-        continue;
-      }
-      try {
-        process.kill(entry.pid, "SIGINT");
-      } catch {
-        /* ignore */
-      }
+  let interactiveShutdownInProgress = false;
+  const runInteractiveShutdown = async (signal) => {
+    if (interactiveShutdownInProgress) {
+      return;
     }
-    process.exit(0);
+    interactiveShutdownInProgress = true;
+    const shutdown = await executeCanonicalShutdown({
+      expectContainer: process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER !== "0",
+    });
+    if (shutdown.phase === "stop_failed") {
+      process.exitCode = 1;
+    }
+    process.exit(signal === "SIGINT" ? 0 : (process.exitCode ?? 0));
+  };
+  process.on("SIGINT", () => {
+    void runInteractiveShutdown("SIGINT");
+  });
+  process.on("SIGTERM", () => {
+    void runInteractiveShutdown("SIGTERM");
   });
 }
