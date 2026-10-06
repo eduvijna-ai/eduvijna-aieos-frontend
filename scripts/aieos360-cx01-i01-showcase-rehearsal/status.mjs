@@ -8,7 +8,7 @@ import {
 } from "./paths.mjs";
 import { runPinGuard } from "./pin_guard.mjs";
 import { isPidAlive, readProcessRegistry, waitForHttpOk } from "./process_registry.mjs";
-import { verifyProcessIdentity } from "./process_identity.mjs";
+import { verifyRegistryEntryOwnership } from "./process_identity.mjs";
 
 runPinGuard();
 
@@ -54,7 +54,7 @@ for (const entry of registry.children ?? []) {
     deadExpected.push(entry);
     continue;
   }
-  const identity = verifyProcessIdentity(entry.pid, entry);
+  const identity = verifyRegistryEntryOwnership(entry.pid, entry);
   if (!identity.ok) {
     deadExpected.push({ ...entry, identity_rejected: identity.reason });
     continue;

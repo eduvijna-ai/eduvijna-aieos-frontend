@@ -5,6 +5,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { canonicalStop, runNodeSync } from "./proof_orchestration.mjs";
 import { repoRoot, statusPath } from "./paths.mjs";
 
 const scriptDir = join(repoRoot, "scripts/aieos360-cx01-i01-showcase-rehearsal");
@@ -14,21 +15,12 @@ if (!backendRoot) {
   process.exit(1);
 }
 
-function runNode(script, extraEnv = {}) {
-  const result = spawnSync("node", [join(scriptDir, script)], {
-    cwd: repoRoot,
-    env: { ...process.env, ...extraEnv },
-    encoding: "utf8",
-  });
-  if (result.status !== 0) {
-    console.error(result.stdout);
-    console.error(result.stderr);
-    throw new Error(`${script} failed with ${result.status}`);
-  }
-  return result;
-}
+const managedStartEnv = {
+  AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET: "1",
+  AIEOS360_CX01_I01_SHOWCASE_START_MODE: "managed",
+};
 
-function runPython(script) {
+function runPython(script, timeoutMs = 600_000) {
   const result = spawnSync(
     process.env.AIEOS360_CX01_I01_SHOWCASE_UV || "uv",
     ["run", "python", join(scriptDir, script)],
@@ -44,6 +36,7 @@ function runPython(script) {
         ].join(process.platform === "win32" ? ";" : ":"),
       },
       encoding: "utf8",
+      timeout: timeoutMs,
     },
   );
   if (result.status !== 0) {
@@ -54,21 +47,54 @@ function runPython(script) {
   return result;
 }
 
-runNode("reset.mjs");
-runNode("start.mjs", {
-  AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET: "1",
-  AIEOS360_CX01_I01_SHOWCASE_START_MODE: "managed",
-});
-runPython("four_role_runtime_proof.py");
-runNode("status.mjs", { AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE: "1" });
-runNode("stop.mjs", { AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER: "0" });
+runNodeSync("reset.mjs", {}, 600_000);
+
+let stackStarted = false;
+let proofError = null;
+try {
+  const start = runNodeSync("start.mjs", managedStartEnv, 600_000);
+  if (start.status !== 0) {
+    console.error(start.stdout);
+    console.error(start.stderr);
+    throw new Error(`start.mjs failed with ${start.status}`);
+  }
+  stackStarted = true;
+
+  runPython("four_role_runtime_proof.py");
+  const status = runNodeSync(
+    "status.mjs",
+    { AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE: "1" },
+    300_000,
+  );
+  if (status.status !== 0) {
+    console.error(status.stdout);
+    console.error(status.stderr);
+    throw new Error(`status.mjs failed with ${status.status}`);
+  }
+} catch (error) {
+  proofError = error;
+} finally {
+  if (stackStarted) {
+    const stop = canonicalStop();
+    if (stop.status !== 0) {
+      console.error(stop.stdout);
+      console.error(stop.stderr);
+      proofError =
+        proofError ?? new Error(`stop.mjs failed with ${stop.status}`);
+    }
+  }
+}
+
+if (proofError) {
+  throw proofError;
+}
 
 if (!existsSync(statusPath)) {
   throw new Error("status file missing after stop");
 }
-const status = JSON.parse(readFileSync(statusPath, "utf8"));
-if (status.phase !== "stopped") {
-  throw new Error(`expected phase stopped after stop; got ${status.phase}`);
+const finalStatus = JSON.parse(readFileSync(statusPath, "utf8"));
+if (finalStatus.phase !== "stopped") {
+  throw new Error(`expected phase stopped after stop; got ${finalStatus.phase}`);
 }
 
 const proof = {
@@ -79,9 +105,11 @@ const proof = {
     "status_live",
     "canonical_stop",
   ],
-  final_phase: status.phase,
+  final_phase: finalStatus.phase,
   classification: "NON_PRODUCTION",
   operator_path: "start.mjs",
+  managed_start: true,
+  cleanup: "try_finally_canonical_stop",
 };
 const tmpDir = join(repoRoot, "tmp");
 mkdirSync(tmpDir, { recursive: true });

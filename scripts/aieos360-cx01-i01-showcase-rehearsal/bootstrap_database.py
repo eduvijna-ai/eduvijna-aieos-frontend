@@ -46,7 +46,6 @@ def main() -> int:
         provision_identities,
         provision_runtime_grants,
         runtime_url,
-        start_postgres,
         wait_for_engine,
     )
     from tests.dbutil import clear_asset_audit_rows_for_schema_downgrade  # noqa: E402
@@ -66,13 +65,15 @@ def main() -> int:
         m_url = external
         r_url = os.environ.get("AIEOS_TEST_RUNTIME_DATABASE_URL", external)
     else:
-        import tests.conftest as conftest  # noqa: E402
+        import subprocess
 
-        conftest.CONTAINER_NAME = os.environ.get(
-            "AIEOS360_CX01_I01_SHOWCASE_PG_CONTAINER", "aieos-aieos360-cx01-i01-showcase-pg"
+        script_dir = Path(__file__).resolve().parent
+        port = os.environ.get("AIEOS_TEST_PG_PORT", "55448")
+        subprocess.run(
+            ["node", str(script_dir / "start_governed_pg.mjs")],
+            check=True,
+            env={**os.environ, "AIEOS_TEST_PG_PORT": str(port)},
         )
-        conftest.HOST_PORT = port
-        port = start_postgres()
         started_container = True
         b_url = bootstrap_url(port)
         m_url = migrator_url(port)

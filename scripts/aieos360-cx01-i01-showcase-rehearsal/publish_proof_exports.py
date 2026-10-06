@@ -24,7 +24,13 @@ def main() -> int:
         "aieos360-cx01-i01-showcase-operator-failure-proof.json",
         "aieos360-cx01-i01-showcase-manifest.json",
     )
-    merged: dict = {"exports": []}
+    merged: dict = {
+        "bundle_kind": "cx01_i01_sanitized_proof_exports",
+        "not_single_snapshot": True,
+        "approved_client_scenario_id": "AIEOS360-CX-SCENARIO-01",
+        "package_scenario_id": "aieos360-cx01-i01-showcase-rehearsal",
+        "exports": [],
+    }
     for name in patterns:
         src = tmp / name
         if not src.is_file():

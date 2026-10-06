@@ -17,9 +17,17 @@ import {
   writeOperatorStatus,
   writeProcessRegistry,
 } from "./process_registry.mjs";
+import {
+  buildChildRegistryEntry,
+  CHILD_OWNERSHIP_ENV,
+  newChildOwnershipToken,
+  newParentRunId,
+  verifyRegistryEntryOwnership,
+} from "./process_identity.mjs";
 import { dbReportPath, fixturePath, repoRoot } from "./paths.mjs";
 
 const scriptDirPath = join(repoRoot, "scripts/aieos360-cx01-i01-showcase-rehearsal");
+const parentRunId = newParentRunId();
 
 const dbReport = JSON.parse(readFileSync(dbReportPath, "utf8"));
 const teacherBe = Number(
@@ -43,7 +51,10 @@ await assertPortsAvailable([teacherBe, studentBe, principalBe, parentBe]);
 
 const existing = readProcessRegistry();
 for (const entry of existing.children ?? []) {
-  if (isPidAlive(entry.pid)) {
+  if (!isPidAlive(entry.pid)) {
+    continue;
+  }
+  if (verifyRegistryEntryOwnership(entry.pid, entry).ok) {
     throw new Error(
       `CX01 showcase backends already running (pid ${entry.pid} for ${entry.script})`,
     );
@@ -52,9 +63,11 @@ for (const entry of existing.children ?? []) {
 
 const children = [];
 function spawnNode(script, extraEnv = {}) {
+  const ownershipToken = newChildOwnershipToken();
   const child = spawn("node", [join(scriptDirPath, script)], {
     env: {
       ...process.env,
+      [CHILD_OWNERSHIP_ENV]: ownershipToken,
       AIEOS360_CX01_I01_SHOWCASE_SKIP_BOOTSTRAP: "1",
       AIEOS360_CX01_I01_SHOWCASE_RUNTIME_DATABASE_URL: dbReport.runtime_database_url,
       AIEOS360_CX01_I01_SHOWCASE_BOOTSTRAP_DATABASE_URL: dbReport.bootstrap_database_url,
@@ -66,47 +79,69 @@ function spawnNode(script, extraEnv = {}) {
     detached: true,
   });
   child.unref();
-  children.push({ script, pid: child.pid, kind: "backend" });
+  const role = script
+    .replace(/^start-/, "")
+    .replace(/-backend\.mjs$/, "-backend")
+    .replace(/\.mjs$/, "");
+  const entry = buildChildRegistryEntry({
+    script,
+    role,
+    pid: child.pid,
+    parentRunId,
+    ownershipToken,
+  });
+  children.push(entry);
+  writeProcessRegistry({ children: [...children], parentRunId });
   return child;
 }
 
-spawnNode("start-teacher-backend.mjs", {
-  AIEOS360_CX01_I01_SHOWCASE_TEACHER_BACKEND_PORT: String(teacherBe),
-});
-spawnNode("start-student-backend.mjs", {
-  AIEOS360_CX01_I01_SHOWCASE_STUDENT_BACKEND_PORT: String(studentBe),
-});
-spawnNode("start-principal-backend.mjs", {
-  AIEOS360_CX01_I01_SHOWCASE_PRINCIPAL_BACKEND_PORT: String(principalBe),
-});
-spawnNode("start-parent-backend.mjs", {
-  AIEOS360_CX01_I01_SHOWCASE_PARENT_BACKEND_PORT: String(parentBe),
-});
+try {
+  spawnNode("start-teacher-backend.mjs", {
+    AIEOS360_CX01_I01_SHOWCASE_TEACHER_BACKEND_PORT: String(teacherBe),
+  });
+  spawnNode("start-student-backend.mjs", {
+    AIEOS360_CX01_I01_SHOWCASE_STUDENT_BACKEND_PORT: String(studentBe),
+  });
+  spawnNode("start-principal-backend.mjs", {
+    AIEOS360_CX01_I01_SHOWCASE_PRINCIPAL_BACKEND_PORT: String(principalBe),
+  });
+  spawnNode("start-parent-backend.mjs", {
+    AIEOS360_CX01_I01_SHOWCASE_PARENT_BACKEND_PORT: String(parentBe),
+  });
 
-const readiness = [
-  { role: "teacher", url: `http://127.0.0.1:${teacherBe}/docs` },
-  { role: "student", url: `http://127.0.0.1:${studentBe}/docs` },
-  { role: "principal", url: `http://127.0.0.1:${principalBe}/docs` },
-  { role: "parent", url: `http://127.0.0.1:${parentBe}/docs` },
-];
+  const readiness = [
+    { role: "teacher", url: `http://127.0.0.1:${teacherBe}/docs` },
+    { role: "student", url: `http://127.0.0.1:${studentBe}/docs` },
+    { role: "principal", url: `http://127.0.0.1:${principalBe}/docs` },
+    { role: "parent", url: `http://127.0.0.1:${parentBe}/docs` },
+  ];
 
-for (const target of readiness) {
-  await waitForHttpOk(target.url);
+  for (const target of readiness) {
+    await waitForHttpOk(target.url);
+  }
+} catch (error) {
+  for (const entry of children) {
+    if (!isPidAlive(entry.pid)) {
+      continue;
+    }
+    if (!verifyRegistryEntryOwnership(entry.pid, entry).ok) {
+      continue;
+    }
+    try {
+      process.kill(entry.pid, "SIGTERM");
+    } catch {
+      /* ignore */
+    }
+  }
+  writeProcessRegistry({ children: children.filter((e) => isPidAlive(e.pid)) });
+  throw error;
 }
 
-writeProcessRegistry({ children });
+writeProcessRegistry({ children, parentRunId });
 writeOperatorStatus({
   phase: "running",
   classification: "NON_PRODUCTION",
   mode: "backends_only",
-  role_urls: {
-    teacher: { backend: `http://127.0.0.1:${teacherBe}` },
-    student: { backend: `http://127.0.0.1:${studentBe}` },
-    principal: { backend: `http://127.0.0.1:${principalBe}` },
-    parent: { backend: `http://127.0.0.1:${parentBe}` },
-  },
-  readiness_verified: readiness.map((item) => item.role),
+  parent_run_id: parentRunId,
   started_at: new Date().toISOString(),
 });
-
-console.log(JSON.stringify({ phase: "running", readiness_verified: true }, null, 2));

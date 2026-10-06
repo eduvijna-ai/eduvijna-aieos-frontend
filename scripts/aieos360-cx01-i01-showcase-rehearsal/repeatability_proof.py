@@ -134,6 +134,20 @@ def main() -> int:
         "assignments_after_second_reset": 0,
         "migration_head_after_reset_2": db_2.get("migration_head"),
         "scenario_id_stable": True,
+        "fixture_identity_after_reset_cycle_1": {
+            "tenant_id": fixture_1.get("tenant_id"),
+            "class_ref": fixture_1.get("class_ref"),
+            "scenario_id": fixture_1.get("scenario_id"),
+        },
+        "fixture_identity_after_reset_cycle_2": {
+            "tenant_id": fixture_2.get("tenant_id"),
+            "class_ref": fixture_2.get("class_ref"),
+            "scenario_id": fixture_2.get("scenario_id"),
+        },
+        "artifact_note": (
+            "Repeatability proof spans two sequential reset cycles; "
+            "fixture fields above are from distinct snapshots, not one combined state."
+        ),
     }
     from export_sanitize import write_sanitized_json
 

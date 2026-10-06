@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
 import { CX01_SHOWCASE_CONTAINER } from "./constants.mjs";
+import { removeOwnedContainer } from "./docker_ownership.mjs";
 import {
-  inspectOwnedContainer,
-  verifyProcessIdentity,
+  verifyRegistryEntryOwnership,
   waitForPidExit,
 } from "./process_identity.mjs";
 import {
@@ -27,7 +26,7 @@ for (const entry of registry.children ?? []) {
     signaled.push({ ...entry, already_dead: true });
     continue;
   }
-  const identity = verifyProcessIdentity(entry.pid, entry);
+  const identity = verifyRegistryEntryOwnership(entry.pid, entry);
   if (!identity.ok) {
     rejected.push({ ...entry, reason: identity.reason });
     continue;
@@ -41,18 +40,32 @@ for (const entry of registry.children ?? []) {
 }
 
 for (const entry of signaled.filter((item) => !item.already_dead)) {
-  const exited = await waitForPidExit(entry.pid, 15_000);
-  if (!exited && isPidAlive(entry.pid)) {
+  const exitedAfterTerm = await waitForPidExit(entry.pid, 15_000);
+  if (exitedAfterTerm || !isPidAlive(entry.pid)) {
+    continue;
+  }
+
+  const preKillIdentity = verifyRegistryEntryOwnership(entry.pid, entry);
+  if (!preKillIdentity.ok) {
+    rejected.push({
+      ...entry,
+      reason: preKillIdentity.reason,
+      stage: "pre_sigkill",
+    });
+    continue;
+  }
+
+  try {
+    process.kill(entry.pid, "SIGKILL");
+  } catch (error) {
+    failed.push({ ...entry, error: String(error), stage: "sigkill" });
+    continue;
+  }
+
+  const exitedAfterKill = await waitForPidExit(entry.pid, 5_000);
+  if (!exitedAfterKill && isPidAlive(entry.pid)) {
     survivors.push(entry);
-    try {
-      process.kill(entry.pid, "SIGKILL");
-    } catch {
-      /* ignore */
-    }
-    const forcedExit = await waitForPidExit(entry.pid, 5_000);
-    if (!forcedExit && isPidAlive(entry.pid)) {
-      failed.push({ ...entry, error: "process survived SIGTERM/SIGKILL" });
-    }
+    failed.push({ ...entry, error: "process survived SIGTERM/SIGKILL" });
   }
 }
 
@@ -60,32 +73,19 @@ let containerRemoved = false;
 let containerRemoveError = null;
 let containerIdentity = null;
 if (process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER !== "0") {
-  const inspect = inspectOwnedContainer(CX01_SHOWCASE_CONTAINER);
-  if (inspect.ok) {
-    containerIdentity = {
-      containerId: inspect.containerId,
-      containerName: CX01_SHOWCASE_CONTAINER,
-    };
-    const docker = spawnSync("docker", ["rm", "-f", CX01_SHOWCASE_CONTAINER], {
-      encoding: "utf8",
-    });
-    if (docker.status === 0) {
-      containerRemoved = true;
-    } else if (docker.stderr?.includes("No such container")) {
-      containerRemoved = false;
-    } else {
-      containerRemoveError = docker.stderr || docker.stdout || "docker rm failed";
-    }
-  } else if (!inspect.error?.includes("No such object")) {
-    containerRemoveError = inspect.error;
+  const removal = removeOwnedContainer(CX01_SHOWCASE_CONTAINER);
+  if (removal.removed) {
+    containerRemoved = true;
+    containerIdentity = { containerId: removal.containerId };
+  } else if (removal.missing) {
+    containerRemoved = false;
+  } else if (removal.error) {
+    containerRemoveError = removal.error;
   }
 }
 
 const phase =
-  failed.length > 0 ||
-  survivors.length > 0 ||
-  rejected.length > 0 ||
-  containerRemoveError
+  failed.length > 0 || survivors.length > 0 || containerRemoveError
     ? "stop_failed"
     : "stopped";
 
@@ -95,9 +95,18 @@ writeOperatorStatus({
   stopped_at: new Date().toISOString(),
   container_removed: containerRemoved,
   container_identity: containerIdentity,
-  signaled_processes: signaled,
+  signaled_processes: signaled.map(({ pid, role, script, already_dead }) => ({
+    pid,
+    role,
+    script,
+    already_dead: Boolean(already_dead),
+  })),
   rejected_registry_entries: rejected,
-  survivor_processes: survivors,
+  survivor_processes: survivors.map(({ pid, role, script }) => ({
+    pid,
+    role,
+    script,
+  })),
   failed_processes: failed,
   container_remove_error: containerRemoveError,
 });
@@ -105,8 +114,15 @@ writeOperatorStatus({
 if (phase === "stopped") {
   writeProcessRegistry({ children: [] });
 } else {
+  const recoverable = survivors
+    .filter((entry) => isPidAlive(entry.pid))
+    .concat(
+      failed
+        .filter((item) => isPidAlive(item.pid))
+        .map((item) => ({ ...item, stop_failed: true })),
+    );
   writeProcessRegistry({
-    children: [...survivors, ...failed.map((item) => ({ ...item, stop_failed: true }))],
+    children: recoverable,
     last_stop_failed_at: new Date().toISOString(),
   });
 }
@@ -129,6 +145,7 @@ console.log(
       classification: "NON_PRODUCTION",
       container_removed: containerRemoved,
       phase,
+      rejected_count: rejected.length,
     },
     null,
     2,

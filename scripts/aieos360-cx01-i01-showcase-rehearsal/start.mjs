@@ -33,7 +33,14 @@ import {
   statusPath,
   tmpDir,
 } from "./paths.mjs";
-import { verifyProcessIdentity } from "./process_identity.mjs";
+import {
+  buildChildRegistryEntry,
+  CHILD_OWNERSHIP_ENV,
+  newChildOwnershipToken,
+  newParentRunId,
+  PARENT_RUN_ENV,
+  verifyRegistryEntryOwnership,
+} from "./process_identity.mjs";
 
 const scriptDir = join(repoRoot, "scripts/aieos360-cx01-i01-showcase-rehearsal");
 const skipReset = process.env.AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET === "1";
@@ -44,6 +51,7 @@ const startMode =
 const readinessTimeoutMs = Number(
   process.env.AIEOS360_CX01_I01_SHOWCASE_START_READINESS_TIMEOUT_MS || "180000",
 );
+const parentRunId = newParentRunId();
 
 mkdirSync(tmpDir, { recursive: true });
 runPinGuard();
@@ -54,7 +62,7 @@ function assertNotAlreadyRunning() {
     if (!isPidAlive(entry.pid)) {
       continue;
     }
-    const identity = verifyProcessIdentity(entry.pid, entry);
+    const identity = verifyRegistryEntryOwnership(entry.pid, entry);
     if (!identity.ok) {
       continue;
     }
@@ -72,8 +80,6 @@ function assertNotAlreadyRunning() {
     process.exit(1);
   }
 }
-
-assertNotAlreadyRunning();
 
 const teacherBe = Number(
   process.env.AIEOS360_CX01_I01_SHOWCASE_TEACHER_BACKEND_PORT ||
@@ -108,6 +114,8 @@ const parentFe = Number(
     DEFAULT_PARENT_FRONTEND_PORT,
 );
 
+assertNotAlreadyRunning();
+
 await assertPortsAvailable([
   teacherBe,
   studentBe,
@@ -130,7 +138,7 @@ if (!skipReset) {
 }
 
 const dbReport = JSON.parse(readFileSync(dbReportPath, "utf8"));
-writeProcessRegistry({ children: [] });
+writeProcessRegistry({ children: [], parentRunId });
 
 const spawned = [];
 
@@ -139,7 +147,7 @@ function cleanupOwned(reason) {
     if (!entry.pid || !isPidAlive(entry.pid)) {
       continue;
     }
-    const identity = verifyProcessIdentity(entry.pid, entry);
+    const identity = verifyRegistryEntryOwnership(entry.pid, entry);
     if (!identity.ok) {
       continue;
     }
@@ -153,17 +161,40 @@ function cleanupOwned(reason) {
     phase: "start_failed",
     classification: "NON_PRODUCTION",
     failure_reason: reason,
-    partial_children: spawned,
+    partial_children: spawned.map(({ pid, role, script }) => ({
+      pid,
+      role,
+      script,
+    })),
     failed_at: new Date().toISOString(),
   });
-  writeProcessRegistry({ children: spawned.filter((e) => isPidAlive(e.pid)) });
+  writeProcessRegistry({
+    parentRunId,
+    children: spawned.filter((e) => isPidAlive(e.pid)),
+  });
+}
+
+function registerSpawnedChild(script, role, child) {
+  const entry = buildChildRegistryEntry({
+    script,
+    role,
+    pid: child.pid,
+    parentRunId,
+    ownershipToken: child.__cx01OwnershipToken,
+  });
+  spawned.push(entry);
+  appendProcessChild(entry);
+  return child;
 }
 
 function spawnNode(script, extraEnv = {}) {
   const managed = startMode === "managed";
+  const ownershipToken = newChildOwnershipToken();
   const child = spawn("node", [join(scriptDir, script)], {
     env: {
       ...process.env,
+      [CHILD_OWNERSHIP_ENV]: ownershipToken,
+      [PARENT_RUN_ENV]: parentRunId,
       AIEOS360_CX01_I01_SHOWCASE_SKIP_BOOTSTRAP: "1",
       AIEOS360_CX01_I01_SHOWCASE_RUNTIME_DATABASE_URL: dbReport.runtime_database_url,
       AIEOS360_CX01_I01_SHOWCASE_BOOTSTRAP_DATABASE_URL: dbReport.bootstrap_database_url,
@@ -174,6 +205,7 @@ function spawnNode(script, extraEnv = {}) {
     stdio: managed ? "ignore" : "inherit",
     detached: managed,
   });
+  child.__cx01OwnershipToken = ownershipToken;
   if (managed) {
     child.unref();
   }
@@ -181,14 +213,13 @@ function spawnNode(script, extraEnv = {}) {
     .replace(/^start-/, "")
     .replace(/-backend\.mjs$/, "-backend")
     .replace(/\.mjs$/, "");
-  const entry = { script, pid: child.pid, role };
-  spawned.push(entry);
-  appendProcessChild(entry);
+  registerSpawnedChild(script, role, child);
   return child;
 }
 
 function spawnVite(port, backendPort, role) {
   const managed = startMode === "managed";
+  const ownershipToken = newChildOwnershipToken();
   const child = spawn(
     "pnpm",
     ["exec", "vite", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
@@ -196,18 +227,19 @@ function spawnVite(port, backendPort, role) {
       cwd: repoRoot,
       env: {
         ...process.env,
+        [CHILD_OWNERSHIP_ENV]: ownershipToken,
+        [PARENT_RUN_ENV]: parentRunId,
         VITE_DEV_API_PROXY_TARGET: `http://127.0.0.1:${backendPort}`,
       },
       stdio: managed ? "ignore" : "inherit",
       detached: managed,
     },
   );
+  child.__cx01OwnershipToken = ownershipToken;
   if (managed) {
     child.unref();
   }
-  const entry = { script: `vite:${port}`, pid: child.pid, role: `${role}_frontend` };
-  spawned.push(entry);
-  appendProcessChild(entry);
+  registerSpawnedChild(`vite:${port}`, `${role}_frontend`, child);
   return child;
 }
 
@@ -262,6 +294,7 @@ try {
     classification: "NON_PRODUCTION",
     mode: "full_stack",
     start_mode: startMode,
+    parent_run_id: parentRunId,
     role_urls: {
       teacher: {
         frontend: `http://127.0.0.1:${teacherFe}`,
@@ -324,6 +357,10 @@ try {
 if (startMode === "interactive") {
   process.on("SIGINT", () => {
     for (const entry of spawned) {
+      const identity = verifyRegistryEntryOwnership(entry.pid, entry);
+      if (!identity.ok) {
+        continue;
+      }
       try {
         process.kill(entry.pid, "SIGINT");
       } catch {

@@ -89,3 +89,18 @@ describe("AIEOS360-CX01-I01 reset target contract (non-destructive)", () => {
     expect(result.stderr + result.stdout).toContain("RESET BLOCKED");
   });
 });
+
+describe("AIEOS360-CX01-I01 process ownership (non-destructive)", () => {
+  it("verifies birth identity and ownership token on live child", () => {
+    const result = spawnSync(
+      "node",
+      [path.join(scriptDir, "process_identity_selftest.mjs")],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    if (result.status !== 0) {
+      console.error(result.stdout);
+      console.error(result.stderr);
+    }
+    expect(result.status).toBe(0);
+  });
+});

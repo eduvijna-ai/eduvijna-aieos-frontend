@@ -1,11 +1,160 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 
-const OWNER_MARKER = "aieos360-cx01-i01-showcase";
+export const CHILD_OWNERSHIP_ENV = "AIEOS360_CX01_I01_SHOWCASE_CHILD_OWNERSHIP";
+export const PARENT_RUN_ENV = "AIEOS360_CX01_I01_SHOWCASE_PARENT_RUN_ID";
 
-export function processCommandLine(pid) {
+export function newParentRunId() {
+  return randomUUID();
+}
+
+export function newChildOwnershipToken() {
+  return randomUUID();
+}
+
+function readLinuxProcStat(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const close = stat.lastIndexOf(")");
+    if (close === -1) {
+      return null;
+    }
+    const rest = stat.slice(close + 2).split(" ");
+    return {
+      starttime: rest[19],
+      ppid: rest[1],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readLinuxEnviron(pid) {
+  try {
+    return readFileSync(`/proc/${pid}/environ`).toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
+function readLinuxExe(pid) {
+  try {
+    return readlinkSync(`/proc/${pid}/exe`);
+  } catch {
+    return null;
+  }
+}
+
+export function captureProcessBirthIdentity(pid) {
+  if (!pid || pid <= 0) {
+    return null;
+  }
+  if (process.platform === "linux") {
+    const stat = readLinuxProcStat(pid);
+    if (!stat) {
+      return null;
+    }
+    return {
+      platform: "linux",
+      pid,
+      ppid: stat.ppid,
+      starttime: stat.starttime,
+      executable: readLinuxExe(pid),
+    };
+  }
+  if (process.platform === "darwin") {
+    const ps = spawnSync("ps", ["-p", String(pid), "-o", "ppid=,lstart="], {
+      encoding: "utf8",
+    });
+    if (ps.status !== 0) {
+      return null;
+    }
+    const line = (ps.stdout || "").trim();
+    const match = line.match(/^(\d+)\s+(.+)$/);
+    if (!match) {
+      return null;
+    }
+    return {
+      platform: "darwin",
+      pid,
+      ppid: match[1],
+      lstart: match[2].trim(),
+    };
+  }
   if (process.platform === "win32") {
-    const result = spawnSync(
+    const ps = spawnSync(
+      "powershell",
+      [
+        "-NoProfile",
+        "-Command",
+        `$p=Get-CimInstance Win32_Process -Filter "ProcessId=${pid}"; ` +
+          `if($p){"$($p.ParentProcessId)|$($p.CreationDate.ToString('o'))|$($p.ExecutablePath)"}`,
+      ],
+      { encoding: "utf8" },
+    );
+    const line = (ps.stdout || "").trim();
+    if (!line) {
+      return null;
+    }
+    const [ppid, creationDate, executable] = line.split("|");
+    return {
+      platform: "win32",
+      pid,
+      ppid,
+      creationDate,
+      executable: executable || null,
+    };
+  }
+  return { platform: process.platform, pid };
+}
+
+function birthMatches(pid, stored) {
+  if (!stored) {
+    return false;
+  }
+  const current = captureProcessBirthIdentity(pid);
+  if (!current) {
+    return false;
+  }
+  if (current.platform !== stored.platform) {
+    return false;
+  }
+  if (String(current.ppid) !== String(stored.ppid)) {
+    return false;
+  }
+  if (current.platform === "linux") {
+    return (
+      String(current.starttime) === String(stored.starttime) &&
+      String(current.pid) === String(stored.pid)
+    );
+  }
+  if (current.platform === "darwin") {
+    return current.lstart === stored.lstart && String(current.pid) === String(stored.pid);
+  }
+  if (current.platform === "win32") {
+    return (
+      current.creationDate === stored.creationDate &&
+      String(current.pid) === String(stored.pid)
+    );
+  }
+  return String(current.pid) === String(stored.pid);
+}
+
+function ownershipTokenInProcess(pid, token) {
+  if (!token) {
+    return false;
+  }
+  if (process.platform === "linux") {
+    const env = readLinuxEnviron(pid);
+    return env.includes(`${CHILD_OWNERSHIP_ENV}=${token}`);
+  }
+  if (process.platform === "darwin") {
+    const ps = spawnSync("ps", ["eww", "-p", String(pid)], { encoding: "utf8" });
+    return (ps.stdout || "").includes(`${CHILD_OWNERSHIP_ENV}=${token}`);
+  }
+  if (process.platform === "win32") {
+    const ps = spawnSync(
       "powershell",
       [
         "-NoProfile",
@@ -14,67 +163,46 @@ export function processCommandLine(pid) {
       ],
       { encoding: "utf8" },
     );
-    return (result.stdout || "").trim();
+    return (ps.stdout || "").includes(token);
   }
-  try {
-    const buf = readFileSync(`/proc/${pid}/cmdline`);
-    return buf.toString("utf8").replaceAll("\0", " ").trim();
-  } catch {
-    return "";
-  }
+  return false;
 }
 
-export function expectedIdentityForEntry(entry) {
-  const script = entry?.script ?? "";
-  if (script.startsWith("vite:")) {
-    return { kind: "vite", port: script.split(":")[1], marker: OWNER_MARKER };
-  }
-  if (script.endsWith("-backend.mjs") || script.endsWith("_backend.mjs")) {
-    return { kind: "backend", script, marker: OWNER_MARKER };
-  }
-  if (script.endsWith(".mjs") || script.endsWith(".py")) {
-    return { kind: "node", script, marker: OWNER_MARKER };
-  }
-  return { kind: "unknown", script, marker: OWNER_MARKER };
+export function buildChildRegistryEntry({ script, role, pid, parentRunId, ownershipToken }) {
+  const birthIdentity = captureProcessBirthIdentity(pid);
+  return {
+    script,
+    role,
+    pid,
+    parentRunId,
+    ownershipToken,
+    birthIdentity,
+    registeredAt: new Date().toISOString(),
+  };
 }
 
-export function verifyProcessIdentity(pid, entry) {
+export function verifyRegistryEntryOwnership(pid, entry) {
   if (!pid || pid <= 0) {
     return { ok: false, reason: "invalid pid" };
   }
-  const cmdline = processCommandLine(pid);
-  if (!cmdline) {
-    return { ok: false, reason: "could not read process command line" };
+  if (!entry?.ownershipToken || !entry?.birthIdentity) {
+    return { ok: false, reason: "registry entry missing ownership metadata" };
   }
-  const identity = expectedIdentityForEntry(entry);
-  if (identity.kind === "vite") {
-    const portOk =
-      cmdline.includes("vite") &&
-      (cmdline.includes(`--port ${identity.port}`) ||
-        cmdline.includes(`--port=${identity.port}`));
-    if (!portOk) {
-      return { ok: false, reason: "vite command line does not match registry port" };
-    }
-    return { ok: true, cmdline };
+  if (String(entry.pid) !== String(pid)) {
+    return { ok: false, reason: "registry pid does not match target pid" };
   }
-  if (identity.script) {
-    const needle = identity.script.replace(/^start-/, "");
-    if (
-      !cmdline.includes(identity.script) &&
-      !cmdline.includes("serve_") &&
-      !cmdline.includes(needle) &&
-      !cmdline.includes("aieos360-cx01-i01-showcase-rehearsal")
-    ) {
-      return {
-        ok: false,
-        reason: `command line does not match registered script ${identity.script}`,
-      };
-    }
+  if (!birthMatches(pid, entry.birthIdentity)) {
+    return { ok: false, reason: "process birth identity does not match registry" };
   }
-  if (!cmdline.includes("aieos360-cx01-i01") && !cmdline.includes("cx01")) {
-    return { ok: false, reason: "process is not a CX01 showcase child" };
+  if (!ownershipTokenInProcess(pid, entry.ownershipToken)) {
+    return { ok: false, reason: "ownership token not present in process environment" };
   }
-  return { ok: true, cmdline };
+  return { ok: true };
+}
+
+/** @deprecated use verifyRegistryEntryOwnership */
+export function verifyProcessIdentity(pid, entry) {
+  return verifyRegistryEntryOwnership(pid, entry);
 }
 
 export async function waitForPidExit(pid, timeoutMs = 15_000) {
@@ -90,19 +218,6 @@ export async function waitForPidExit(pid, timeoutMs = 15_000) {
   return false;
 }
 
-export function inspectOwnedContainer(containerName) {
-  const result = spawnSync(
-    "docker",
-    ["inspect", "-f", "{{.Id}} {{.Name}}", containerName],
-    { encoding: "utf8" },
-  );
-  if (result.status !== 0) {
-    return { ok: false, error: result.stderr || result.stdout || "docker inspect failed" };
-  }
-  const line = (result.stdout || "").trim();
-  const [id, name] = line.split(/\s+/, 2);
-  if (!name?.includes(containerName)) {
-    return { ok: false, error: "container name mismatch" };
-  }
-  return { ok: true, containerId: id, containerName };
+export function hashOwnershipRecord(record) {
+  return createHash("sha256").update(JSON.stringify(record)).digest("hex");
 }
