@@ -117,7 +117,13 @@ describe("AIEOS360-CX01-I01 showcase rehearsal pin and safety consistency", () =
       "scripts/aieos360-cx01-i01-showcase-rehearsal/lifecycle_proof.mjs",
     );
     expect(lifecycle).toContain("start.mjs");
+    expect(lifecycle).toContain("AIEOS360_CX01_I01_SHOWCASE_START_MODE");
+    expect(lifecycle).toContain("managed");
     expect(lifecycle).toContain("four_role_runtime_proof.py");
+
+    const start = read("scripts/aieos360-cx01-i01-showcase-rehearsal/start.mjs");
+    expect(start).toContain('AIEOS360_CX01_I01_SHOWCASE_START_MODE === "managed"');
+    expect(start).toContain("process.exit(0)");
     expect(lifecycle).toContain("AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE");
 
     const stop = read("scripts/aieos360-cx01-i01-showcase-rehearsal/stop.mjs");

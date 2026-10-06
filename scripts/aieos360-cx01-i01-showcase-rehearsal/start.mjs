@@ -37,6 +37,13 @@ import { verifyProcessIdentity } from "./process_identity.mjs";
 
 const scriptDir = join(repoRoot, "scripts/aieos360-cx01-i01-showcase-rehearsal");
 const skipReset = process.env.AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET === "1";
+const startMode =
+  process.env.AIEOS360_CX01_I01_SHOWCASE_START_MODE === "managed"
+    ? "managed"
+    : "interactive";
+const readinessTimeoutMs = Number(
+  process.env.AIEOS360_CX01_I01_SHOWCASE_START_READINESS_TIMEOUT_MS || "180000",
+);
 
 mkdirSync(tmpDir, { recursive: true });
 runPinGuard();
@@ -153,6 +160,7 @@ function cleanupOwned(reason) {
 }
 
 function spawnNode(script, extraEnv = {}) {
+  const managed = startMode === "managed";
   const child = spawn("node", [join(scriptDir, script)], {
     env: {
       ...process.env,
@@ -163,9 +171,12 @@ function spawnNode(script, extraEnv = {}) {
       AIEOS360_CX01_I01_SHOWCASE_FIXTURE_PATH: fixturePath,
       ...extraEnv,
     },
-    stdio: "inherit",
-    detached: false,
+    stdio: managed ? "ignore" : "inherit",
+    detached: managed,
   });
+  if (managed) {
+    child.unref();
+  }
   const role = script
     .replace(/^start-/, "")
     .replace(/-backend\.mjs$/, "-backend")
@@ -177,6 +188,7 @@ function spawnNode(script, extraEnv = {}) {
 }
 
 function spawnVite(port, backendPort, role) {
+  const managed = startMode === "managed";
   const child = spawn(
     "pnpm",
     ["exec", "vite", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
@@ -186,10 +198,13 @@ function spawnVite(port, backendPort, role) {
         ...process.env,
         VITE_DEV_API_PROXY_TARGET: `http://127.0.0.1:${backendPort}`,
       },
-      stdio: "inherit",
-      detached: false,
+      stdio: managed ? "ignore" : "inherit",
+      detached: managed,
     },
   );
+  if (managed) {
+    child.unref();
+  }
   const entry = { script: `vite:${port}`, pid: child.pid, role: `${role}_frontend` };
   spawned.push(entry);
   appendProcessChild(entry);
@@ -238,14 +253,15 @@ try {
     },
   ];
   for (const target of readiness) {
-    await waitForHttpOk(target.backend);
-    await waitForHttpOk(target.frontend);
+    await waitForHttpOk(target.backend, readinessTimeoutMs);
+    await waitForHttpOk(target.frontend, readinessTimeoutMs);
   }
 
   writeOperatorStatus({
     phase: "running",
     classification: "NON_PRODUCTION",
     mode: "full_stack",
+    start_mode: startMode,
     role_urls: {
       teacher: {
         frontend: `http://127.0.0.1:${teacherFe}`,
@@ -278,6 +294,24 @@ try {
     started_at: new Date().toISOString(),
   });
 
+  if (startMode === "managed") {
+    console.log(
+      JSON.stringify(
+        {
+          started: true,
+          classification: "NON_PRODUCTION",
+          mode: "full_stack",
+          start_mode: "managed",
+          child_count: spawned.length,
+          readiness_verified: true,
+        },
+        null,
+        2,
+      ),
+    );
+    process.exit(0);
+  }
+
   console.log(
     "AIEOS360-CX01-I01 showcase rehearsal started (NON_PRODUCTION). Press Ctrl+C to stop.",
   );
@@ -287,13 +321,15 @@ try {
   process.exit(1);
 }
 
-process.on("SIGINT", () => {
-  for (const entry of spawned) {
-    try {
-      process.kill(entry.pid, "SIGINT");
-    } catch {
-      /* ignore */
+if (startMode === "interactive") {
+  process.on("SIGINT", () => {
+    for (const entry of spawned) {
+      try {
+        process.kill(entry.pid, "SIGINT");
+      } catch {
+        /* ignore */
+      }
     }
-  }
-  process.exit(0);
-});
+    process.exit(0);
+  });
+}

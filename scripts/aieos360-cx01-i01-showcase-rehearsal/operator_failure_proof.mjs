@@ -34,13 +34,18 @@ if (reset.status !== 0) {
   throw new Error("reset failed before operator failure proofs");
 }
 
-const firstStart = runNode("start.mjs", { AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET: "1" });
+const managedStartEnv = {
+  AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET: "1",
+  AIEOS360_CX01_I01_SHOWCASE_START_MODE: "managed",
+};
+
+const firstStart = runNode("start.mjs", managedStartEnv);
 if (firstStart.status !== 0) {
   throw new Error("initial start failed");
 }
 results.push({ case: "first_start", ok: true });
 
-const repeatStart = runNode("start.mjs", { AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET: "1" });
+const repeatStart = runNode("start.mjs", managedStartEnv);
 results.push({
   case: "repeat_start_while_running",
   ok: repeatStart.status !== 0,
@@ -69,9 +74,7 @@ results.push({
 
 writeProcessRegistry({ children: [] });
 const blocker = await occupyPort(DEFAULT_TEACHER_BACKEND_PORT);
-const portConflictStart = runNode("start.mjs", {
-  AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET: "1",
-});
+const portConflictStart = runNode("start.mjs", managedStartEnv);
 blocker.close();
 results.push({
   case: "port_conflict_start_fails",

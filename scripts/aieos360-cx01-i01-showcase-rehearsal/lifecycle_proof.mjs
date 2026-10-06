@@ -55,7 +55,10 @@ function runPython(script) {
 }
 
 runNode("reset.mjs");
-runNode("start.mjs", { AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET: "1" });
+runNode("start.mjs", {
+  AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET: "1",
+  AIEOS360_CX01_I01_SHOWCASE_START_MODE: "managed",
+});
 runPython("four_role_runtime_proof.py");
 runNode("status.mjs", { AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE: "1" });
 runNode("stop.mjs", { AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER: "0" });
