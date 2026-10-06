@@ -120,9 +120,7 @@ function birthMatches(pid, stored) {
   if (current.platform !== stored.platform) {
     return false;
   }
-  if (String(current.ppid) !== String(stored.ppid)) {
-    return false;
-  }
+  // Do not compare ppid: managed/detached children are reparented after the supervisor exits.
   if (current.platform === "linux") {
     return (
       String(current.starttime) === String(stored.starttime) &&

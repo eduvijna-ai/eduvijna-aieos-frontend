@@ -220,9 +220,17 @@ function spawnNode(script, extraEnv = {}) {
 function spawnVite(port, backendPort, role) {
   const managed = startMode === "managed";
   const ownershipToken = newChildOwnershipToken();
+  const viteBin = join(repoRoot, "node_modules/vite/bin/vite.js");
   const child = spawn(
-    "pnpm",
-    ["exec", "vite", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
+    process.execPath,
+    [
+      viteBin,
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(port),
+      "--strictPort",
+    ],
     {
       cwd: repoRoot,
       env: {
