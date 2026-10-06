@@ -55,15 +55,30 @@ for (const entry of signaled.filter((item) => !item.already_dead)) {
     continue;
   }
 
-  try {
-    process.kill(entry.pid, "SIGKILL");
-  } catch (error) {
-    failed.push({ ...entry, error: String(error), stage: "sigkill" });
-    continue;
+  let killed = false;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const preAttempt = verifyRegistryEntryOwnership(entry.pid, entry);
+    if (!preAttempt.ok) {
+      rejected.push({
+        ...entry,
+        reason: preAttempt.reason,
+        stage: `pre_sigkill_attempt_${attempt}`,
+      });
+      break;
+    }
+    try {
+      process.kill(entry.pid, "SIGKILL");
+    } catch (error) {
+      failed.push({ ...entry, error: String(error), stage: "sigkill" });
+      break;
+    }
+    const exitedAfterKill = await waitForPidExit(entry.pid, 25_000);
+    if (exitedAfterKill || !isPidAlive(entry.pid)) {
+      killed = true;
+      break;
+    }
   }
-
-  const exitedAfterKill = await waitForPidExit(entry.pid, 5_000);
-  if (!exitedAfterKill && isPidAlive(entry.pid)) {
+  if (!killed && isPidAlive(entry.pid)) {
     survivors.push(entry);
     failed.push({ ...entry, error: "process survived SIGTERM/SIGKILL" });
   }

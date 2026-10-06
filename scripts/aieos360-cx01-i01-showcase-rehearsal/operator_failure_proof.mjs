@@ -125,8 +125,11 @@ const resistant = spawn(
       [CHILD_OWNERSHIP_ENV]: sigtermResistantToken,
     },
     stdio: "ignore",
+    detached: true,
   },
 );
+resistant.unref();
+await new Promise((resolve) => setTimeout(resolve, 300));
 const ownedResistantEntry = buildChildRegistryEntry({
   script: "cx01-failure-proof-resistant",
   role: "teacher-backend",
