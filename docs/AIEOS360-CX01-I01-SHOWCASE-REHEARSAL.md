@@ -77,6 +77,12 @@ Skip automatic reset on start (reuse current DB):
 AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET=1 pnpm showcase:aieos360:start
 ```
 
+**Interactive vs managed start:** default `start.mjs` is **interactive** (foreground supervisor; Ctrl+C stops children). CI and proof scripts use **managed** mode so the canonical operator returns after bounded readiness while children keep running:
+
+```bash
+AIEOS360_CX01_I01_SHOWCASE_START_MODE=managed AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET=1 node scripts/aieos360-cx01-i01-showcase-rehearsal/start.mjs
+```
+
 ## Role port map (defaults)
 
 | Role | Frontend | Backend |
