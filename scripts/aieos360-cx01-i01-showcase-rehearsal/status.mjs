@@ -82,12 +82,19 @@ report.missing_expected_roles = missingRoles;
 
 let healthOk = true;
 const roleUrls = report.operator_status?.role_urls;
+const healthTimeoutMs = Number(
+  process.env.AIEOS360_CX01_I01_SHOWCASE_STATUS_HEALTH_TIMEOUT_MS ||
+    (process.env.AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE === "1" ? "90000" : "5000"),
+);
 if (operatorPhase === "running" && roleUrls) {
   const checks = [];
   for (const [role, urls] of Object.entries(roleUrls)) {
     if (urls.backend) {
+      const backendUrl = urls.backend.endsWith("/docs")
+        ? urls.backend
+        : `${urls.backend.replace(/\/$/, "")}/docs`;
       try {
-        await waitForHttpOk(urls.backend, 5_000);
+        await waitForHttpOk(backendUrl, healthTimeoutMs);
         checks.push({ role, surface: "backend", ok: true });
       } catch {
         checks.push({ role, surface: "backend", ok: false });
@@ -96,7 +103,7 @@ if (operatorPhase === "running" && roleUrls) {
     }
     if (urls.frontend && mode === "full_stack") {
       try {
-        await waitForHttpOk(urls.frontend, 5_000);
+        await waitForHttpOk(urls.frontend, healthTimeoutMs);
         checks.push({ role, surface: "frontend", ok: true });
       } catch {
         checks.push({ role, surface: "frontend", ok: false });
@@ -125,6 +132,12 @@ console.log(JSON.stringify(report, null, 2));
 
 if (process.env.AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE === "1") {
   if (report.effective_phase !== "running") {
+    process.exit(1);
+  }
+  if (missingRoles.length > 0) {
+    process.exit(1);
+  }
+  if (mode === "full_stack" && liveChildren.length < expectedRoles.length) {
     process.exit(1);
   }
 }

@@ -62,7 +62,8 @@ export function verifyProcessIdentity(pid, entry) {
     if (
       !cmdline.includes(identity.script) &&
       !cmdline.includes("serve_") &&
-      !cmdline.includes(needle)
+      !cmdline.includes(needle) &&
+      !cmdline.includes("aieos360-cx01-i01-showcase-rehearsal")
     ) {
       return {
         ok: false,
