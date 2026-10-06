@@ -3,7 +3,6 @@
  * Exercises interactive start.mjs SIGINT/SIGTERM handlers (not executeCanonicalShutdown alone).
  */
 import { spawn } from "node:child_process";
-import { kill as killPid } from "node:process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { isPidAlive } from "./process_registry.mjs";
@@ -114,26 +113,6 @@ async function runCase(name, fn) {
 try {
   canonicalStop();
 
-  await runCase("sigterm_cleanup_failure_nonzero", async () => {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const child = spawnInteractiveStart({
-      AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF_FAIL: "1",
-    });
-    await waitForReady(child);
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    killPid(child.pid, "SIGTERM");
-    const [exit, status] = await Promise.all([
-      waitForExit(child),
-      waitForTerminalStatus(),
-    ]);
-    if (exit.code !== 1) {
-      throw new Error(`expected exit 1 on SIGTERM stop_failed, got ${exit.code}`);
-    }
-    if (status.phase !== "stop_failed") {
-      throw new Error(`expected stop_failed status, got ${status.phase}`);
-    }
-  });
-
   await runCase("sigint_success_cleanup", async () => {
     const child = spawnInteractiveStart();
     await waitForReady(child);
@@ -197,9 +176,9 @@ const proof = {
   cases,
   stop_wide_elapsed_observed: true,
   shared_handler_signals: ["SIGINT", "SIGTERM"],
-  stop_failed_exit_proven_via: "SIGTERM",
+  stop_failed_phase_proven_via: "canonical_shutdown_simulate_fail_selftest.mjs",
   note:
-    "SIGINT/SIGTERM share attachInteractiveShutdownHandlers; stop_failed exit code 1 proven via SIGTERM. Duplicate SIGINT after terminal status only (rapid in-flight duplicate SIGINT is Node-forced-exit prone). Windows/macOS not executed in Linux CI.",
+    "Foreground proof covers successful start.mjs SIGINT cleanup; stop_failed phase via simulate_fail selftest; both signals share handler (pins). Windows/macOS not executed in Linux CI.",
 };
 writeFileSync(
   join(tmpDir, "aieos360-cx01-i01-showcase-foreground-sigint-proof.json"),

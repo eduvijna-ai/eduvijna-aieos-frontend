@@ -124,6 +124,15 @@ describe("AIEOS360-CX01-I01 process tree deadlines (non-destructive)", () => {
     expect(result.status).toBe(0);
   });
 
+  it("reports stop_failed when simulateStopFailure is set under harness", () => {
+    const result = spawnSync(
+      "node",
+      [path.join(scriptDir, "canonical_shutdown_simulate_fail_selftest.mjs")],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+  });
+
   it("cleans token-owned descendants when the registered root is already dead", () => {
     const result = spawnSync(
       "node",
