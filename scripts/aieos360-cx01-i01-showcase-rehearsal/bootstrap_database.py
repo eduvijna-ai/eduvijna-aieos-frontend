@@ -49,6 +49,7 @@ def main() -> int:
         start_postgres,
         wait_for_engine,
     )
+    from tests.dbutil import clear_asset_audit_rows_for_schema_downgrade  # noqa: E402
 
     port = os.environ.get("AIEOS_TEST_PG_PORT", "55448")
     report_path = Path(
@@ -91,10 +92,20 @@ def main() -> int:
         and os.environ.get("AIEOS360_CX01_I01_SHOWCASE_CI_EXTERNAL_PG") == "1"
     ):
         with bootstrap.connect() as conn:
-            alembic_table = conn.execute(
-                text("SELECT to_regclass('public.alembic_version')")
+            schema_migrated = conn.execute(
+                text(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM information_schema.tables
+                        WHERE table_schema = 'public'
+                          AND table_name = 'alembic_version'
+                    )
+                    """
+                )
             ).scalar_one()
-        if alembic_table is not None:
+        if schema_migrated:
+            clear_asset_audit_rows_for_schema_downgrade(bootstrap)
             command.downgrade(cfg, "base")
     command.upgrade(cfg, "head")
     head = None
