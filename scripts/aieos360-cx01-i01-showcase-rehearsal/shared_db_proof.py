@@ -64,15 +64,37 @@ def main() -> int:
         if head != EXPECTED_MIGRATION_HEAD:
             raise SystemExit(f"migration head {head} != {EXPECTED_MIGRATION_HEAD}")
 
-        set_tenant(conn, tenant_id)
-        required_principal_ids = [
+        governed_principal_ids = [
             fixture["teacher_principal_id"],
-            fixture["student_principal_id"],
-            fixture["student_b_principal_id"],
             fixture["principal_principal_id"],
             fixture["parent_principal_id"],
+            fixture["student_principal_id"],
+            fixture["student_b_principal_id"],
         ]
-        for principal_id in required_principal_ids:
+        for principal_id in governed_principal_ids:
+            row = conn.execute(
+                text(
+                    """
+                    SELECT status, principal_kind
+                    FROM security.principals
+                    WHERE principal_id = :pid
+                    """
+                ),
+                {"pid": uuid.UUID(principal_id)},
+            ).one_or_none()
+            if row is None:
+                raise SystemExit(f"expected persisted principal {principal_id}")
+            if row.status != "ACTIVE" or row.principal_kind != "HUMAN":
+                raise SystemExit(
+                    f"principal {principal_id} must be ACTIVE HUMAN; "
+                    f"got {row.status} {row.principal_kind}"
+                )
+
+        set_tenant(conn, tenant_id)
+        for principal_id in (
+            fixture["student_principal_id"],
+            fixture["student_b_principal_id"],
+        ):
             membership = conn.execute(
                 text(
                     """
@@ -85,7 +107,7 @@ def main() -> int:
             ).scalar_one_or_none()
             if membership is None:
                 raise SystemExit(
-                    f"expected tenant membership for principal {principal_id}"
+                    f"expected learner tenant membership for principal {principal_id}"
                 )
 
         work_count = conn.execute(
