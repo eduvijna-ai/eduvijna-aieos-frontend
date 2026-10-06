@@ -135,8 +135,10 @@ def main() -> int:
         "migration_head_after_reset_2": db_2.get("migration_head"),
         "scenario_id_stable": True,
     }
+    from export_sanitize import write_sanitized_json
+
     out = tmp / "aieos360-cx01-i01-showcase-repeatability-proof.json"
-    out.write_text(json.dumps(proof, indent=2) + "\n", encoding="utf-8")
+    write_sanitized_json(str(out), proof)
     print(json.dumps(proof, indent=2))
     return 0
 

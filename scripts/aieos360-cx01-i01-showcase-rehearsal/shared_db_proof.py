@@ -131,8 +131,10 @@ def main() -> int:
         "roles_share_contract": ["teacher", "student", "principal", "parent"],
         "fixture_scenario_id": fixture["scenario_id"],
     }
+    from export_sanitize import write_sanitized_json
+
     out_path = tmp / "aieos360-cx01-i01-showcase-shared-db-proof.json"
-    out_path.write_text(json.dumps(proof, indent=2) + "\n", encoding="utf-8")
+    write_sanitized_json(str(out_path), proof)
     print(json.dumps(proof, indent=2))
     return 0
 

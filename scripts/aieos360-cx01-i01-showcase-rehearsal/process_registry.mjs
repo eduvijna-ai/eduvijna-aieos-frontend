@@ -13,12 +13,23 @@ export function writeProcessRegistry(registry) {
   writeFileSync(
     processesPath,
     JSON.stringify(
-      { owner: "aieos360-cx01-i01-showcase", ...registry },
+      {
+        owner: "aieos360-cx01-i01-showcase",
+        registry_version: 1,
+        ...registry,
+      },
       null,
       2,
     ) + "\n",
     "utf8",
   );
+}
+
+export function appendProcessChild(entry) {
+  const registry = readProcessRegistry();
+  const children = [...(registry.children ?? []), entry];
+  writeProcessRegistry({ ...registry, children });
+  return entry;
 }
 
 export function isPidAlive(pid) {

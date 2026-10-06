@@ -57,6 +57,14 @@ function runNodeLifecycle() {
   });
 }
 
+function runOperatorFailureProof() {
+  return spawnSync("node", [path.join(scriptDir, "operator_failure_proof.mjs")], {
+    cwd: repoRoot,
+    env: process.env,
+    encoding: "utf8",
+  });
+}
+
 describe("AIEOS360-CX01-I01 showcase rehearsal proofs", () => {
   it.runIf(runIntegration)(
     "repeatability and operator lifecycle proofs",
@@ -74,7 +82,17 @@ describe("AIEOS360-CX01-I01 showcase rehearsal proofs", () => {
         console.error(lifecycle.stderr);
       }
       expect(lifecycle.status).toBe(0);
+
+      const failures = runOperatorFailureProof();
+      if (failures.status !== 0) {
+        console.error(failures.stdout);
+        console.error(failures.stderr);
+      }
+      expect(failures.status).toBe(0);
+
+      const publish = runUvPython("publish_proof_exports.py");
+      expect(publish.status).toBe(0);
     },
-    900_000,
+    1_200_000,
   );
 });

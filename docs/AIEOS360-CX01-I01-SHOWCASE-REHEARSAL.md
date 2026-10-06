@@ -4,6 +4,13 @@
 > client-showcase rehearsal only. It must never be pointed at production ERP/SIS,
 > staging, or ordinary Founder F5 local development databases.
 
+## Approved client scenario identity
+
+- **Approved client scenario (showcase narrative):** `AIEOS360-CX-SCENARIO-01`
+- **Package / rehearsal scenario id:** `aieos360-cx01-i01-showcase-rehearsal` (engineering substrate label; distinct from the approved client scenario id)
+
+CI proof artifacts under `tmp/cx01-proof-exports/` are **sanitized** (no full database URLs, passwords, or development bearer tokens). Historical workflow artifact `11413231236` uploaded pre-I01R3 exports that included credential-bearing `db.json` / `fixture.json`; those objects were governed **test** credentials only (not production), and future uploads use sanitized exports only.
+
 ## Classification and safety
 
 - Dedicated disposable PostgreSQL **18** Docker container:

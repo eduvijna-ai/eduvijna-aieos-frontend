@@ -17,6 +17,7 @@ const CX01_OPENAPI =
   "4042FB2725DA70A02A70EE09563B7698AE2E5DA82927614CAF1B5F7E6AA7C1D0";
 const CX01_ALEMBIC = "a360s010004";
 const CX01_SCENARIO = "aieos360-cx01-i01-showcase-rehearsal";
+const CX01_CLIENT_SCENARIO = "AIEOS360-CX-SCENARIO-01";
 const CX01_CONTAINER = "aieos-aieos360-cx01-i01-showcase-pg";
 
 const I03_BACKEND = "637583f42b7c475ef83f6f99bca7e65e665a253d";
@@ -39,6 +40,7 @@ describe("AIEOS360-CX01-I01 showcase rehearsal pin and safety consistency", () =
     expect(constants).toContain(CX01_OPENAPI);
     expect(constants).toContain(CX01_ALEMBIC);
     expect(constants).toContain(CX01_SCENARIO);
+    expect(constants).toContain(CX01_CLIENT_SCENARIO);
     expect(constants).toContain(CX01_CONTAINER);
 
     const seed = read(
@@ -109,12 +111,13 @@ describe("AIEOS360-CX01-I01 showcase rehearsal pin and safety consistency", () =
       "scripts/aieos360-cx01-i01-showcase-rehearsal/reset_target_contract.py",
     );
     expect(contract).toContain("validate_external_ci_database_targets");
-    expect(contract).toContain("GOVERNED_TEST_PASSWORD");
+    expect(contract).toContain("reject_connection_routing_overrides");
 
     const lifecycle = read(
       "scripts/aieos360-cx01-i01-showcase-rehearsal/lifecycle_proof.mjs",
     );
-    expect(lifecycle).toContain("start-backends.mjs");
+    expect(lifecycle).toContain("start.mjs");
+    expect(lifecycle).toContain("four_role_runtime_proof.py");
     expect(lifecycle).toContain("AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE");
 
     const stop = read("scripts/aieos360-cx01-i01-showcase-rehearsal/stop.mjs");

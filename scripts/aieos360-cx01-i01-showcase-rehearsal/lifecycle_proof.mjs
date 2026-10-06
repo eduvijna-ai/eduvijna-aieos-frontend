@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 /**
- * CI lifecycle proof: canonical reset, four-role composition, backend readiness,
- * live status, and governed stop/cleanup.
+ * CI lifecycle proof: canonical reset, four-role runtime, full operator start/status/stop.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { repoRoot } from "./paths.mjs";
-import { statusPath } from "./paths.mjs";
+import { repoRoot, statusPath } from "./paths.mjs";
 
 const scriptDir = join(repoRoot, "scripts/aieos360-cx01-i01-showcase-rehearsal");
 const backendRoot = process.env.AIEOS_BACKEND_ROOT;
@@ -57,8 +55,8 @@ function runPython(script) {
 }
 
 runNode("reset.mjs");
-runPython("four_role_compose_proof.py");
-runNode("start-backends.mjs");
+runNode("start.mjs", { AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET: "1" });
+runPython("four_role_runtime_proof.py");
 runNode("status.mjs", { AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE: "1" });
 runNode("stop.mjs", { AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER: "0" });
 
@@ -71,9 +69,16 @@ if (status.phase !== "stopped") {
 }
 
 const proof = {
-  lifecycle: ["reset", "four_role_compose", "start_backends", "status_live", "stop"],
+  lifecycle: [
+    "reset",
+    "canonical_start",
+    "four_role_runtime_http",
+    "status_live",
+    "canonical_stop",
+  ],
   final_phase: status.phase,
   classification: "NON_PRODUCTION",
+  operator_path: "start.mjs",
 };
 const tmpDir = join(repoRoot, "tmp");
 mkdirSync(tmpDir, { recursive: true });

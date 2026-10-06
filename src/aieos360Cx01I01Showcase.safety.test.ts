@@ -71,6 +71,15 @@ describe("AIEOS360-CX01-I01 reset target contract (non-destructive)", () => {
     expect(result.status).not.toBe(0);
   });
 
+  it("rejects PostgreSQL URL query-string host override", () => {
+    const result = runContractCheck({
+      ...governedCiEnv,
+      AIEOS_TEST_DATABASE_URL:
+        "postgresql+psycopg://aieos_migrator:aieos_test@127.0.0.1:5432/aieos?host=evil.example",
+    });
+    expect(result.status).not.toBe(0);
+  });
+
   it("reset_safety fails closed without mutating when contract is invalid", () => {
     const result = runResetSafety({
       AIEOS_TEST_DATABASE_URL:

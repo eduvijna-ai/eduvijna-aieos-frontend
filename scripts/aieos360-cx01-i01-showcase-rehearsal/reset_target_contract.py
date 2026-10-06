@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 CX01_SHOWCASE_CONTAINER = "aieos-aieos360-cx01-i01-showcase-pg"
 DEDICATED_PG_HOST_PORT = 55448
@@ -31,7 +31,50 @@ class ParsedDbUrl:
     database: str
 
 
+FORBIDDEN_URL_QUERY_KEYS = frozenset(
+    {
+        "host",
+        "hostaddr",
+        "port",
+        "service",
+        "dbname",
+        "user",
+        "password",
+        "options",
+        "sslmode",
+        "target_session_attrs",
+    }
+)
+
+
+def reject_connection_routing_overrides(url: str, *, label: str) -> None:
+    """Reject query/fragment/multihost overrides that can reroute the driver."""
+    if "#" in url.split("://", 1)[-1]:
+        raise ValueError(f"{label} must not include URL fragment")
+    normalized = url.replace("postgresql+psycopg://", "postgresql://").replace(
+        "postgresql+psycopg2://", "postgresql://"
+    )
+    parsed = urlparse(normalized)
+    if parsed.query:
+        params = {key.lower() for key, _value in parse_qsl(parsed.query, strict_parsing=True)}
+        forbidden = params & FORBIDDEN_URL_QUERY_KEYS
+        if forbidden:
+            raise ValueError(
+                f"{label} contains forbidden connection-routing query keys: "
+                f"{sorted(forbidden)}"
+            )
+        if params:
+            raise ValueError(
+                f"{label} contains unsupported query parameters: {sorted(params)}"
+            )
+    if parsed.fragment:
+        raise ValueError(f"{label} must not include URL fragment")
+    if parsed.hostname and ("," in parsed.hostname or "/" in parsed.hostname):
+        raise ValueError(f"{label} must not use multihost or socket path authority")
+
+
 def parse_db_url(url: str) -> ParsedDbUrl:
+    reject_connection_routing_overrides(url, label="database URL")
     normalized = url.replace("postgresql+psycopg://", "postgresql://").replace(
         "postgresql+psycopg2://", "postgresql://"
     )
@@ -69,6 +112,7 @@ def _assert_url_matches(
     expected_user: str,
     expected_port: int,
 ) -> ParsedDbUrl:
+    reject_connection_routing_overrides(url, label=label)
     parsed = parse_db_url(url)
     _reject_host(parsed.host)
     if parsed.port != expected_port:

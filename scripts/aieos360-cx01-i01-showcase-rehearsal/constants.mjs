@@ -21,6 +21,7 @@ export const OPENAPI_AUTHORITY_SHA =
 export const EXPECTED_MIGRATION_HEAD = "a360s010004";
 
 export const SCENARIO_ID = "aieos360-cx01-i01-showcase-rehearsal";
+export const APPROVED_CLIENT_SCENARIO_ID = "AIEOS360-CX-SCENARIO-01";
 export const SCENARIO_VERSION = "1";
 export const CLASSIFICATION = "NON_PRODUCTION";
 

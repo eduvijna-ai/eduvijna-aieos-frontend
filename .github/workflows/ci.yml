@@ -765,11 +765,11 @@ jobs:
       - name: CX01-I01 reset + repeatability proof
         run: pnpm test:cx01-i01-showcase-proof
 
-      - name: Upload CX01 showcase proof artifacts
+      - name: Upload CX01 showcase proof artifacts (sanitized exports only)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: aieos360-cx01-i01-showcase-proof
           path: |
-            tmp/aieos360-cx01-i01-showcase-*.json
+            tmp/cx01-proof-exports/*.json
           retention-days: 7

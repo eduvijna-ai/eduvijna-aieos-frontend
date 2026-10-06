@@ -18,6 +18,7 @@ OPENAPI_AUTHORITY_SHA = (
 )
 EXPECTED_MIGRATION_HEAD = "a360s010004"
 SCENARIO_ID = "aieos360-cx01-i01-showcase-rehearsal"
+APPROVED_CLIENT_SCENARIO_ID = "AIEOS360-CX-SCENARIO-01"
 SCENARIO_VERSION = "1"
 CLASSIFICATION = "NON_PRODUCTION"
 CX01_SHOWCASE_CONTAINER = "aieos-aieos360-cx01-i01-showcase-pg"
@@ -108,9 +109,16 @@ def main() -> int:
         or FRONTEND_BASE_SHA
     )
 
+    merge_note = (
+        "frontend_execution_sha is the CI/agent synthetic merge commit; "
+        "frontend_governed_base_sha is the approved W01/I01 frontend pin parent."
+    )
     manifest = {
+        "package_scenario_id": SCENARIO_ID,
+        "approved_client_scenario_id": APPROVED_CLIENT_SCENARIO_ID,
         "scenario_id": SCENARIO_ID,
         "scenario_version": SCENARIO_VERSION,
+        "frontend_execution_synthetic_merge_note": merge_note,
         "classification": CLASSIFICATION,
         "architecture_sha": ARCHITECTURE_PIN_SHA,
         "product_sha": PRODUCT_PIN_SHA,
@@ -164,8 +172,10 @@ def main() -> int:
         "emitted_at": datetime.now(UTC).isoformat(),
     }
 
+    from export_sanitize import write_sanitized_json
+
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    write_sanitized_json(str(manifest_path), manifest)
     print(json.dumps(manifest, indent=2))
     return 0
 

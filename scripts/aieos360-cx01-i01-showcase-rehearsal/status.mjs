@@ -7,9 +7,21 @@ import {
   statusPath,
 } from "./paths.mjs";
 import { runPinGuard } from "./pin_guard.mjs";
-import { isPidAlive, readProcessRegistry } from "./process_registry.mjs";
+import { isPidAlive, readProcessRegistry, waitForHttpOk } from "./process_registry.mjs";
+import { verifyProcessIdentity } from "./process_identity.mjs";
 
 runPinGuard();
+
+const EXPECTED_FULL_STACK = [
+  "teacher-backend",
+  "student-backend",
+  "principal-backend",
+  "parent-backend",
+  "teacher_frontend",
+  "student_frontend",
+  "principal_frontend",
+  "parent_frontend",
+];
 
 const report = {
   classification: "NON_PRODUCTION",
@@ -35,26 +47,84 @@ if (existsSync(dbReportPath)) {
 }
 
 const registry = readProcessRegistry();
-const liveChildren = (registry.children ?? []).filter((entry) =>
-  isPidAlive(entry.pid),
-);
+const liveChildren = [];
+const deadExpected = [];
+for (const entry of registry.children ?? []) {
+  if (!isPidAlive(entry.pid)) {
+    deadExpected.push(entry);
+    continue;
+  }
+  const identity = verifyProcessIdentity(entry.pid, entry);
+  if (!identity.ok) {
+    deadExpected.push({ ...entry, identity_rejected: identity.reason });
+    continue;
+  }
+  liveChildren.push(entry);
+}
+
 report.live_process_count = liveChildren.length;
 report.live_processes = liveChildren.map((entry) => ({
   script: entry.script,
+  role: entry.role,
   pid: entry.pid,
 }));
 
-if (report.operator_status?.phase === "running" && liveChildren.length === 0) {
-  report.live_state_mismatch = true;
-  report.effective_phase = "not_running";
+const operatorPhase = report.operator_status?.phase;
+const mode = report.operator_status?.mode ?? "full_stack";
+const expectedRoles =
+  mode === "backends_only"
+    ? ["teacher-backend", "student-backend", "principal-backend", "parent-backend"]
+    : EXPECTED_FULL_STACK;
+
+const liveRoles = new Set(liveChildren.map((entry) => entry.role).filter(Boolean));
+const missingRoles = expectedRoles.filter((role) => !liveRoles.has(role));
+report.missing_expected_roles = missingRoles;
+
+let healthOk = true;
+const roleUrls = report.operator_status?.role_urls;
+if (operatorPhase === "running" && roleUrls) {
+  const checks = [];
+  for (const [role, urls] of Object.entries(roleUrls)) {
+    if (urls.backend) {
+      try {
+        await waitForHttpOk(urls.backend, 5_000);
+        checks.push({ role, surface: "backend", ok: true });
+      } catch {
+        checks.push({ role, surface: "backend", ok: false });
+        healthOk = false;
+      }
+    }
+    if (urls.frontend && mode === "full_stack") {
+      try {
+        await waitForHttpOk(urls.frontend, 5_000);
+        checks.push({ role, surface: "frontend", ok: true });
+      } catch {
+        checks.push({ role, surface: "frontend", ok: false });
+        healthOk = false;
+      }
+    }
+  }
+  report.service_health = checks;
+}
+
+if (operatorPhase === "running") {
+  if (liveChildren.length === 0) {
+    report.effective_phase = "not_running";
+    report.live_state_mismatch = true;
+  } else if (missingRoles.length > 0 || !healthOk) {
+    report.effective_phase = "degraded";
+    report.live_state_mismatch = true;
+  } else {
+    report.effective_phase = "running";
+  }
 } else {
-  report.effective_phase = report.operator_status?.phase ?? "unknown";
+  report.effective_phase = operatorPhase ?? "unknown";
 }
 
 console.log(JSON.stringify(report, null, 2));
 
 if (process.env.AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE === "1") {
-  if (report.effective_phase !== "running" || liveChildren.length < 4) {
+  if (report.effective_phase !== "running") {
     process.exit(1);
   }
 }
