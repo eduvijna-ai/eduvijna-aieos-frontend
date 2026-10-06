@@ -3,6 +3,7 @@
  * Exercises interactive start.mjs SIGINT/SIGTERM handlers (not executeCanonicalShutdown alone).
  */
 import { spawn } from "node:child_process";
+import { kill as killPid } from "node:process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { isPidAlive } from "./process_registry.mjs";
@@ -113,6 +114,26 @@ async function runCase(name, fn) {
 try {
   canonicalStop();
 
+  await runCase("sigterm_cleanup_failure_nonzero", async () => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const child = spawnInteractiveStart({
+      AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF_FAIL: "1",
+    });
+    await waitForReady(child);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    killPid(child.pid, "SIGTERM");
+    const [exit, status] = await Promise.all([
+      waitForExit(child),
+      waitForTerminalStatus(),
+    ]);
+    if (exit.code !== 1) {
+      throw new Error(`expected exit 1 on SIGTERM stop_failed, got ${exit.code}`);
+    }
+    if (status.phase !== "stop_failed") {
+      throw new Error(`expected stop_failed status, got ${status.phase}`);
+    }
+  });
+
   await runCase("sigint_cleanup_failure_nonzero", async () => {
     const child = spawnInteractiveStart({
       AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF_FAIL: "1",
@@ -125,24 +146,6 @@ try {
     ]);
     if (exit.code !== 1) {
       throw new Error(`expected exit 1 on simulated stop_failed, got ${exit.code}`);
-    }
-    if (status.phase !== "stop_failed") {
-      throw new Error(`expected stop_failed status, got ${status.phase}`);
-    }
-  });
-
-  await runCase("sigterm_cleanup_failure_nonzero", async () => {
-    const child = spawnInteractiveStart({
-      AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF_FAIL: "1",
-    });
-    await waitForReady(child);
-    child.kill("SIGTERM");
-    const [exit, status] = await Promise.all([
-      waitForExit(child),
-      waitForTerminalStatus(),
-    ]);
-    if (exit.code !== 1) {
-      throw new Error(`expected exit 1 on SIGTERM stop_failed, got ${exit.code}`);
     }
     if (status.phase !== "stop_failed") {
       throw new Error(`expected stop_failed status, got ${status.phase}`);
