@@ -15,6 +15,11 @@ import {
 
 mkdirSync(tmpDir, { recursive: true });
 
+if (process.env.AIEOS360_CX01_I01_SHOWCASE_FORCE_RESET_FAIL === "1") {
+  console.error("AIEOS360-CX01-I01 injected reset failure (test only)");
+  process.exit(1);
+}
+
 runPinGuard();
 
 const commonEnv = {

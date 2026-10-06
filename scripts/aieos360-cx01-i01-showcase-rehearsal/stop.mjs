@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 import { CX01_SHOWCASE_CONTAINER } from "./constants.mjs";
 import { removeOwnedContainer } from "./docker_ownership.mjs";
-import {
-  verifyRegistryEntryOwnership,
-  waitForPidExit,
-} from "./process_identity.mjs";
+import { terminateOwnedProcessTree } from "./process_tree.mjs";
 import {
   isPidAlive,
   readProcessRegistry,
@@ -17,6 +14,7 @@ const signaled = [];
 const rejected = [];
 const survivors = [];
 const failed = [];
+const treeTargets = [];
 
 for (const entry of registry.children ?? []) {
   if (!entry?.pid) {
@@ -26,51 +24,22 @@ for (const entry of registry.children ?? []) {
     signaled.push({ ...entry, already_dead: true });
     continue;
   }
-  const identity = verifyRegistryEntryOwnership(entry.pid, entry);
-  if (!identity.ok) {
-    rejected.push({ ...entry, reason: identity.reason });
+  const outcome = await terminateOwnedProcessTree(entry);
+  if (outcome.rejected) {
+    rejected.push({ ...entry, reason: outcome.reason });
     continue;
   }
-  try {
-    process.kill(entry.pid, "SIGTERM");
-    signaled.push(entry);
-  } catch (error) {
-    failed.push({ ...entry, error: String(error) });
-  }
-}
-
-for (const entry of signaled.filter((item) => !item.already_dead)) {
-  const exitedAfterTerm = await waitForPidExit(entry.pid, 15_000);
-  if (exitedAfterTerm || !isPidAlive(entry.pid)) {
-    continue;
-  }
-
-  let killed = false;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const preAttempt = verifyRegistryEntryOwnership(entry.pid, entry);
-    if (!preAttempt.ok) {
-      rejected.push({
+  treeTargets.push(...outcome.targets.map((pid) => ({ pid, role: entry.role })));
+  signaled.push({ ...entry, tree_signaled: outcome.signaled });
+  if (!outcome.ok) {
+    for (const pid of outcome.survivors) {
+      survivors.push({ ...entry, pid, survivor_pid: pid });
+      failed.push({
         ...entry,
-        reason: preAttempt.reason,
-        stage: `pre_sigkill_attempt_${attempt}`,
+        pid,
+        error: "owned process tree survivor after SIGTERM/SIGKILL",
       });
-      break;
     }
-    try {
-      process.kill(entry.pid, "SIGKILL");
-    } catch (error) {
-      failed.push({ ...entry, error: String(error), stage: "sigkill" });
-      break;
-    }
-    const exitedAfterKill = await waitForPidExit(entry.pid, 25_000);
-    if (exitedAfterKill || !isPidAlive(entry.pid)) {
-      killed = true;
-      break;
-    }
-  }
-  if (!killed && isPidAlive(entry.pid)) {
-    survivors.push(entry);
-    failed.push({ ...entry, error: "process survived SIGTERM/SIGKILL" });
   }
 }
 
@@ -84,6 +53,8 @@ if (process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER !== "0") {
     containerIdentity = { containerId: removal.containerId };
   } else if (removal.missing) {
     containerRemoved = false;
+  } else if (removal.inspection_error) {
+    containerRemoveError = removal.error;
   } else if (removal.error) {
     containerRemoveError = removal.error;
   }
@@ -100,15 +71,19 @@ writeOperatorStatus({
   stopped_at: new Date().toISOString(),
   container_removed: containerRemoved,
   container_identity: containerIdentity,
-  signaled_processes: signaled.map(({ pid, role, script, already_dead }) => ({
-    pid,
-    role,
-    script,
-    already_dead: Boolean(already_dead),
-  })),
+  signaled_processes: signaled.map(
+    ({ pid, role, script, already_dead, tree_signaled }) => ({
+      pid,
+      role,
+      script,
+      already_dead: Boolean(already_dead),
+      tree_signaled,
+    }),
+  ),
+  tree_targets: treeTargets,
   rejected_registry_entries: rejected,
-  survivor_processes: survivors.map(({ pid, role, script }) => ({
-    pid,
+  survivor_processes: survivors.map(({ pid, role, script, survivor_pid }) => ({
+    pid: survivor_pid ?? pid,
     role,
     script,
   })),
@@ -120,7 +95,7 @@ if (phase === "stopped") {
   writeProcessRegistry({ children: [] });
 } else {
   const recoverable = survivors
-    .filter((entry) => isPidAlive(entry.pid))
+    .filter((entry) => isPidAlive(entry.survivor_pid ?? entry.pid))
     .concat(
       failed
         .filter((item) => isPidAlive(item.pid))

@@ -47,7 +47,12 @@ function runPython(script, timeoutMs = 600_000) {
   return result;
 }
 
-runNodeSync("reset.mjs", {}, 600_000);
+const reset = runNodeSync("reset.mjs", {}, 600_000);
+if (reset.status !== 0) {
+  console.error(reset.stdout);
+  console.error(reset.stderr);
+  throw new Error(`lifecycle canonical reset.mjs failed with ${reset.status}`);
+}
 
 let stackStarted = false;
 let proofError = null;
@@ -82,6 +87,8 @@ try {
       proofError =
         proofError ?? new Error(`stop.mjs failed with ${stop.status}`);
     }
+  } else {
+    canonicalStop();
   }
 }
 
@@ -105,6 +112,7 @@ const proof = {
     "status_live",
     "canonical_stop",
   ],
+  reset_exit_status: reset.status,
   final_phase: finalStatus.phase,
   classification: "NON_PRODUCTION",
   operator_path: "start.mjs",

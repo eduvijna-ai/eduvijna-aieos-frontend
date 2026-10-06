@@ -90,6 +90,17 @@ describe("AIEOS360-CX01-I01 reset target contract (non-destructive)", () => {
   });
 });
 
+describe("AIEOS360-CX01-I01 docker inspect classification (non-destructive)", () => {
+  it("fail-closed on daemon errors and malformed JSON", () => {
+    const result = spawnSync(
+      "node",
+      [path.join(scriptDir, "docker_inspect_selftest.mjs")],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+  });
+});
+
 describe("AIEOS360-CX01-I01 process ownership (non-destructive)", () => {
   it("verifies birth identity and ownership token on live child", () => {
     const result = spawnSync(

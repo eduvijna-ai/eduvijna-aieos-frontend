@@ -2,13 +2,15 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import {
-  CX01_SHOWCASE_CONTAINER,
-} from "./constants.mjs";
+import { CX01_SHOWCASE_CONTAINER } from "./constants.mjs";
 import { repoRoot } from "./paths.mjs";
+import {
+  CX01_DOCKER_OWNER_LABEL,
+  CX01_DOCKER_PACKAGE_LABEL,
+  classifyDockerInspectResult,
+} from "./docker_inspect.mjs";
 
-export const CX01_DOCKER_OWNER_LABEL = "aieos360.cx01.owner";
-export const CX01_DOCKER_PACKAGE_LABEL = "aieos360.cx01.package";
+export { CX01_DOCKER_OWNER_LABEL, CX01_DOCKER_PACKAGE_LABEL };
 export const EXPECTED_POSTGRES_IMAGE = "postgres:18";
 
 const ownershipPath = join(
@@ -25,23 +27,14 @@ function dockerInspect(containerName) {
   const result = spawnSync("docker", ["inspect", containerName], {
     encoding: "utf8",
   });
-  if (result.status !== 0) {
-    return { exists: false, error: result.stderr || result.stdout };
+  const classified = classifyDockerInspectResult(result);
+  if (classified.state === "error") {
+    return classified;
   }
-  let parsed;
-  try {
-    parsed = JSON.parse(result.stdout)[0];
-  } catch {
-    return { exists: false, error: "docker inspect returned invalid JSON" };
+  if (classified.state === "not_found") {
+    return classified;
   }
-  const labels = parsed?.Config?.Labels ?? {};
-  return {
-    exists: true,
-    containerId: parsed.Id,
-    image: parsed.Config?.Image,
-    ownerLabel: labels[CX01_DOCKER_OWNER_LABEL] ?? null,
-    packageLabel: labels[CX01_DOCKER_PACKAGE_LABEL] ?? null,
-  };
+  return classified;
 }
 
 export function readOwnershipRecord() {
@@ -55,16 +48,24 @@ export function writeOwnershipRecord(record) {
   writeFileSync(ownershipPath, JSON.stringify(record, null, 2) + "\n", "utf8");
 }
 
-export function assertNoUnownedContainerBeforeMutation(containerName = CX01_SHOWCASE_CONTAINER) {
+export function assertNoUnownedContainerBeforeMutation(
+  containerName = CX01_SHOWCASE_CONTAINER,
+) {
   const inspect = dockerInspect(containerName);
-  if (!inspect.exists) {
+  if (inspect.state === "error") {
+    throw new Error(`DOCKER INSPECTION BLOCKED — ${inspect.error}`);
+  }
+  if (inspect.state === "not_found") {
     return;
   }
   const record = readOwnershipRecord();
   if (record?.containerId === inspect.containerId && record?.ownerRunId) {
     return;
   }
-  if (inspect.ownerLabel && inspect.packageLabel === "cx01-i01-showcase-rehearsal") {
+  if (
+    inspect.ownerLabel &&
+    inspect.packageLabel === "cx01-i01-showcase-rehearsal"
+  ) {
     return;
   }
   throw new Error(
@@ -76,7 +77,10 @@ export function verifyContainerForDestruction(
   containerName = CX01_SHOWCASE_CONTAINER,
 ) {
   const inspect = dockerInspect(containerName);
-  if (!inspect.exists) {
+  if (inspect.state === "error") {
+    return { ok: false, inspection_error: true, error: inspect.error };
+  }
+  if (inspect.state === "not_found") {
     return { ok: false, missing: true };
   }
   const record = readOwnershipRecord();
@@ -108,7 +112,21 @@ export function startGovernedPostgresContainer({
 }) {
   assertNoUnownedContainerBeforeMutation(containerName);
   const ownerRunId = randomUUID();
-  spawnSync("docker", ["rm", "-f", containerName], { encoding: "utf8" });
+  const existing = dockerInspect(containerName);
+  if (existing.state === "ok") {
+    const verified = verifyContainerForDestruction(containerName);
+    if (verified.ok) {
+      spawnSync("docker", ["rm", "-f", verified.record.containerId], {
+        encoding: "utf8",
+      });
+    } else {
+      throw new Error(
+        verified.error || "cannot remove existing container without verified ownership",
+      );
+    }
+  } else if (existing.state === "error") {
+    throw new Error(`DOCKER INSPECTION BLOCKED — ${existing.error}`);
+  }
   const run = spawnSync(
     "docker",
     [
@@ -137,7 +155,10 @@ export function startGovernedPostgresContainer({
     throw new Error(run.stderr || run.stdout || "docker run failed");
   }
   const inspect = dockerInspect(containerName);
-  if (!inspect.exists) {
+  if (inspect.state === "error") {
+    throw new Error(`DOCKER INSPECTION BLOCKED — ${inspect.error}`);
+  }
+  if (inspect.state !== "ok") {
     throw new Error("governed postgres container did not start");
   }
   const record = {
@@ -154,13 +175,20 @@ export function startGovernedPostgresContainer({
 
 export function removeOwnedContainer(containerName = CX01_SHOWCASE_CONTAINER) {
   const verified = verifyContainerForDestruction(containerName);
+  if (verified.inspection_error) {
+    return { removed: false, inspection_error: true, error: verified.error };
+  }
   if (verified.missing) {
     return { removed: false, missing: true };
   }
   if (!verified.ok) {
     return { removed: false, error: verified.error };
   }
-  const docker = spawnSync("docker", ["rm", "-f", containerName], { encoding: "utf8" });
+  const docker = spawnSync(
+    "docker",
+    ["rm", "-f", verified.record.containerId],
+    { encoding: "utf8" },
+  );
   if (docker.status !== 0) {
     return { removed: false, error: docker.stderr || docker.stdout };
   }

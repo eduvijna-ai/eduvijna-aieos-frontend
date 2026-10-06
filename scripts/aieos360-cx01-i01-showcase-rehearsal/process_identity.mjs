@@ -140,17 +140,18 @@ function birthMatches(pid, stored) {
   return String(current.pid) === String(stored.pid);
 }
 
-function ownershipTokenInProcess(pid, token) {
+export function ownershipTokenInProcess(pid, token) {
   if (!token) {
     return false;
   }
+  const marker = `${CHILD_OWNERSHIP_ENV}=${token}`;
   if (process.platform === "linux") {
     const env = readLinuxEnviron(pid);
-    return env.includes(`${CHILD_OWNERSHIP_ENV}=${token}`);
+    return env.includes(marker);
   }
   if (process.platform === "darwin") {
     const ps = spawnSync("ps", ["eww", "-p", String(pid)], { encoding: "utf8" });
-    return (ps.stdout || "").includes(`${CHILD_OWNERSHIP_ENV}=${token}`);
+    return (ps.stdout || "").includes(marker);
   }
   if (process.platform === "win32") {
     const ps = spawnSync(
@@ -162,7 +163,12 @@ function ownershipTokenInProcess(pid, token) {
       ],
       { encoding: "utf8" },
     );
-    return (ps.stdout || "").includes(token);
+    const commandLine = ps.stdout || "";
+    return (
+      commandLine.includes(marker) ||
+      (commandLine.includes("owned_child_launcher.mjs") &&
+        commandLine.includes(token))
+    );
   }
   return false;
 }

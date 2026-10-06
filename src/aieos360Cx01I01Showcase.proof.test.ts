@@ -90,6 +90,17 @@ describe("AIEOS360-CX01-I01 showcase rehearsal proofs", () => {
       }
       expect(failures.status).toBe(0);
 
+      const injected = spawnSync(
+        "node",
+        [path.join(scriptDir, "injected_failure_proof.mjs")],
+        { cwd: repoRoot, env: process.env, encoding: "utf8" },
+      );
+      if (injected.status !== 0) {
+        console.error(injected.stdout);
+        console.error(injected.stderr);
+      }
+      expect(injected.status).toBe(0);
+
       const publish = runUvPython("publish_proof_exports.py");
       expect(publish.status).toBe(0);
     },

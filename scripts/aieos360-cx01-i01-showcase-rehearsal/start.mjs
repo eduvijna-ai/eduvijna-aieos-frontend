@@ -41,8 +41,10 @@ import {
   PARENT_RUN_ENV,
   verifyRegistryEntryOwnership,
 } from "./process_identity.mjs";
+import { terminateOwnedProcessTree } from "./process_tree.mjs";
 
 const scriptDir = join(repoRoot, "scripts/aieos360-cx01-i01-showcase-rehearsal");
+const ownedLauncherPath = join(scriptDir, "owned_child_launcher.mjs");
 const skipReset = process.env.AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET === "1";
 const startMode =
   process.env.AIEOS360_CX01_I01_SHOWCASE_START_MODE === "managed"
@@ -142,20 +144,12 @@ writeProcessRegistry({ children: [], parentRunId });
 
 const spawned = [];
 
-function cleanupOwned(reason) {
+async function cleanupOwned(reason) {
   for (const entry of spawned) {
-    if (!entry.pid || !isPidAlive(entry.pid)) {
+    if (!entry?.pid) {
       continue;
     }
-    const identity = verifyRegistryEntryOwnership(entry.pid, entry);
-    if (!identity.ok) {
-      continue;
-    }
-    try {
-      process.kill(entry.pid, "SIGTERM");
-    } catch {
-      /* ignore */
-    }
+    await terminateOwnedProcessTree(entry);
   }
   writeOperatorStatus({
     phase: "start_failed",
@@ -187,57 +181,24 @@ function registerSpawnedChild(script, role, child) {
   return child;
 }
 
-function spawnNode(script, extraEnv = {}) {
+function spawnOwned(scriptPath, registryScript, role, extraEnv = {}, scriptArgs = []) {
   const managed = startMode === "managed";
   const ownershipToken = newChildOwnershipToken();
-  const child = spawn("node", [join(scriptDir, script)], {
-    env: {
-      ...process.env,
-      [CHILD_OWNERSHIP_ENV]: ownershipToken,
-      [PARENT_RUN_ENV]: parentRunId,
-      AIEOS360_CX01_I01_SHOWCASE_SKIP_BOOTSTRAP: "1",
-      AIEOS360_CX01_I01_SHOWCASE_RUNTIME_DATABASE_URL: dbReport.runtime_database_url,
-      AIEOS360_CX01_I01_SHOWCASE_BOOTSTRAP_DATABASE_URL: dbReport.bootstrap_database_url,
-      AIEOS360_CX01_I01_SHOWCASE_DB_REPORT: dbReportPath,
-      AIEOS360_CX01_I01_SHOWCASE_FIXTURE_PATH: fixturePath,
-      ...extraEnv,
-    },
-    stdio: managed ? "ignore" : "inherit",
-    detached: managed,
-  });
-  child.__cx01OwnershipToken = ownershipToken;
-  if (managed) {
-    child.unref();
-  }
-  const role = script
-    .replace(/^start-/, "")
-    .replace(/-backend\.mjs$/, "-backend")
-    .replace(/\.mjs$/, "");
-  registerSpawnedChild(script, role, child);
-  return child;
-}
-
-function spawnVite(port, backendPort, role) {
-  const managed = startMode === "managed";
-  const ownershipToken = newChildOwnershipToken();
-  const viteBin = join(repoRoot, "node_modules/vite/bin/vite.js");
   const child = spawn(
     process.execPath,
-    [
-      viteBin,
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(port),
-      "--strictPort",
-    ],
+    [ownedLauncherPath, ownershipToken, scriptPath, ...scriptArgs],
     {
       cwd: repoRoot,
       env: {
         ...process.env,
         [CHILD_OWNERSHIP_ENV]: ownershipToken,
         [PARENT_RUN_ENV]: parentRunId,
-        VITE_DEV_API_PROXY_TARGET: `http://127.0.0.1:${backendPort}`,
+        AIEOS360_CX01_I01_SHOWCASE_SKIP_BOOTSTRAP: "1",
+        AIEOS360_CX01_I01_SHOWCASE_RUNTIME_DATABASE_URL: dbReport.runtime_database_url,
+        AIEOS360_CX01_I01_SHOWCASE_BOOTSTRAP_DATABASE_URL: dbReport.bootstrap_database_url,
+        AIEOS360_CX01_I01_SHOWCASE_DB_REPORT: dbReportPath,
+        AIEOS360_CX01_I01_SHOWCASE_FIXTURE_PATH: fixturePath,
+        ...extraEnv,
       },
       stdio: managed ? "ignore" : "inherit",
       detached: managed,
@@ -247,8 +208,39 @@ function spawnVite(port, backendPort, role) {
   if (managed) {
     child.unref();
   }
-  registerSpawnedChild(`vite:${port}`, `${role}_frontend`, child);
+  registerSpawnedChild(registryScript, role, child);
+  maybeInjectPartialStartFailure();
   return child;
+}
+
+function spawnNode(script, extraEnv = {}) {
+  const role = script
+    .replace(/^start-/, "")
+    .replace(/-backend\.mjs$/, "-backend")
+    .replace(/\.mjs$/, "");
+  return spawnOwned(join(scriptDir, script), script, role, extraEnv);
+}
+
+function spawnVite(port, backendPort, role) {
+  const viteBin = join(repoRoot, "node_modules/vite/bin/vite.js");
+  return spawnOwned(
+    viteBin,
+    `vite:${port}`,
+    `${role}_frontend`,
+    { VITE_DEV_API_PROXY_TARGET: `http://127.0.0.1:${backendPort}` },
+    ["--host", "127.0.0.1", "--port", String(port), "--strictPort"],
+  );
+}
+
+const injectPartialAfter = Number(
+  process.env.AIEOS360_CX01_I01_SHOWCASE_INJECT_PARTIAL_START_AFTER || "0",
+);
+function maybeInjectPartialStartFailure() {
+  if (injectPartialAfter > 0 && spawned.length >= injectPartialAfter) {
+    throw new Error(
+      `injected partial start failure after ${spawned.length} children`,
+    );
+  }
 }
 
 try {
@@ -357,7 +349,7 @@ try {
     "AIEOS360-CX01-I01 showcase rehearsal started (NON_PRODUCTION). Press Ctrl+C to stop.",
   );
 } catch (error) {
-  cleanupOwned(String(error));
+  await cleanupOwned(String(error));
   console.error(error);
   process.exit(1);
 }
