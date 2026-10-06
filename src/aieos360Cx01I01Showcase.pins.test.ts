@@ -136,6 +136,10 @@ describe("AIEOS360-CX01-I01 showcase rehearsal pin and safety consistency", () =
     );
     expect(shutdown).toContain("writeOperatorStatus");
     expect(shutdown).toContain("descendant_exit_records");
+    expect(shutdown).toContain("executeStopWideShutdown");
+    expect(shutdown).toContain("stop_wide_elapsed_ms");
+    expect(start).toContain("attachInteractiveShutdownHandlers");
+    expect(start).toContain("process.exit(process.exitCode ?? 0)");
   });
 
   it("keeps CX01 integration proofs opt-in only (not generic CI/Docker)", () => {

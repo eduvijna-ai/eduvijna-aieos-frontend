@@ -110,6 +110,32 @@ describe("AIEOS360-CX01-I01 process tree deadlines (non-destructive)", () => {
     );
     expect(result.status).toBe(0);
   });
+
+  it("uses one stop-wide grace/kill budget across multiple registry roots", () => {
+    const result = spawnSync(
+      "node",
+      [path.join(scriptDir, "stop_wide_deadline_selftest.mjs")],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    if (result.status !== 0) {
+      console.error(result.stdout);
+      console.error(result.stderr);
+    }
+    expect(result.status).toBe(0);
+  });
+
+  it("cleans token-owned descendants when the registered root is already dead", () => {
+    const result = spawnSync(
+      "node",
+      [path.join(scriptDir, "stop_wide_orphan_selftest.mjs")],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    if (result.status !== 0) {
+      console.error(result.stdout);
+      console.error(result.stderr);
+    }
+    expect(result.status).toBe(0);
+  });
 });
 
 describe("AIEOS360-CX01-I01 process ownership (non-destructive)", () => {

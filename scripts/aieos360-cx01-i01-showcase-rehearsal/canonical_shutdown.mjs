@@ -4,7 +4,10 @@
  */
 import { CX01_SHOWCASE_CONTAINER } from "./constants.mjs";
 import { removeOwnedContainer } from "./docker_ownership.mjs";
-import { terminateOwnedProcessTree } from "./process_tree.mjs";
+import {
+  executeStopWideShutdown,
+  planRegistryEntryShutdown,
+} from "./process_tree.mjs";
 import {
   isPidAlive,
   readProcessRegistry,
@@ -26,6 +29,12 @@ export async function executeCanonicalShutdown(options = {}) {
       process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_TREE_KILL_MS ||
       "25000",
   );
+  const signalProofHarness =
+    process.env.AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF === "1";
+  const simulateStopFailure =
+    options.simulateStopFailure === true &&
+    (signalProofHarness ||
+      process.env.AIEOS360_CX01_I01_SHOWCASE_SIGNAL_PROOF_HARNESS === "1");
 
   const registry = readProcessRegistry();
   const signaled = [];
@@ -35,38 +44,50 @@ export async function executeCanonicalShutdown(options = {}) {
   const treeTargets = [];
   const descendantExitRecords = [];
 
-  for (const entry of registry.children ?? []) {
-    if (!entry?.pid) {
-      continue;
+  const plans = (registry.children ?? [])
+    .filter((entry) => entry?.pid)
+    .map((entry) => planRegistryEntryShutdown(entry));
+
+  for (const plan of plans) {
+    if (plan.rejected) {
+      rejected.push({ ...plan.entry, reason: plan.reason });
+    } else if (plan.root_already_dead && plan.targets.length === 0) {
+      signaled.push({ ...plan.entry, already_dead: true });
     }
-    if (!isPidAlive(entry.pid)) {
-      signaled.push({ ...entry, already_dead: true });
-      continue;
-    }
-    const outcome = await terminateOwnedProcessTree(entry, {
-      treeGraceMs,
-      treeKillMs,
-    });
+  }
+
+  const stopWide = await executeStopWideShutdown(plans, {
+    treeGraceMs,
+    treeKillMs,
+  });
+
+  for (const outcome of stopWide.perEntry) {
     if (outcome.rejected) {
-      rejected.push({ ...entry, reason: outcome.reason });
       continue;
     }
     treeTargets.push(
-      ...outcome.targets.map((pid) => ({ pid, role: entry.role })),
+      ...outcome.targets.map((pid) => ({ pid, role: outcome.entry.role })),
     );
     descendantExitRecords.push({
-      role: entry.role,
-      root_pid: entry.pid,
+      role: outcome.entry.role,
+      root_pid: outcome.entry.pid,
+      root_already_dead: Boolean(outcome.root_already_dead),
       descendant_exit: outcome.descendant_exit,
     });
-    signaled.push({ ...entry, tree_signaled: outcome.signaled });
+    if (outcome.signaled.length > 0 || outcome.root_already_dead) {
+      signaled.push({
+        ...outcome.entry,
+        already_dead: outcome.root_already_dead && outcome.signaled.length === 0,
+        tree_signaled: outcome.signaled,
+      });
+    }
     if (!outcome.ok) {
       for (const pid of outcome.survivors) {
-        survivors.push({ ...entry, pid, survivor_pid: pid });
+        survivors.push({ ...outcome.entry, pid, survivor_pid: pid });
         failed.push({
-          ...entry,
+          ...outcome.entry,
           pid,
-          error: "owned process tree survivor after shared grace/kill",
+          error: "owned process tree survivor after stop-wide grace/kill",
         });
       }
     }
@@ -89,10 +110,14 @@ export async function executeCanonicalShutdown(options = {}) {
     }
   }
 
-  const phase =
+  let phase =
     failed.length > 0 || survivors.length > 0 || containerRemoveError
       ? "stop_failed"
       : "stopped";
+
+  if (simulateStopFailure) {
+    phase = "stop_failed";
+  }
 
   const status = {
     phase,
@@ -119,6 +144,9 @@ export async function executeCanonicalShutdown(options = {}) {
     })),
     failed_processes: failed,
     container_remove_error: containerRemoveError,
+    stop_wide_grace_ms: treeGraceMs,
+    stop_wide_kill_ms: treeKillMs,
+    stop_wide_elapsed_ms: stopWide.stop_wide_elapsed_ms,
     tree_grace_ms: treeGraceMs,
     tree_kill_ms: treeKillMs,
   };
@@ -149,5 +177,6 @@ export async function executeCanonicalShutdown(options = {}) {
     rejected,
     survivors,
     failed,
+    stopWideElapsedMs: stopWide.stop_wide_elapsed_ms,
   };
 }

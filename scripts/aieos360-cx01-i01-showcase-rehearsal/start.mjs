@@ -46,6 +46,8 @@ import { executeCanonicalShutdown } from "./canonical_shutdown.mjs";
 const scriptDir = join(repoRoot, "scripts/aieos360-cx01-i01-showcase-rehearsal");
 const ownedLauncherPath = join(scriptDir, "owned_child_launcher.mjs");
 const skipReset = process.env.AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET === "1";
+const interactiveSignalProof =
+  process.env.AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF === "1";
 const startMode =
   process.env.AIEOS360_CX01_I01_SHOWCASE_START_MODE === "managed"
     ? "managed"
@@ -118,28 +120,32 @@ const parentFe = Number(
 
 assertNotAlreadyRunning();
 
-await assertPortsAvailable([
-  teacherBe,
-  studentBe,
-  principalBe,
-  parentBe,
-  teacherFe,
-  studentFe,
-  principalFe,
-  parentFe,
-]);
+if (!interactiveSignalProof) {
+  await assertPortsAvailable([
+    teacherBe,
+    studentBe,
+    principalBe,
+    parentBe,
+    teacherFe,
+    studentFe,
+    principalFe,
+    parentFe,
+  ]);
 
-if (!skipReset) {
-  const result = spawnSync("node", [join(scriptDir, "reset.mjs")], {
-    stdio: "inherit",
-    env: process.env,
-  });
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
+  if (!skipReset) {
+    const result = spawnSync("node", [join(scriptDir, "reset.mjs")], {
+      stdio: "inherit",
+      env: process.env,
+    });
+    if (result.status !== 0) {
+      process.exit(result.status ?? 1);
+    }
   }
 }
 
-const dbReport = JSON.parse(readFileSync(dbReportPath, "utf8"));
+const dbReport = interactiveSignalProof
+  ? null
+  : JSON.parse(readFileSync(dbReportPath, "utf8"));
 writeProcessRegistry({ children: [], parentRunId });
 
 const spawned = [];
@@ -255,7 +261,70 @@ function maybeInjectPartialStartFailure() {
   }
 }
 
+function attachInteractiveShutdownHandlers() {
+  let interactiveShutdownInProgress = false;
+  const runInteractiveShutdown = async () => {
+    if (interactiveShutdownInProgress) {
+      return;
+    }
+    interactiveShutdownInProgress = true;
+    const shutdown = await executeCanonicalShutdown({
+      expectContainer:
+        process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER !== "0",
+      simulateStopFailure:
+        process.env.AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF_FAIL ===
+        "1",
+    });
+    if (shutdown.phase === "stop_failed") {
+      process.exitCode = 1;
+    }
+    process.exit(process.exitCode ?? 0);
+  };
+  process.on("SIGINT", () => {
+    void runInteractiveShutdown();
+  });
+  process.on("SIGTERM", () => {
+    void runInteractiveShutdown();
+  });
+}
+
 try {
+  if (interactiveSignalProof) {
+    if (startMode !== "interactive") {
+      throw new Error("interactive signal proof requires interactive start mode");
+    }
+    const childScript = join(scriptDir, "interactive_signal_child.mjs");
+    for (const role of ["teacher-backend", "student-backend"]) {
+      const ownershipToken = newChildOwnershipToken();
+      const child = spawn(
+        process.execPath,
+        [ownedLauncherPath, ownershipToken, childScript],
+        {
+          cwd: repoRoot,
+          env: {
+            ...process.env,
+            [CHILD_OWNERSHIP_ENV]: ownershipToken,
+            [PARENT_RUN_ENV]: parentRunId,
+          },
+          stdio: "ignore",
+          detached: false,
+        },
+      );
+      child.__cx01OwnershipToken = ownershipToken;
+      registerSpawnedChild("interactive_signal_child.mjs", role, child);
+    }
+    writeOperatorStatus({
+      phase: "running",
+      classification: "NON_PRODUCTION",
+      signal_proof_harness: true,
+      parent_run_id: parentRunId,
+      started_at: new Date().toISOString(),
+    });
+    console.log("CX01_INTERACTIVE_SIGNAL_PROOF_READY");
+    attachInteractiveShutdownHandlers();
+    await new Promise(() => {});
+  }
+
   spawnNode("start-teacher-backend.mjs", {
     AIEOS360_CX01_I01_SHOWCASE_TEACHER_BACKEND_PORT: String(teacherBe),
   });
@@ -366,25 +435,6 @@ try {
   process.exit(1);
 }
 
-if (startMode === "interactive") {
-  let interactiveShutdownInProgress = false;
-  const runInteractiveShutdown = async (signal) => {
-    if (interactiveShutdownInProgress) {
-      return;
-    }
-    interactiveShutdownInProgress = true;
-    const shutdown = await executeCanonicalShutdown({
-      expectContainer: process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER !== "0",
-    });
-    if (shutdown.phase === "stop_failed") {
-      process.exitCode = 1;
-    }
-    process.exit(signal === "SIGINT" ? 0 : (process.exitCode ?? 0));
-  };
-  process.on("SIGINT", () => {
-    void runInteractiveShutdown("SIGINT");
-  });
-  process.on("SIGTERM", () => {
-    void runInteractiveShutdown("SIGTERM");
-  });
+if (startMode === "interactive" && !interactiveSignalProof) {
+  attachInteractiveShutdownHandlers();
 }
