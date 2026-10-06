@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { CX01_SHOWCASE_CONTAINER } from "./constants.mjs";
 import {

@@ -59,28 +59,22 @@ function runNodeLifecycle() {
 
 describe("AIEOS360-CX01-I01 showcase rehearsal proofs", () => {
   it.runIf(runIntegration)(
-    "reset repeatability clears prior TeachingAssignment outputs",
+    "repeatability and operator lifecycle proofs",
     () => {
-      const result = runUvPython("repeatability_proof.py");
-      if (result.status !== 0) {
-        console.error(result.stdout);
-        console.error(result.stderr);
+      const repeatability = runUvPython("repeatability_proof.py");
+      if (repeatability.status !== 0) {
+        console.error(repeatability.stdout);
+        console.error(repeatability.stderr);
       }
-      expect(result.status).toBe(0);
-    },
-    600_000,
-  );
+      expect(repeatability.status).toBe(0);
 
-  it.runIf(runIntegration)(
-    "operator lifecycle proves four-role backend readiness and governed stop",
-    () => {
-      const result = runNodeLifecycle();
-      if (result.status !== 0) {
-        console.error(result.stdout);
-        console.error(result.stderr);
+      const lifecycle = runNodeLifecycle();
+      if (lifecycle.status !== 0) {
+        console.error(lifecycle.stdout);
+        console.error(lifecycle.stderr);
       }
-      expect(result.status).toBe(0);
+      expect(lifecycle.status).toBe(0);
     },
-    600_000,
+    900_000,
   );
 });

@@ -65,19 +65,28 @@ def main() -> int:
             raise SystemExit(f"migration head {head} != {EXPECTED_MIGRATION_HEAD}")
 
         set_tenant(conn, tenant_id)
-        principal_count = conn.execute(
-            text(
-                """
-                SELECT COUNT(*) FROM security.principals p
-                JOIN security.tenant_memberships m
-                  ON m.principal_id = p.principal_id
-                WHERE m.tenant_id = :tid
-                """
-            ),
-            {"tid": tenant_id},
-        ).scalar_one()
-        if principal_count < 3:
-            raise SystemExit(f"expected seeded principals; got {principal_count}")
+        required_principal_ids = [
+            fixture["teacher_principal_id"],
+            fixture["student_principal_id"],
+            fixture["student_b_principal_id"],
+            fixture["principal_principal_id"],
+            fixture["parent_principal_id"],
+        ]
+        for principal_id in required_principal_ids:
+            membership = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM security.tenant_memberships
+                    WHERE tenant_id = :tid AND principal_id = :pid
+                    """
+                ),
+                {"tid": tenant_id, "pid": uuid.UUID(principal_id)},
+            ).scalar_one_or_none()
+            if membership is None:
+                raise SystemExit(
+                    f"expected tenant membership for principal {principal_id}"
+                )
 
         work_count = conn.execute(
             text(
