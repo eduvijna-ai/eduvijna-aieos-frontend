@@ -64,11 +64,6 @@ def main() -> int:
         b_url = os.environ.get("AIEOS_TEST_BOOTSTRAP_DATABASE_URL", external)
         m_url = external
         r_url = os.environ.get("AIEOS_TEST_RUNTIME_DATABASE_URL", external)
-        if os.environ.get("AIEOS360_CX01_I01_SHOWCASE_CI_EXTERNAL_PG") == "1":
-            bootstrap_engine = wait_for_engine(b_url)
-            cfg = alembic_config(m_url)
-            command.downgrade(cfg, "base")
-            bootstrap_engine.dispose()
     else:
         import tests.conftest as conftest  # noqa: E402
 
@@ -91,6 +86,16 @@ def main() -> int:
     provision_identities(bootstrap)
     os.environ["AIEOS_DATABASE_URL"] = m_url
     cfg = alembic_config(m_url)
+    if (
+        external
+        and os.environ.get("AIEOS360_CX01_I01_SHOWCASE_CI_EXTERNAL_PG") == "1"
+    ):
+        with bootstrap.connect() as conn:
+            alembic_table = conn.execute(
+                text("SELECT to_regclass('public.alembic_version')")
+            ).scalar_one()
+        if alembic_table is not None:
+            command.downgrade(cfg, "base")
     command.upgrade(cfg, "head")
     head = None
     with bootstrap.connect() as conn:

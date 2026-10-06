@@ -103,4 +103,17 @@ describe("AIEOS360-CX01-I01 showcase rehearsal pin and safety consistency", () =
     expect(ci).toContain(CX01_ALEMBIC);
     expect(ci).toContain("pnpm test:cx01-i01-showcase-proof");
   });
+
+  it("keeps CX01 integration proofs opt-in only (not generic CI/Docker)", () => {
+    const proof = read("src/aieos360Cx01I01Showcase.proof.test.ts");
+    expect(proof).toContain(
+      'process.env.AIEOS360_CX01_I01_SHOWCASE_INTEGRATION === "1"',
+    );
+    expect(proof).not.toContain('process.env.CI === "true"');
+    expect(proof).not.toMatch(/CI\s*===\s*["']true["']/);
+
+    const pkg = read("package.json");
+    expect(pkg).toContain("AIEOS360_CX01_I01_SHOWCASE_INTEGRATION=1");
+    expect(pkg).toContain("test:cx01-i01-showcase-proof");
+  });
 });

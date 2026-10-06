@@ -9,13 +9,14 @@ const repoRoot = path.resolve(
   "..",
 );
 
+const integrationOptIn =
+  process.env.AIEOS360_CX01_I01_SHOWCASE_INTEGRATION === "1";
+const backendReady = Boolean(process.env.AIEOS_BACKEND_ROOT);
 const dockerReady =
   spawnSync("docker", ["version"], { encoding: "utf8" }).status === 0;
 const externalPgReady = Boolean(process.env.AIEOS_TEST_DATABASE_URL);
-const runIntegration =
-  (process.env.AIEOS360_CX01_I01_SHOWCASE_INTEGRATION === "1" ||
-    process.env.CI === "true") &&
-  (dockerReady || externalPgReady);
+const substrateReady = dockerReady || externalPgReady;
+const runIntegration = integrationOptIn && backendReady && substrateReady;
 
 function runUvPython(script: string) {
   const backendRoot = process.env.AIEOS_BACKEND_ROOT;
