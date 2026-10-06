@@ -1,6 +1,7 @@
 import { readFileSync, readlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { isPidAlive } from "./process_registry.mjs";
 
 export const CHILD_OWNERSHIP_ENV = "AIEOS360_CX01_I01_SHOWCASE_CHILD_OWNERSHIP";
 export const PARENT_RUN_ENV = "AIEOS360_CX01_I01_SHOWCASE_PARENT_RUN_ID";
@@ -206,14 +207,12 @@ export function verifyProcessIdentity(pid, entry) {
 export async function waitForPidExit(pid, timeoutMs = 15_000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    try {
-      process.kill(pid, 0);
-    } catch {
+    if (!isPidAlive(pid)) {
       return true;
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  return false;
+  return !isPidAlive(pid);
 }
 
 export function hashOwnershipRecord(record) {

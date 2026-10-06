@@ -45,16 +45,6 @@ for (const entry of signaled.filter((item) => !item.already_dead)) {
     continue;
   }
 
-  const preKillIdentity = verifyRegistryEntryOwnership(entry.pid, entry);
-  if (!preKillIdentity.ok) {
-    rejected.push({
-      ...entry,
-      reason: preKillIdentity.reason,
-      stage: "pre_sigkill",
-    });
-    continue;
-  }
-
   let killed = false;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const preAttempt = verifyRegistryEntryOwnership(entry.pid, entry);

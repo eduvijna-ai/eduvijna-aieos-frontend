@@ -1,6 +1,19 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { processesPath, statusPath } from "./paths.mjs";
 
+function linuxProcessState(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const close = stat.lastIndexOf(")");
+    if (close === -1) {
+      return null;
+    }
+    return stat.slice(close + 2).split(" ")[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function readProcessRegistry() {
   try {
     return JSON.parse(readFileSync(processesPath, "utf8"));
@@ -35,6 +48,12 @@ export function appendProcessChild(entry) {
 export function isPidAlive(pid) {
   if (!pid || pid <= 0) {
     return false;
+  }
+  if (process.platform === "linux") {
+    const state = linuxProcessState(pid);
+    if (state === "Z") {
+      return false;
+    }
   }
   try {
     process.kill(pid, 0);
