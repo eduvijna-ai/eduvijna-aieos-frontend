@@ -25,6 +25,11 @@
     "test:e2e:aieos360-s02-i04": "playwright test --config playwright.aieos360-s02-i04.config.ts",
     "test:e2e:aieos360-s03-i04": "playwright test --config playwright.aieos360-s03-i04.config.ts",
     "test:e2e:aieos360-s04-i03": "playwright test --config playwright.aieos360-s04-i03.config.ts",
+    "showcase:aieos360:reset": "node scripts/aieos360-cx01-i01-showcase-rehearsal/reset.mjs",
+    "showcase:aieos360:start": "node scripts/aieos360-cx01-i01-showcase-rehearsal/start.mjs",
+    "showcase:aieos360:status": "node scripts/aieos360-cx01-i01-showcase-rehearsal/status.mjs",
+    "showcase:aieos360:stop": "node scripts/aieos360-cx01-i01-showcase-rehearsal/stop.mjs",
+    "test:cx01-i01-showcase-proof": "AIEOS360_CX01_I01_SHOWCASE_INTEGRATION=1 vitest run src/aieos360Cx01I01Showcase.proof.test.ts",
     "sync:openapi": "node scripts/sync-openapi-snapshot.mjs",
     "generate:api-types": "openapi-typescript contracts/openapi/aieos-v1.consumer-snapshot.json -o src/services/api/generated/aieos-v1.ts"
   },

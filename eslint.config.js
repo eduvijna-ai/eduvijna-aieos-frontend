@@ -14,6 +14,7 @@ export default tseslint.config(
       "node_modules/**",
       "src/services/api/generated/**",
       "tmp/**",
+      "backend/**",
     ],
   },
   js.configs.recommended,

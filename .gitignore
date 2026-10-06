@@ -62,6 +62,7 @@ playwright-aieos360-i05-report/
 playwright-aieos360-s02-i04-report/
 playwright-aieos360-s03-i04-report/
 playwright-aieos360-s04-i03-report/
+playwright-aieos360-cx01-i01-report/
 test-results/
 blob-report/
 .tmp/
@@ -71,6 +72,9 @@ blob-report/
 tmp/
 tmp-evidence/
 evidence/
+
+# Local backend checkout for rehearsal/E2E (never commit)
+backend/
 
 # Python (if tooling is added later)
 __pycache__/
