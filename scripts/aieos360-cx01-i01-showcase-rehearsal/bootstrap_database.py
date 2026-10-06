@@ -105,6 +105,7 @@ def main() -> int:
                 )
             ).scalar_one()
         if schema_migrated:
+            command.upgrade(cfg, "head")
             clear_asset_audit_rows_for_schema_downgrade(bootstrap)
             command.downgrade(cfg, "base")
     command.upgrade(cfg, "head")

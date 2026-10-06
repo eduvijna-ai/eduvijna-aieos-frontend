@@ -51,6 +51,11 @@ describe("AIEOS360-CX01-I01 showcase rehearsal proofs", () => {
     "reset repeatability clears prior TeachingAssignment outputs",
     () => {
       const result = runUvPython("repeatability_proof.py");
+      if (result.status !== 0) {
+        // Surface Python failure output in CI when subprocess stdio is not inherited.
+        console.error(result.stdout);
+        console.error(result.stderr);
+      }
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
     },
