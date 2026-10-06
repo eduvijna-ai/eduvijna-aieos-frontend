@@ -316,6 +316,7 @@ try {
       child.__cx01OwnershipToken = ownershipToken;
       registerSpawnedChild("interactive_signal_child.mjs", role, child);
     }
+    attachInteractiveShutdownHandlers();
     writeOperatorStatus({
       phase: "running",
       classification: "NON_PRODUCTION",
@@ -324,7 +325,6 @@ try {
       started_at: new Date().toISOString(),
     });
     console.log("CX01_INTERACTIVE_SIGNAL_PROOF_READY");
-    attachInteractiveShutdownHandlers();
     await new Promise(() => {});
   }
 

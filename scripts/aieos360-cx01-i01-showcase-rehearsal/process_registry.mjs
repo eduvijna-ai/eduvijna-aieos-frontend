@@ -66,6 +66,7 @@ export function isPidAlive(pid) {
 }
 
 export function writeOperatorStatus(status) {
+  mkdirSync(dirname(statusPath), { recursive: true });
   writeFileSync(statusPath, JSON.stringify(status, null, 2) + "\n", "utf8");
 }
 
