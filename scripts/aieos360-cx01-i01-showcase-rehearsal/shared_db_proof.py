@@ -53,13 +53,18 @@ def main() -> int:
 
     from sqlalchemy import create_engine, text
 
-    engine = create_engine(runtime_url)
-    with engine.connect() as conn:
+    from tests.dbutil import set_tenant
+
+    bootstrap_url = db_report.get("bootstrap_database_url", runtime_url)
+    tenant_id = uuid.UUID(fixture["tenant_id"])
+
+    bootstrap_engine = create_engine(bootstrap_url)
+    with bootstrap_engine.connect() as conn:
         head = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
         if head != EXPECTED_MIGRATION_HEAD:
             raise SystemExit(f"migration head {head} != {EXPECTED_MIGRATION_HEAD}")
 
-        tenant_id = uuid.UUID(fixture["tenant_id"])
+        set_tenant(conn, tenant_id)
         principal_count = conn.execute(
             text(
                 """
@@ -85,6 +90,7 @@ def main() -> int:
         ).scalar_one()
         if work_count < 1:
             raise SystemExit("expected seeded prerequisite TeachingWork")
+    bootstrap_engine.dispose()
 
     proof = {
         "shared_database": True,
@@ -97,7 +103,6 @@ def main() -> int:
     out_path = tmp / "aieos360-cx01-i01-showcase-shared-db-proof.json"
     out_path.write_text(json.dumps(proof, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(proof, indent=2))
-    engine.dispose()
     return 0
 
 

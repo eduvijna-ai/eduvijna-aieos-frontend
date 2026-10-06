@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -24,6 +25,32 @@ CX01_SHOWCASE_CONTAINER = "aieos-aieos360-cx01-i01-showcase-pg"
 
 def _repo_tmp() -> Path:
     return Path(__file__).resolve().parents[2] / "tmp"
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _git_head(repo: Path) -> str | None:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def _verify_backend_pin() -> str:
+    backend_root = os.environ.get("AIEOS_BACKEND_ROOT")
+    if not backend_root:
+        return BACKEND_PIN_SHA
+    head = _git_head(Path(backend_root))
+    if head != BACKEND_PIN_SHA:
+        raise SystemExit(
+            f"backend pin drift: HEAD {head} != governed {BACKEND_PIN_SHA}"
+        )
+    return head
 
 
 def main() -> int:
@@ -74,6 +101,13 @@ def main() -> int:
         os.environ.get("AIEOS360_CX01_I01_SHOWCASE_PARENT_FRONTEND_PORT", "5294")
     )
 
+    backend_verified_sha = _verify_backend_pin()
+    frontend_execution_sha = (
+        os.environ.get("AIEOS360_CX01_I01_SHOWCASE_FRONTEND_EXECUTION_SHA")
+        or _git_head(_repo_root())
+        or FRONTEND_BASE_SHA
+    )
+
     manifest = {
         "scenario_id": SCENARIO_ID,
         "scenario_version": SCENARIO_VERSION,
@@ -81,7 +115,9 @@ def main() -> int:
         "architecture_sha": ARCHITECTURE_PIN_SHA,
         "product_sha": PRODUCT_PIN_SHA,
         "infrastructure_sha": INFRASTRUCTURE_PIN_SHA,
-        "backend_sha": BACKEND_PIN_SHA,
+        "backend_sha": backend_verified_sha,
+        "frontend_governed_base_sha": FRONTEND_BASE_SHA,
+        "frontend_execution_sha": frontend_execution_sha,
         "frontend_sha": FRONTEND_BASE_SHA,
         "openapi_sha256": OPENAPI_AUTHORITY_SHA,
         "migration_head": EXPECTED_MIGRATION_HEAD,

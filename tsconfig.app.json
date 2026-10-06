@@ -43,6 +43,7 @@
     "src/aieos360S04I03E2e.pins.test.ts",
     "src/aieos360Cx01I01Showcase.pins.test.ts",
     "src/aieos360Cx01I01Showcase.proof.test.ts",
+    "src/aieos360Cx01I01Showcase.safety.test.ts",
     "src/features/principal-os/principal-os.architecture.test.ts",
     "src/features/parent-os/parent-os.architecture.test.ts",
     "src/services/api/principalSchoolIntelligenceApi.test.ts",

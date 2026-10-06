@@ -679,7 +679,7 @@ jobs:
   aieos360-cx01-i01-showcase:
     name: aieos360-cx01-i01-showcase
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
     env:

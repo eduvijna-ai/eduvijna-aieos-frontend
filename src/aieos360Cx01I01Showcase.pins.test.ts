@@ -104,6 +104,24 @@ describe("AIEOS360-CX01-I01 showcase rehearsal pin and safety consistency", () =
     expect(ci).toContain("pnpm test:cx01-i01-showcase-proof");
   });
 
+  it("documents destructive-reset contract and lifecycle proof entrypoints", () => {
+    const contract = read(
+      "scripts/aieos360-cx01-i01-showcase-rehearsal/reset_target_contract.py",
+    );
+    expect(contract).toContain("validate_external_ci_database_targets");
+    expect(contract).toContain("GOVERNED_TEST_PASSWORD");
+
+    const lifecycle = read(
+      "scripts/aieos360-cx01-i01-showcase-rehearsal/lifecycle_proof.mjs",
+    );
+    expect(lifecycle).toContain("start-backends.mjs");
+    expect(lifecycle).toContain("AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE");
+
+    const stop = read("scripts/aieos360-cx01-i01-showcase-rehearsal/stop.mjs");
+    expect(stop).toContain("writeOperatorStatus");
+    expect(stop).toContain('"stopped"');
+  });
+
   it("keeps CX01 integration proofs opt-in only (not generic CI/Docker)", () => {
     const proof = read("src/aieos360Cx01I01Showcase.proof.test.ts");
     expect(proof).toContain(
@@ -111,6 +129,7 @@ describe("AIEOS360-CX01-I01 showcase rehearsal pin and safety consistency", () =
     );
     expect(proof).not.toContain('process.env.CI === "true"');
     expect(proof).not.toMatch(/CI\s*===\s*["']true["']/);
+    expect(proof).toContain("AIEOS360_CX01_I01_SHOWCASE_CI_EXTERNAL_PG");
 
     const pkg = read("package.json");
     expect(pkg).toContain("AIEOS360_CX01_I01_SHOWCASE_INTEGRATION=1");

@@ -7,6 +7,7 @@ import {
   statusPath,
 } from "./paths.mjs";
 import { runPinGuard } from "./pin_guard.mjs";
+import { isPidAlive, readProcessRegistry } from "./process_registry.mjs";
 
 runPinGuard();
 
@@ -33,4 +34,27 @@ if (existsSync(dbReportPath)) {
   report.container_name = db.container_name;
 }
 
+const registry = readProcessRegistry();
+const liveChildren = (registry.children ?? []).filter((entry) =>
+  isPidAlive(entry.pid),
+);
+report.live_process_count = liveChildren.length;
+report.live_processes = liveChildren.map((entry) => ({
+  script: entry.script,
+  pid: entry.pid,
+}));
+
+if (report.operator_status?.phase === "running" && liveChildren.length === 0) {
+  report.live_state_mismatch = true;
+  report.effective_phase = "not_running";
+} else {
+  report.effective_phase = report.operator_status?.phase ?? "unknown";
+}
+
 console.log(JSON.stringify(report, null, 2));
+
+if (process.env.AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE === "1") {
+  if (report.effective_phase !== "running" || liveChildren.length < 4) {
+    process.exit(1);
+  }
+}

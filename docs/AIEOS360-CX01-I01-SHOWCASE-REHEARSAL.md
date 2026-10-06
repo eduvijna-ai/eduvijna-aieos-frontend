@@ -102,6 +102,20 @@ Class refs: `class-5a`, `class-5b`
 | `tmp/aieos360-cx01-i01-showcase-manifest.json` | Machine-readable rehearsal manifest |
 | `tmp/aieos360-cx01-i01-showcase-status.json` | Operator status snapshot |
 
+## Reset safety fence
+
+Destructive reset validates **parsed** database URLs (host, port, database, role user,
+password) against the approved disposable substrates. External CI PostgreSQL requires an
+explicit operator/CI flag:
+
+`AIEOS360_CX01_I01_SHOWCASE_CI_EXTERNAL_PG=1`
+
+Substring credential checks are not used. Production/non-loopback hosts are rejected.
+
+The machine-readable manifest records both `frontend_governed_base_sha` (W01 pin) and
+`frontend_execution_sha` (checkout HEAD at reset time). Database URLs and secrets are
+never written to the manifest.
+
 ## What reset destroys vs preserves
 
 **Destroyed / recreated**

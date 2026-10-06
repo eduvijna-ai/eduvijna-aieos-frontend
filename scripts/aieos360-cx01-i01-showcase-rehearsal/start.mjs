@@ -17,6 +17,12 @@ import {
   DEFAULT_TEACHER_FRONTEND_PORT,
 } from "./constants.mjs";
 import { runPinGuard } from "./pin_guard.mjs";
+import { assertPortsAvailable } from "./port_guard.mjs";
+import {
+  isPidAlive,
+  readProcessRegistry,
+  waitForHttpOk,
+} from "./process_registry.mjs";
 import {
   dbReportPath,
   fixturePath,
@@ -43,6 +49,24 @@ if (!skipReset) {
 }
 
 const dbReport = JSON.parse(readFileSync(dbReportPath, "utf8"));
+const existing = readProcessRegistry();
+for (const entry of existing.children ?? []) {
+  if (isPidAlive(entry.pid)) {
+    console.error(
+      JSON.stringify(
+        {
+          error: "CX01 showcase already running",
+          pid: entry.pid,
+          script: entry.script,
+        },
+        null,
+        2,
+      ),
+    );
+    process.exit(1);
+  }
+}
+
 const children = [];
 
 function spawnNode(script, extraEnv = {}) {
@@ -66,7 +90,7 @@ function spawnNode(script, extraEnv = {}) {
 function spawnVite(port, backendPort) {
   const child = spawn(
     "pnpm",
-    ["exec", "vite", "--host", "127.0.0.1", "--port", String(port)],
+    ["exec", "vite", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
     {
       cwd: repoRoot,
       env: {
@@ -114,6 +138,17 @@ const parentFe = Number(
     DEFAULT_PARENT_FRONTEND_PORT,
 );
 
+await assertPortsAvailable([
+  teacherBe,
+  studentBe,
+  principalBe,
+  parentBe,
+  teacherFe,
+  studentFe,
+  principalFe,
+  parentFe,
+]);
+
 spawnNode("start-teacher-backend.mjs", {
   AIEOS360_CX01_I01_SHOWCASE_TEACHER_BACKEND_PORT: String(teacherBe),
 });
@@ -132,7 +167,18 @@ spawnVite(studentFe, studentBe);
 spawnVite(principalFe, principalBe);
 spawnVite(parentFe, parentBe);
 
-writeFileSync(processesPath, JSON.stringify({ children }, null, 2) + "\n", "utf8");
+const readiness = [
+  { role: "teacher", backend: `http://127.0.0.1:${teacherBe}/docs`, frontend: `http://127.0.0.1:${teacherFe}` },
+  { role: "student", backend: `http://127.0.0.1:${studentBe}/docs`, frontend: `http://127.0.0.1:${studentFe}` },
+  { role: "principal", backend: `http://127.0.0.1:${principalBe}/docs`, frontend: `http://127.0.0.1:${principalFe}` },
+  { role: "parent", backend: `http://127.0.0.1:${parentBe}/docs`, frontend: `http://127.0.0.1:${parentFe}` },
+];
+for (const target of readiness) {
+  await waitForHttpOk(target.backend);
+  await waitForHttpOk(target.frontend);
+}
+
+writeFileSync(processesPath, JSON.stringify({ children, owner: "aieos360-cx01-i01-showcase" }, null, 2) + "\n", "utf8");
 writeFileSync(
   statusPath,
   JSON.stringify(

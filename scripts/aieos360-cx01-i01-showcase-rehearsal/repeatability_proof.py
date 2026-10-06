@@ -1,11 +1,10 @@
-"""Run CX01 reset twice; prove prior rehearsal outputs are cleared."""
+"""Run canonical CX01 reset twice; prove prior rehearsal outputs are cleared."""
 
 from __future__ import annotations
 
 import json
 import os
 import subprocess
-import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,41 +14,21 @@ REPO_ROOT = SCRIPT_DIR.parents[1]
 EXPECTED_MIGRATION_HEAD = "a360s010004"
 
 
-def _run_reset_cycle() -> None:
-    env = {**os.environ}
-    env.setdefault("AIEOS_TEST_PG_PORT", "55448")
+def _run_canonical_reset(env: dict[str, str]) -> None:
     if env.get("AIEOS_TEST_DATABASE_URL"):
-        env.setdefault("AIEOS360_CX01_I01_SHOWCASE_CI_EXTERNAL_PG", "1")
-    for name in (
-        "bootstrap_database.py",
-        "seed_precondition.py",
-        "emit_manifest.py",
-    ):
-        script = SCRIPT_DIR / name
-        backend_root = env["AIEOS_BACKEND_ROOT"]
-        result = subprocess.run(
-            [
-                os.environ.get("AIEOS360_CX01_I01_SHOWCASE_UV", "uv"),
-                "run",
-                "python",
-                str(script),
-            ],
-            cwd=backend_root,
-            env={
-                **env,
-                "AIEOS_BACKEND_ROOT": backend_root,
-                "PYTHONPATH": os.pathsep.join(
-                    [
-                        str(Path(backend_root) / "src"),
-                        backend_root,
-                        str(SCRIPT_DIR),
-                    ]
-                ),
-            },
-            check=False,
-        )
-        if result.returncode != 0:
-            raise SystemExit(f"{name} failed with {result.returncode}")
+        if env.get("AIEOS360_CX01_I01_SHOWCASE_CI_EXTERNAL_PG") != "1":
+            raise SystemExit(
+                "repeatability proof requires caller-authorized "
+                "AIEOS360_CX01_I01_SHOWCASE_CI_EXTERNAL_PG=1 for external PostgreSQL"
+            )
+    result = subprocess.run(
+        ["node", str(SCRIPT_DIR / "reset.mjs")],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise SystemExit(f"canonical reset.mjs failed with {result.returncode}")
 
 
 def _count_assignments(bootstrap_url: str, tenant_id: str) -> int:
@@ -114,18 +93,17 @@ def main() -> int:
     if not os.environ.get("AIEOS_BACKEND_ROOT"):
         raise SystemExit("AIEOS_BACKEND_ROOT is required")
 
+    env = {**os.environ}
+    env.setdefault("AIEOS_TEST_PG_PORT", "55448")
+
     tmp = REPO_ROOT / "tmp"
     db_report_path = tmp / "aieos360-cx01-i01-showcase-db.json"
     fixture_path = tmp / "aieos360-cx01-i01-showcase-fixture.json"
 
-    os.environ.setdefault(
-        "AIEOS360_CX01_I01_SHOWCASE_DB_REPORT", str(db_report_path)
-    )
-    os.environ.setdefault(
-        "AIEOS360_CX01_I01_SHOWCASE_FIXTURE_PATH", str(fixture_path)
-    )
+    env.setdefault("AIEOS360_CX01_I01_SHOWCASE_DB_REPORT", str(db_report_path))
+    env.setdefault("AIEOS360_CX01_I01_SHOWCASE_FIXTURE_PATH", str(fixture_path))
 
-    _run_reset_cycle()
+    _run_canonical_reset(env)
     fixture_1 = json.loads(fixture_path.read_text(encoding="utf-8"))
     db_1 = json.loads(db_report_path.read_text(encoding="utf-8"))
     bootstrap = db_1["bootstrap_database_url"]
@@ -135,7 +113,7 @@ def main() -> int:
     if _count_assignments(bootstrap, tenant_id) != 1:
         raise SystemExit("expected synthetic assignment after rehearsal pollution")
 
-    _run_reset_cycle()
+    _run_canonical_reset(env)
     fixture_2 = json.loads(fixture_path.read_text(encoding="utf-8"))
     db_2 = json.loads(db_report_path.read_text(encoding="utf-8"))
 
@@ -151,6 +129,7 @@ def main() -> int:
 
     proof = {
         "reset_cycles": 2,
+        "canonical_reset_path": "reset.mjs",
         "assignments_after_pollution": 1,
         "assignments_after_second_reset": 0,
         "migration_head_after_reset_2": db_2.get("migration_head"),
