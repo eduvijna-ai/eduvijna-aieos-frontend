@@ -52,11 +52,14 @@ def _run_reset_cycle() -> None:
             raise SystemExit(f"{name} failed with {result.returncode}")
 
 
-def _count_assignments(runtime_url: str) -> int:
+def _count_assignments(bootstrap_url: str, tenant_id: str) -> int:
     from sqlalchemy import create_engine, text
 
-    engine = create_engine(runtime_url)
+    from tests.dbutil import set_tenant
+
+    engine = create_engine(bootstrap_url)
     with engine.connect() as conn:
+        set_tenant(conn, uuid.UUID(tenant_id))
         count = conn.execute(
             text("SELECT COUNT(*) FROM teaching.assignments")
         ).scalar_one()
@@ -64,13 +67,17 @@ def _count_assignments(runtime_url: str) -> int:
     return int(count)
 
 
-def _insert_synthetic_assignment(runtime_url: str, fixture: dict) -> None:
+def _insert_synthetic_assignment(bootstrap_url: str, fixture: dict) -> None:
     from sqlalchemy import create_engine, text
+
+    from tests.dbutil import set_tenant
 
     assignment_id = uuid.uuid4()
     now = datetime.now(UTC)
-    engine = create_engine(runtime_url)
+    tenant_id = uuid.UUID(fixture["tenant_id"])
+    engine = create_engine(bootstrap_url)
     with engine.begin() as conn:
+        set_tenant(conn, tenant_id)
         conn.execute(
             text(
                 """
@@ -121,17 +128,18 @@ def main() -> int:
     _run_reset_cycle()
     fixture_1 = json.loads(fixture_path.read_text(encoding="utf-8"))
     db_1 = json.loads(db_report_path.read_text(encoding="utf-8"))
-    runtime = db_1["runtime_database_url"]
+    bootstrap = db_1["bootstrap_database_url"]
+    tenant_id = fixture_1["tenant_id"]
 
-    _insert_synthetic_assignment(runtime, fixture_1)
-    if _count_assignments(runtime) != 1:
+    _insert_synthetic_assignment(bootstrap, fixture_1)
+    if _count_assignments(bootstrap, tenant_id) != 1:
         raise SystemExit("expected synthetic assignment after rehearsal pollution")
 
     _run_reset_cycle()
     fixture_2 = json.loads(fixture_path.read_text(encoding="utf-8"))
     db_2 = json.loads(db_report_path.read_text(encoding="utf-8"))
 
-    if _count_assignments(db_2["runtime_database_url"]) != 0:
+    if _count_assignments(db_2["bootstrap_database_url"], tenant_id) != 0:
         raise SystemExit("reset must clear prior TeachingAssignment outputs")
 
     for key in ("scenario_id", "tenant_id", "class_ref", "class_ref_5b"):
