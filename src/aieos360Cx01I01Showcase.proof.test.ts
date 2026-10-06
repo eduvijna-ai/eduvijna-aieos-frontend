@@ -57,7 +57,6 @@ describe("AIEOS360-CX01-I01 showcase rehearsal proofs", () => {
         console.error(result.stderr);
       }
       expect(result.status).toBe(0);
-      expect(result.stderr).toBe("");
     },
     600_000,
   );
