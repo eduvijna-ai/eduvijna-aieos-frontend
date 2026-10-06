@@ -268,17 +268,20 @@ function attachInteractiveShutdownHandlers() {
       return;
     }
     interactiveShutdownInProgress = true;
-    const shutdown = await executeCanonicalShutdown({
-      expectContainer:
-        process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER !== "0",
-      simulateStopFailure:
-        process.env.AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF_FAIL ===
-        "1",
-    });
-    if (shutdown.phase === "stop_failed") {
-      process.exitCode = 1;
+    try {
+      const shutdown = await executeCanonicalShutdown({
+        expectContainer:
+          process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER !== "0",
+        simulateStopFailure:
+          process.env.AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF_FAIL ===
+          "1",
+      });
+      if (shutdown.phase === "stop_failed") {
+        process.exitCode = 1;
+      }
+    } finally {
+      process.exit(process.exitCode ?? 0);
     }
-    process.exit(process.exitCode ?? 0);
   };
   process.on("SIGINT", () => {
     void runInteractiveShutdown();
