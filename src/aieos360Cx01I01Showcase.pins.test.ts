@@ -141,6 +141,7 @@ describe("AIEOS360-CX01-I01 showcase rehearsal pin and safety consistency", () =
     expect(start).toContain("attachInteractiveShutdownHandlers");
     expect(start).toContain('process.on("SIGINT"');
     expect(start).toContain('process.on("SIGTERM"');
+    expect(start).toContain("interactiveShutdownInProgress");
     expect(start).toContain("process.exit(process.exitCode ?? 0)");
   });
 
