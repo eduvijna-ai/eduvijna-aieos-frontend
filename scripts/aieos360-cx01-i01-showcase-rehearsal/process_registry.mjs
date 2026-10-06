@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { processesPath, statusPath } from "./paths.mjs";
 
 function linuxProcessState(pid) {
@@ -23,6 +24,7 @@ export function readProcessRegistry() {
 }
 
 export function writeProcessRegistry(registry) {
+  mkdirSync(dirname(processesPath), { recursive: true });
   writeFileSync(
     processesPath,
     JSON.stringify(
