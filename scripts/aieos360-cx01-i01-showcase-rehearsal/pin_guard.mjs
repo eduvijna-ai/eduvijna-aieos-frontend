@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import {
@@ -45,7 +45,11 @@ export function verifyFrontendOpenApiPins() {
   const versionsDir = join(backendRoot, "migrations/versions");
   const files = readdirSync(versionsDir);
   const hasHead = files.some((name) => {
-    const text = readFileSync(join(versionsDir, name), "utf8");
+    const path = join(versionsDir, name);
+    if (!statSync(path).isFile()) {
+      return false;
+    }
+    const text = readFileSync(path, "utf8");
     return name.includes(EXPECTED_MIGRATION_HEAD) || text.includes(EXPECTED_MIGRATION_HEAD);
   });
   if (!hasHead) {
