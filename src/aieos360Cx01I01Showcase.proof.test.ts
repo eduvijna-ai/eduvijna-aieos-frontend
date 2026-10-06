@@ -69,6 +69,17 @@ describe("AIEOS360-CX01-I01 showcase rehearsal proofs", () => {
   it.runIf(runIntegration)(
     "repeatability and operator lifecycle proofs",
     () => {
+      const foregroundSigint = spawnSync(
+        "node",
+        [path.join(scriptDir, "foreground_start_sigint_proof.mjs")],
+        { cwd: repoRoot, env: process.env, encoding: "utf8" },
+      );
+      if (foregroundSigint.status !== 0) {
+        console.error(foregroundSigint.stdout);
+        console.error(foregroundSigint.stderr);
+      }
+      expect(foregroundSigint.status).toBe(0);
+
       const repeatability = runUvPython("repeatability_proof.py");
       if (repeatability.status !== 0) {
         console.error(repeatability.stdout);
@@ -100,17 +111,6 @@ describe("AIEOS360-CX01-I01 showcase rehearsal proofs", () => {
         console.error(interactiveShutdown.stderr);
       }
       expect(interactiveShutdown.status).toBe(0);
-
-      const foregroundSigint = spawnSync(
-        "node",
-        [path.join(scriptDir, "foreground_start_sigint_proof.mjs")],
-        { cwd: repoRoot, env: process.env, encoding: "utf8" },
-      );
-      if (foregroundSigint.status !== 0) {
-        console.error(foregroundSigint.stdout);
-        console.error(foregroundSigint.stderr);
-      }
-      expect(foregroundSigint.status).toBe(0);
 
       const injected = spawnSync(
         "node",

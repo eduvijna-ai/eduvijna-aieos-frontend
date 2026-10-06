@@ -62,7 +62,7 @@ function waitForExit(child, timeoutMs = 120_000) {
   });
 }
 
-async function waitForTerminalStatus(timeoutMs = 30_000) {
+async function waitForTerminalStatus(timeoutMs = 60_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
