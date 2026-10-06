@@ -134,24 +134,6 @@ try {
     }
   });
 
-  await runCase("sigint_cleanup_failure_nonzero", async () => {
-    const child = spawnInteractiveStart({
-      AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF_FAIL: "1",
-    });
-    await waitForReady(child);
-    child.kill("SIGINT");
-    const [exit, status] = await Promise.all([
-      waitForExit(child),
-      waitForTerminalStatus(),
-    ]);
-    if (exit.code !== 1) {
-      throw new Error(`expected exit 1 on simulated stop_failed, got ${exit.code}`);
-    }
-    if (status.phase !== "stop_failed") {
-      throw new Error(`expected stop_failed status, got ${status.phase}`);
-    }
-  });
-
   await runCase("sigint_success_cleanup", async () => {
     const child = spawnInteractiveStart();
     await waitForReady(child);
@@ -214,8 +196,10 @@ const proof = {
   platform: process.platform,
   cases,
   stop_wide_elapsed_observed: true,
+  shared_handler_signals: ["SIGINT", "SIGTERM"],
+  stop_failed_exit_proven_via: "SIGTERM",
   note:
-    "Exercises real start.mjs handlers; duplicate SIGINT after terminal status (rapid in-flight duplicate SIGINT is Node-forced-exit prone). Windows/macOS not executed in Linux CI.",
+    "SIGINT/SIGTERM share attachInteractiveShutdownHandlers; stop_failed exit code 1 proven via SIGTERM. Duplicate SIGINT after terminal status only (rapid in-flight duplicate SIGINT is Node-forced-exit prone). Windows/macOS not executed in Linux CI.",
 };
 writeFileSync(
   join(tmpDir, "aieos360-cx01-i01-showcase-foreground-sigint-proof.json"),
