@@ -74,6 +74,11 @@ describe("AIEOS360-CX01-I01R9 Codex correction regressions", () => {
     expect(pg).toContain("already_stopped");
     expect(pg).toContain("live_verified");
     expect(pg).toContain("rejected_unsafe");
+    expect(pg).toContain("resolveTermGraceMs");
+    expect(pg).toContain("term_grace_deadline_at_ms");
+    const bootstrap = read(`${scriptPkg}/bootstrap_database.py`);
+    expect(bootstrap).toContain("_cleanup_owned_local_container");
+    expect(bootstrap).toContain("remove_owned_pg.mjs");
     // Runtime selftest is executed once from aieos360Cx01I01R9Showcase.proof.test.ts
     // (parallel vitest workers must not share the global process registry file).
   });

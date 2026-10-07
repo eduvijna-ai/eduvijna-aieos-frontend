@@ -211,6 +211,19 @@ export function resolveStopTimeoutMs() {
   );
 }
 
+/** Bounded SIGTERM grace inside the single overall stop deadline (leaves budget for SIGKILL). */
+export function resolveTermGraceMs(stopTimeoutMs) {
+  const configured =
+    process.env.AIEOS360_CX01_I01R9_STOP_TERM_GRACE_MS ??
+    process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_TERM_GRACE_MS;
+  if (configured !== undefined && configured !== "") {
+    return Math.min(Number(configured), stopTimeoutMs);
+  }
+  const killReserveMs = 1000;
+  const halfBudget = Math.floor(stopTimeoutMs / 2);
+  return Math.max(0, Math.min(halfBudget, stopTimeoutMs - killReserveMs));
+}
+
 function registryEntriesToRetain(children, alreadyStopped, rejected, survivors, liveVerified) {
   const removePids = new Set(alreadyStopped.map((entry) => entry.pid));
   for (const entry of liveVerified) {
@@ -230,8 +243,13 @@ function registryEntriesToRetain(children, alreadyStopped, rejected, survivors, 
 /** One shared absolute deadline for the entire managed stack stop operation. */
 export async function stopRegisteredProcessGroups() {
   const stopTimeoutMs = resolveStopTimeoutMs();
+  const termGraceMs = resolveTermGraceMs(stopTimeoutMs);
   const stopStartedAt = Date.now();
   const stopDeadlineAt = stopStartedAt + stopTimeoutMs;
+  const termGraceDeadlineAt = Math.min(
+    stopDeadlineAt,
+    stopStartedAt + termGraceMs,
+  );
 
   const registry = readProcessRegistry();
   const children = registry.children ?? [];
@@ -274,7 +292,7 @@ export async function stopRegisteredProcessGroups() {
   const termTargets = verifiedAtPreSignal.filter(
     (entry) => !rejected.some((r) => r.pid === entry.pid),
   );
-  await waitForProcessGroupsExit(termTargets, stopDeadlineAt);
+  await waitForProcessGroupsExit(termTargets, termGraceDeadlineAt);
   const termPhaseEnded = Date.now();
 
   for (const entry of termTargets) {
@@ -327,7 +345,9 @@ export async function stopRegisteredProcessGroups() {
   const stopElapsedMs = Date.now() - stopStartedAt;
   const stopTiming = {
     stop_timeout_ms: stopTimeoutMs,
+    term_grace_ms: termGraceMs,
     stop_deadline_at_ms: stopDeadlineAt,
+    term_grace_deadline_at_ms: termGraceDeadlineAt,
     stop_elapsed_ms: stopElapsedMs,
     term_phase_ms: termPhaseEnded - termPhaseStarted,
     kill_phase_ms: Date.now() - termPhaseEnded,

@@ -15,6 +15,16 @@ from pathlib import Path
 EXPECTED_MIGRATION_HEAD = "a360s010004"
 
 
+def _cleanup_owned_local_container(script_dir: Path) -> None:
+    import subprocess
+
+    subprocess.run(
+        ["node", str(script_dir / "remove_owned_pg.mjs")],
+        check=False,
+        env=os.environ.copy(),
+    )
+
+
 def _backend_root() -> Path:
     root = os.environ.get("AIEOS_BACKEND_ROOT")
     if not root:
@@ -60,66 +70,78 @@ def main() -> int:
 
     external = os.environ.get("AIEOS_TEST_DATABASE_URL")
     started_container = False
-    if external:
-        b_url = os.environ.get("AIEOS_TEST_BOOTSTRAP_DATABASE_URL", external)
-        m_url = external
-        r_url = os.environ.get("AIEOS_TEST_RUNTIME_DATABASE_URL", external)
-    else:
-        import subprocess
+    bootstrap = None
+    try:
+        if external:
+            b_url = os.environ.get("AIEOS_TEST_BOOTSTRAP_DATABASE_URL", external)
+            m_url = external
+            r_url = os.environ.get("AIEOS_TEST_RUNTIME_DATABASE_URL", external)
+        else:
+            import subprocess
 
-        script_dir = Path(__file__).resolve().parent
-        port = os.environ.get("AIEOS_TEST_PG_PORT", "55448")
-        subprocess.run(
-            ["node", str(script_dir / "start_governed_pg.mjs")],
-            check=True,
-            env={**os.environ, "AIEOS_TEST_PG_PORT": str(port)},
-        )
-        started_container = True
-        b_url = bootstrap_url(port)
-        m_url = migrator_url(port)
-        r_url = runtime_url(port)
+            port = os.environ.get("AIEOS_TEST_PG_PORT", "55448")
+            subprocess.run(
+                ["node", str(script_dir / "start_governed_pg.mjs")],
+                check=True,
+                env={**os.environ, "AIEOS_TEST_PG_PORT": str(port)},
+            )
+            started_container = True
+            b_url = bootstrap_url(port)
+            m_url = migrator_url(port)
+            r_url = runtime_url(port)
 
-    bootstrap = wait_for_engine(b_url)
-    with bootstrap.connect() as conn:
-        version = conn.execute(text("SHOW server_version")).scalar_one()
-        if not str(version).startswith("18."):
-            raise RuntimeError(f"PostgreSQL 18 required; got {version}")
+        if os.environ.get("AIEOS360_CX01_I01R9_PROOF_BOOTSTRAP_FAIL_AFTER_PG") == "1":
+            raise RuntimeError(
+                "proof: simulated local bootstrap failure after owned container start"
+            )
 
-    provision_identities(bootstrap)
-    os.environ["AIEOS_DATABASE_URL"] = m_url
-    cfg = alembic_config(m_url)
-    if (
-        external
-        and os.environ.get("AIEOS360_CX01_I01_SHOWCASE_CI_EXTERNAL_PG") == "1"
-    ):
+        bootstrap = wait_for_engine(b_url)
         with bootstrap.connect() as conn:
-            schema_migrated = conn.execute(
-                text(
-                    """
-                    SELECT EXISTS (
-                        SELECT 1
-                        FROM information_schema.tables
-                        WHERE table_schema = 'public'
-                          AND table_name = 'alembic_version'
+            version = conn.execute(text("SHOW server_version")).scalar_one()
+            if not str(version).startswith("18."):
+                raise RuntimeError(f"PostgreSQL 18 required; got {version}")
+
+        provision_identities(bootstrap)
+        os.environ["AIEOS_DATABASE_URL"] = m_url
+        cfg = alembic_config(m_url)
+        if (
+            external
+            and os.environ.get("AIEOS360_CX01_I01_SHOWCASE_CI_EXTERNAL_PG") == "1"
+        ):
+            with bootstrap.connect() as conn:
+                schema_migrated = conn.execute(
+                    text(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM information_schema.tables
+                            WHERE table_schema = 'public'
+                              AND table_name = 'alembic_version'
+                        )
+                        """
                     )
-                    """
-                )
+                ).scalar_one()
+            if schema_migrated:
+                command.upgrade(cfg, "head")
+                clear_asset_audit_rows_for_schema_downgrade(bootstrap)
+                command.downgrade(cfg, "base")
+        command.upgrade(cfg, "head")
+        head = None
+        with bootstrap.connect() as conn:
+            head = conn.execute(
+                text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-        if schema_migrated:
-            command.upgrade(cfg, "head")
-            clear_asset_audit_rows_for_schema_downgrade(bootstrap)
-            command.downgrade(cfg, "base")
-    command.upgrade(cfg, "head")
-    head = None
-    with bootstrap.connect() as conn:
-        head = conn.execute(
-            text("SELECT version_num FROM alembic_version")
-        ).scalar_one()
-    if head != EXPECTED_MIGRATION_HEAD:
-        raise RuntimeError(
-            f"Expected migration head {EXPECTED_MIGRATION_HEAD}; got {head}"
-        )
-    provision_runtime_grants(bootstrap)
+        if head != EXPECTED_MIGRATION_HEAD:
+            raise RuntimeError(
+                f"Expected migration head {EXPECTED_MIGRATION_HEAD}; got {head}"
+            )
+        provision_runtime_grants(bootstrap)
+    except BaseException:
+        if bootstrap is not None:
+            bootstrap.dispose()
+        if started_container:
+            _cleanup_owned_local_container(script_dir)
+        raise
 
     report = {
         "postgres_major": 18,
@@ -139,7 +161,8 @@ def main() -> int:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report))
-    bootstrap.dispose()
+    if bootstrap is not None:
+        bootstrap.dispose()
     return 0
 
 

@@ -69,6 +69,15 @@ describe("AIEOS360-CX01-I01R9 showcase rehearsal proofs", () => {
     expect(result.status).toBe(0);
   });
 
+  it("bootstrap failure removes owned local PostgreSQL container", () => {
+    const result = runNodeProof("bootstrap_failure_cleanup.selftest.mjs");
+    if (result.status !== 0) {
+      console.error(result.stdout);
+      console.error(result.stderr);
+    }
+    expect(result.status).toBe(0);
+  });
+
   it.runIf(runIntegration)(
     "pin guard, repeatability, shared DB, and managed lifecycle (bounded)",
     () => {

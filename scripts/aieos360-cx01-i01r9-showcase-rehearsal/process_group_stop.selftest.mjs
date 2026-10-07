@@ -195,10 +195,56 @@ async function testLeaderDeadProcessGroupStillAlive() {
   writeProcessRegistry({ children: [] });
 }
 
+async function testTermGraceReservesSigkillBudget() {
+  writeProcessRegistry({ children: [] });
+  const child = spawn(
+    "bash",
+    ["-c", 'trap "" TERM; sleep 300'],
+    { detached: true, stdio: "ignore" },
+  );
+  child.unref();
+  const pid = child.pid;
+  const pgid = pid;
+  const startTime = linuxProcessStartTime(pid);
+  appendProcessChild({
+    role: "term-ignorer",
+    script: "bash",
+    pid,
+    pgid,
+    startTime,
+    port: null,
+    spawned_at: new Date().toISOString(),
+  });
+  process.env.AIEOS360_CX01_I01R9_STOP_TIMEOUT_MS = "4000";
+  process.env.AIEOS360_CX01_I01R9_STOP_TERM_GRACE_MS = "800";
+  const outcome = await stopRegisteredProcessGroups();
+  if (!outcome.ok) {
+    killProcessGroup(pgid);
+    throw new Error(`term grace kill failed: ${JSON.stringify(outcome)}`);
+  }
+  if (isProcessGroupAlive(pgid)) {
+    killProcessGroup(pgid);
+    throw new Error("SIGKILL should have removed TERM-ignoring process group");
+  }
+  if (outcome.stopTiming.term_phase_ms > 1500) {
+    throw new Error("TERM phase should not consume entire stop deadline");
+  }
+  if (outcome.stopTiming.stop_elapsed_ms >= 4000) {
+    throw new Error("overall stop deadline exceeded before SIGKILL could run");
+  }
+  if (outcome.stopTiming.term_grace_ms !== 800) {
+    throw new Error(`unexpected term_grace_ms: ${outcome.stopTiming.term_grace_ms}`);
+  }
+  if (!outcome.stopTiming.within_deadline) {
+    throw new Error("stop should complete within shared deadline");
+  }
+}
+
 const sharedDeadline = await testLiveVerifiedGroups();
 await testAlreadyDeadCleanGroup();
 await testBirthIdentityMismatch();
 await testLeaderDeadProcessGroupStillAlive();
+await testTermGraceReservesSigkillBudget();
 
 console.log(
   JSON.stringify({
@@ -208,6 +254,7 @@ console.log(
       "already_stopped",
       "rejected_unsafe_identity_mismatch",
       "rejected_unsafe_leader_dead_pg_alive",
+      "term_grace_then_sigkill_within_overall_deadline",
     ],
     shared_stop_deadline_ms: sharedDeadline.shared_stop_deadline_ms,
     stop_timing: sharedDeadline.stop_timing,
