@@ -9,6 +9,9 @@ import {
   planRegistryEntryShutdown,
 } from "./process_tree.mjs";
 import {
+  buildSurvivorRegistryEntry,
+} from "./process_identity.mjs";
+import {
   isPidAlive,
   readProcessRegistry,
   writeOperatorStatus,
@@ -16,6 +19,17 @@ import {
 } from "./process_registry.mjs";
 
 export async function executeCanonicalShutdown(options = {}) {
+  const signalProofHarness =
+    process.env.AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF === "1";
+  const genericHarness =
+    process.env.AIEOS360_CX01_I01_SHOWCASE_SIGNAL_PROOF_HARNESS === "1";
+  if (
+    process.env.AIEOS360_CX01_I01_SHOWCASE_SIMULATE_SHUTDOWN_THROW === "1" &&
+    (signalProofHarness || genericHarness)
+  ) {
+    throw new Error("simulated canonical shutdown throw (harness)");
+  }
+
   const expectContainer =
     options.expectContainer ??
     process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER !== "0";
@@ -29,13 +43,11 @@ export async function executeCanonicalShutdown(options = {}) {
       process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_TREE_KILL_MS ||
       "25000",
   );
-  const signalProofHarness =
-    process.env.AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF === "1";
   const simulateStopFailure =
     options.simulateStopFailure === true &&
-    (signalProofHarness ||
-      process.env.AIEOS360_CX01_I01_SHOWCASE_SIGNAL_PROOF_HARNESS === "1");
+    (signalProofHarness || genericHarness);
 
+  try {
   const registry = readProcessRegistry();
   const signaled = [];
   const rejected = [];
@@ -83,7 +95,7 @@ export async function executeCanonicalShutdown(options = {}) {
     }
     if (!outcome.ok) {
       for (const pid of outcome.survivors) {
-        survivors.push({ ...outcome.entry, pid, survivor_pid: pid });
+        survivors.push(buildSurvivorRegistryEntry(outcome.entry, pid));
         failed.push({
           ...outcome.entry,
           pid,
@@ -137,8 +149,8 @@ export async function executeCanonicalShutdown(options = {}) {
     tree_targets: treeTargets,
     descendant_exit_records: descendantExitRecords,
     rejected_registry_entries: rejected,
-    survivor_processes: survivors.map(({ pid, role, script, survivor_pid }) => ({
-      pid: survivor_pid ?? pid,
+    survivor_processes: survivors.map(({ pid, role, script }) => ({
+      pid,
       role,
       script,
     })),
@@ -157,11 +169,21 @@ export async function executeCanonicalShutdown(options = {}) {
     writeProcessRegistry({ children: [] });
   } else {
     const recoverable = survivors
-      .filter((entry) => isPidAlive(entry.survivor_pid ?? entry.pid))
+      .filter((entry) => isPidAlive(entry.pid))
       .concat(
         failed
           .filter((item) => isPidAlive(item.pid))
-          .map((item) => ({ ...item, stop_failed: true })),
+          .map((item) =>
+            buildSurvivorRegistryEntry(
+              {
+                script: item.script,
+                role: item.role,
+                parentRunId: item.parentRunId,
+                ownershipToken: item.ownershipToken,
+              },
+              item.pid,
+            ),
+          ),
       );
     writeProcessRegistry({
       children: recoverable,
@@ -179,4 +201,47 @@ export async function executeCanonicalShutdown(options = {}) {
     failed,
     stopWideElapsedMs: stopWide.stop_wide_elapsed_ms,
   };
+  } catch (error) {
+    const stoppedAt = new Date().toISOString();
+    const status = {
+      phase: "stop_failed",
+      classification: "NON_PRODUCTION",
+      stopped_at: stoppedAt,
+      shutdown_error: String(error),
+      container_removed: false,
+      signaled_processes: [],
+      tree_targets: [],
+      descendant_exit_records: [],
+      rejected_registry_entries: [],
+      survivor_processes: [],
+      failed_processes: [],
+      container_remove_error: null,
+    };
+    try {
+      writeOperatorStatus(status);
+    } catch {
+      /* persistence must not mask shutdown failure */
+    }
+    try {
+      const registry = readProcessRegistry();
+      writeProcessRegistry({
+        children: registry.children ?? [],
+        last_stop_failed_at: stoppedAt,
+      });
+    } catch {
+      /* ignore */
+    }
+    return {
+      phase: "stop_failed",
+      status,
+      containerRemoved: false,
+      containerRemoveError: null,
+      rejected: [],
+      survivors: [],
+      failed: [],
+      stopWideElapsedMs: null,
+      shutdownThrew: true,
+      error: String(error),
+    };
+  }
 }

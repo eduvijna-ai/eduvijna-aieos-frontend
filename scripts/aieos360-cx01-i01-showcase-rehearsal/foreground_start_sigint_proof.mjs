@@ -238,6 +238,34 @@ try {
     expectExitCode: 1,
     expectPhase: "stop_failed",
   });
+
+  await runSignalShutdownCase({
+    name: "shutdown_throw_nonzero",
+    signal: "SIGINT",
+    extraEnv: { AIEOS360_CX01_I01_SHOWCASE_SIMULATE_SHUTDOWN_THROW: "1" },
+    expectExitCode: 1,
+    expectPhase: "stop_failed",
+  });
+
+  await runCase("same_process_mixed_signals_during_cleanup", async () => {
+    const child = spawnInteractiveStart();
+    const exitPromise = createExitPromise(child);
+    await waitForReady(child);
+    await new Promise((resolve) => setTimeout(resolve, 75));
+    child.kill("SIGINT");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    child.kill("SIGTERM");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    child.kill("SIGINT");
+    const exit = await exitPromise;
+    let status;
+    try {
+      status = await waitForTerminalStatus();
+    } catch (error) {
+      throw new Error(`${error.message} | ${formatDiagnostics(child, exit)}`);
+    }
+    assertSuccessfulExit(exit, status);
+  });
 } catch {
   const proof = {
     classification: "NON_PRODUCTION",
@@ -266,8 +294,10 @@ const proof = {
   handler_before_ready: true,
   stop_failed_phase_proven_via:
     "live start.mjs SIGINT/SIGTERM + canonical_shutdown_simulate_fail_selftest.mjs",
+  same_process_mixed_signals_during_cleanup: true,
+  shutdown_throw_case: true,
   note:
-    "Handlers registered before READY; exit promise before signal; stderr captured on failure. Windows/macOS not executed in Linux CI.",
+    "Handlers before stack startup; same-process mixed signals during cleanup; Windows/macOS not executed in Linux CI.",
 };
 writeFileSync(
   join(tmpDir, "aieos360-cx01-i01-showcase-foreground-sigint-proof.json"),

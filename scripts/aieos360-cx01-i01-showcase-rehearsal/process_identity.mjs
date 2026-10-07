@@ -186,6 +186,17 @@ export function buildChildRegistryEntry({ script, role, pid, parentRunId, owners
   };
 }
 
+/** Re-bind survivor PID to fresh birth identity for recoverable stop retries. */
+export function buildSurvivorRegistryEntry(originalEntry, survivorPid) {
+  return buildChildRegistryEntry({
+    script: originalEntry.script,
+    role: originalEntry.role,
+    pid: survivorPid,
+    parentRunId: originalEntry.parentRunId,
+    ownershipToken: originalEntry.ownershipToken,
+  });
+}
+
 export function verifyRegistryEntryOwnership(pid, entry) {
   if (!pid || pid <= 0) {
     return { ok: false, reason: "invalid pid" };

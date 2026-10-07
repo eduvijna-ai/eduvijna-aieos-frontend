@@ -358,6 +358,54 @@ function mayForceKillPid(pid, plan) {
   );
 }
 
+function isPidAllowedForPlan(pid, plan) {
+  const { entry } = plan;
+  if (!isPidAlive(pid)) {
+    return false;
+  }
+  if (pid === entry.pid) {
+    if (!plan.root_alive) {
+      return false;
+    }
+    return verifyRegistryEntryOwnership(pid, entry).ok;
+  }
+  return (
+    ownershipTokenInProcess(pid, entry.ownershipToken) ||
+    isDescendantOf(pid, entry.pid)
+  );
+}
+
+export function collectVerifiedTargetsForPlan(plan) {
+  if (plan.rejected) {
+    return [];
+  }
+  const refreshed = planRegistryEntryShutdown(plan.entry);
+  const targets = new Set();
+  if (!refreshed.rejected) {
+    for (const pid of refreshed.targets) {
+      targets.add(pid);
+    }
+    plan.root_alive = refreshed.root_alive;
+    plan.root_already_dead = refreshed.root_already_dead;
+  }
+  for (const pid of findLivePidsWithOwnershipToken(plan.entry.ownershipToken)) {
+    if (isPidAlive(pid)) {
+      targets.add(pid);
+    }
+  }
+  return [...targets].filter((pid) => isPidAllowedForPlan(pid, plan));
+}
+
+function collectAllVerifiedTargets(activePlans) {
+  const targets = new Set();
+  for (const plan of activePlans) {
+    for (const pid of collectVerifiedTargetsForPlan(plan)) {
+      targets.add(pid);
+    }
+  }
+  return [...targets];
+}
+
 /**
  * Signal all verified registry trees, then poll once for grace and once for kill.
  */
@@ -386,23 +434,25 @@ export async function executeStopWideShutdown(plans, options = {}) {
   const uniqueSignaled = [...new Set(signaled)];
   await waitForAllPidsExit(uniqueSignaled, treeGraceMs);
 
-  const allTargets = [
-    ...new Set(activePlans.flatMap((plan) => plan.targets)),
-  ];
-  const killCandidates = allTargets.filter((pid) => isPidAlive(pid));
+  const preKillTargets = collectAllVerifiedTargets(activePlans);
+  const killCandidates = preKillTargets.filter((pid) => isPidAlive(pid));
   for (const pid of killCandidates) {
-    const plan = activePlans.find((candidate) => candidate.targets.includes(pid));
+    const plan = activePlans.find((candidate) =>
+      collectVerifiedTargetsForPlan(candidate).includes(pid),
+    );
     if (!plan || !mayForceKillPid(pid, plan)) {
       continue;
     }
     signalForceKill(pid);
   }
 
-  const afterKill = await waitForAllPidsExit(
+  await waitForAllPidsExit(
     killCandidates.filter((pid) => isPidAlive(pid)),
     treeKillMs,
   );
-  const survivorSet = new Set(afterKill.alive);
+
+  const postKillTargets = collectAllVerifiedTargets(activePlans);
+  const survivorSet = new Set(postKillTargets.filter((pid) => isPidAlive(pid)));
 
   const perEntry = plans.map((plan) => {
     if (plan.rejected) {
@@ -417,8 +467,10 @@ export async function executeStopWideShutdown(plans, options = {}) {
         ok: false,
       };
     }
-    const planSurvivors = plan.targets.filter((pid) => survivorSet.has(pid));
-    const descendantExit = plan.targets.map((pid) => ({
+    const finalTargets = collectVerifiedTargetsForPlan(plan);
+    plan.targets = finalTargets;
+    const planSurvivors = finalTargets.filter((pid) => survivorSet.has(pid));
+    const descendantExit = finalTargets.map((pid) => ({
       pid,
       exited: !isPidAlive(pid),
       is_root: pid === plan.entry.pid,

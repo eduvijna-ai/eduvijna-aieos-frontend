@@ -145,6 +145,32 @@ describe("AIEOS360-CX01-I01 process tree deadlines (non-destructive)", () => {
     }
     expect(result.status).toBe(0);
   });
+
+  it("rescans late-spawned token-owned descendants during shutdown", () => {
+    const result = spawnSync(
+      "node",
+      [path.join(scriptDir, "stop_wide_late_spawn_selftest.mjs")],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    if (result.status !== 0) {
+      console.error(result.stdout);
+      console.error(result.stderr);
+    }
+    expect(result.status).toBe(0);
+  });
+
+  it("retries stop with survivor birth identity bound to live PID", () => {
+    const result = spawnSync(
+      "node",
+      [path.join(scriptDir, "survivor_registry_retry_selftest.mjs")],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    if (result.status !== 0) {
+      console.error(result.stdout);
+      console.error(result.stderr);
+    }
+    expect(result.status).toBe(0);
+  });
 });
 
 describe("AIEOS360-CX01-I01 process ownership (non-destructive)", () => {

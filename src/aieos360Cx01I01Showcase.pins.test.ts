@@ -139,12 +139,16 @@ describe("AIEOS360-CX01-I01 showcase rehearsal pin and safety consistency", () =
     expect(shutdown).toContain("executeStopWideShutdown");
     expect(shutdown).toContain("stop_wide_elapsed_ms");
     expect(start).toContain("attachInteractiveShutdownHandlers");
-    expect(start.indexOf("attachInteractiveShutdownHandlers")).toBeLessThan(
-      start.indexOf("CX01_INTERACTIVE_SIGNAL_PROOF_READY"),
+    const beforePorts = start.slice(0, start.indexOf("await assertPortsAvailable"));
+    expect(beforePorts).toContain("attachInteractiveShutdownHandlers();");
+    expect(start.indexOf("await assertPortsAvailable")).toBeLessThan(
+      start.indexOf('spawnNode("start-teacher-backend.mjs"'),
     );
+    expect(start).toContain("assertStartupNotAborted");
+    expect(shutdown).toContain("buildSurvivorRegistryEntry");
     expect(start).toContain('process.on("SIGINT"');
     expect(start).toContain('process.on("SIGTERM"');
-    expect(start).toContain("interactiveShutdownInProgress");
+    expect(start).toContain("interactiveShutdownState");
     expect(start).toContain("process.exit(process.exitCode ?? 0)");
   });
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { executeCanonicalShutdown } from "./canonical_shutdown.mjs";
 import {
   buildChildRegistryEntry,
@@ -10,6 +10,31 @@ import {
 } from "./process_identity.mjs";
 import { isPidAlive, writeProcessRegistry } from "./process_registry.mjs";
 import { tmpDir } from "./paths.mjs";
+
+function listAliveWithMarkers(markers) {
+  if (process.platform !== "linux") {
+    return [];
+  }
+  const alive = [];
+  for (const name of readdirSync("/proc")) {
+    if (!/^\d+$/.test(name)) {
+      continue;
+    }
+    const pid = Number(name);
+    if (!isPidAlive(pid)) {
+      continue;
+    }
+    try {
+      const env = readFileSync(`/proc/${pid}/environ`).toString("utf8");
+      if (markers.some((marker) => env.includes(marker))) {
+        alive.push(pid);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return alive;
+}
 
 function killTracked(pids) {
   for (const pid of pids) {
@@ -60,11 +85,11 @@ try {
   }
 
   writeProcessRegistry({ children: entries, parentRunId });
-  await new Promise((resolve) => setTimeout(resolve, 400));
+  await new Promise((resolve) => setTimeout(resolve, 700));
 
-  const graceMs = 500;
-  const killMs = 4_000;
-  const maxElapsedMs = graceMs + killMs + 3_000;
+  const graceMs = 600;
+  const killMs = 8_000;
+  const maxElapsedMs = graceMs + killMs + 4_000;
 
   const started = Date.now();
   const shutdown = await executeCanonicalShutdown({
@@ -74,7 +99,10 @@ try {
   });
   const elapsed = Date.now() - started;
 
-  const stillAlive = allTrackPids.filter((pid) => isPidAlive(pid));
+  const tokenMarkers = entries.map(
+    (entry) => `${CHILD_OWNERSHIP_ENV}=${entry.ownershipToken}`,
+  );
+  const stillAlive = listAliveWithMarkers(tokenMarkers);
   const descendantRecords = shutdown.status?.descendant_exit_records ?? [];
 
   if (shutdown.phase !== "stopped") {
@@ -107,5 +135,8 @@ try {
   );
 } finally {
   killTracked(allTrackPids);
+  killTracked(listAliveWithMarkers(
+    entries.map((entry) => `${CHILD_OWNERSHIP_ENV}=${entry.ownershipToken}`),
+  ));
   writeProcessRegistry({ children: [] });
 }

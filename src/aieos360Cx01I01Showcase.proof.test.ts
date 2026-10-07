@@ -80,6 +80,17 @@ describe("AIEOS360-CX01-I01 showcase rehearsal proofs", () => {
       }
       expect(foregroundSigint.status).toBe(0);
 
+      const stackInterrupt = spawnSync(
+        "node",
+        [path.join(scriptDir, "interactive_stack_interrupt_proof.mjs")],
+        { cwd: repoRoot, env: process.env, encoding: "utf8" },
+      );
+      if (stackInterrupt.status !== 0) {
+        console.error(stackInterrupt.stdout);
+        console.error(stackInterrupt.stderr);
+      }
+      expect(stackInterrupt.status).toBe(0);
+
       const repeatability = runUvPython("repeatability_proof.py");
       if (repeatability.status !== 0) {
         console.error(repeatability.stdout);

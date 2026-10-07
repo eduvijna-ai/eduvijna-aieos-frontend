@@ -48,6 +48,8 @@ const ownedLauncherPath = join(scriptDir, "owned_child_launcher.mjs");
 const skipReset = process.env.AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET === "1";
 const interactiveSignalProof =
   process.env.AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF === "1";
+const stackInterruptProof =
+  process.env.AIEOS360_CX01_I01_SHOWCASE_STACK_INTERRUPT_PROOF === "1";
 const startMode =
   process.env.AIEOS360_CX01_I01_SHOWCASE_START_MODE === "managed"
     ? "managed"
@@ -118,7 +120,64 @@ const parentFe = Number(
     DEFAULT_PARENT_FRONTEND_PORT,
 );
 
+const interactiveShutdownState = {
+  inProgress: false,
+  startupAborted: false,
+};
+
+function assertStartupNotAborted() {
+  if (interactiveShutdownState.startupAborted) {
+    throw new Error("startup aborted by interactive shutdown");
+  }
+}
+
+function attachInteractiveShutdownHandlers() {
+  const runInteractiveShutdown = async () => {
+    if (interactiveShutdownState.inProgress) {
+      return;
+    }
+    interactiveShutdownState.inProgress = true;
+    interactiveShutdownState.startupAborted = true;
+    try {
+      const shutdown = await executeCanonicalShutdown({
+        expectContainer:
+          process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER !== "0",
+        simulateStopFailure:
+          process.env.AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF_FAIL ===
+          "1",
+      });
+      if (shutdown.phase === "stop_failed" || shutdown.shutdownThrew) {
+        process.exitCode = 1;
+      }
+    } catch (error) {
+      process.exitCode = 1;
+      try {
+        writeOperatorStatus({
+          phase: "stop_failed",
+          classification: "NON_PRODUCTION",
+          shutdown_handler_error: String(error),
+          stopped_at: new Date().toISOString(),
+        });
+      } catch {
+        /* ignore */
+      }
+    } finally {
+      process.exit(process.exitCode ?? 0);
+    }
+  };
+  process.on("SIGINT", () => {
+    void runInteractiveShutdown();
+  });
+  process.on("SIGTERM", () => {
+    void runInteractiveShutdown();
+  });
+}
+
 assertNotAlreadyRunning();
+
+if (startMode === "interactive") {
+  attachInteractiveShutdownHandlers();
+}
 
 if (!interactiveSignalProof) {
   await assertPortsAvailable([
@@ -200,6 +259,7 @@ function registerSpawnedChild(script, role, child) {
 }
 
 function spawnOwned(scriptPath, registryScript, role, extraEnv = {}, scriptArgs = []) {
+  assertStartupNotAborted();
   const managed = startMode === "managed";
   const ownershipToken = newChildOwnershipToken();
   const child = spawn(
@@ -261,36 +321,6 @@ function maybeInjectPartialStartFailure() {
   }
 }
 
-function attachInteractiveShutdownHandlers() {
-  let interactiveShutdownInProgress = false;
-  const runInteractiveShutdown = async () => {
-    if (interactiveShutdownInProgress) {
-      return;
-    }
-    interactiveShutdownInProgress = true;
-    try {
-      const shutdown = await executeCanonicalShutdown({
-        expectContainer:
-          process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_EXPECT_CONTAINER !== "0",
-        simulateStopFailure:
-          process.env.AIEOS360_CX01_I01_SHOWCASE_INTERACTIVE_SIGNAL_PROOF_FAIL ===
-          "1",
-      });
-      if (shutdown.phase === "stop_failed") {
-        process.exitCode = 1;
-      }
-    } finally {
-      process.exit(process.exitCode ?? 0);
-    }
-  };
-  process.on("SIGINT", () => {
-    void runInteractiveShutdown();
-  });
-  process.on("SIGTERM", () => {
-    void runInteractiveShutdown();
-  });
-}
-
 try {
   if (interactiveSignalProof) {
     if (startMode !== "interactive") {
@@ -316,7 +346,6 @@ try {
       child.__cx01OwnershipToken = ownershipToken;
       registerSpawnedChild("interactive_signal_child.mjs", role, child);
     }
-    attachInteractiveShutdownHandlers();
     writeOperatorStatus({
       phase: "running",
       classification: "NON_PRODUCTION",
@@ -346,6 +375,10 @@ try {
   spawnVite(principalFe, principalBe, "principal");
   spawnVite(parentFe, parentBe, "parent");
 
+  if (stackInterruptProof) {
+    console.log("CX01_STACK_SPAWN_COMPLETE");
+  }
+
   const readiness = [
     {
       role: "teacher",
@@ -368,9 +401,17 @@ try {
       frontend: `http://127.0.0.1:${parentFe}`,
     },
   ];
+  if (stackInterruptProof) {
+    console.log("CX01_STACK_READINESS_PHASE");
+  }
   for (const target of readiness) {
+    assertStartupNotAborted();
     await waitForHttpOk(target.backend, readinessTimeoutMs);
+    assertStartupNotAborted();
     await waitForHttpOk(target.frontend, readinessTimeoutMs);
+  }
+  if (stackInterruptProof) {
+    console.log("CX01_STACK_FULLY_READY");
   }
 
   writeOperatorStatus({
@@ -433,11 +474,10 @@ try {
     "AIEOS360-CX01-I01 showcase rehearsal started (NON_PRODUCTION). Press Ctrl+C to stop.",
   );
 } catch (error) {
+  if (interactiveShutdownState.startupAborted) {
+    process.exit(process.exitCode ?? 0);
+  }
   await cleanupOwned(String(error));
   console.error(error);
   process.exit(1);
-}
-
-if (startMode === "interactive" && !interactiveSignalProof) {
-  attachInteractiveShutdownHandlers();
 }
