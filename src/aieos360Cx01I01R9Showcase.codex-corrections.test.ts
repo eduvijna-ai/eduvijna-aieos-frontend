@@ -74,12 +74,8 @@ describe("AIEOS360-CX01-I01R9 Codex correction regressions", () => {
     expect(pg).toContain("already_stopped");
     expect(pg).toContain("live_verified");
     expect(pg).toContain("rejected_unsafe");
-    const result = spawnSync(
-      "node",
-      [path.join(repoRoot, scriptPkg, "process_group_stop.selftest.mjs")],
-      { encoding: "utf8" },
-    );
-    expect(result.status).toBe(0);
+    // Runtime selftest is executed once from aieos360Cx01I01R9Showcase.proof.test.ts
+    // (parallel vitest workers must not share the global process registry file).
   });
 
   it("pin guard rejects tracked changes but ignores untracked files", () => {
