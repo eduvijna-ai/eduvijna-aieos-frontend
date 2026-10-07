@@ -454,7 +454,9 @@ def main() -> int:
     }
     fixture_path.parent.mkdir(parents=True, exist_ok=True)
     fixture_path.write_text(json.dumps(fixture, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(fixture, indent=2))
+    from export_sanitize import sanitize_object
+
+    print(json.dumps(sanitize_object(fixture), indent=2))
 
     bootstrap_engine.dispose()
     runtime_engine.dispose()

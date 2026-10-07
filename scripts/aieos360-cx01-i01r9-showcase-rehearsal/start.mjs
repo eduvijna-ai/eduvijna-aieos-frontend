@@ -27,6 +27,11 @@ import {
   statusPath,
   tmpDir,
 } from "./paths.mjs";
+import { cleanupManagedStack } from "./managed_cleanup.mjs";
+import {
+  buildReadinessTargets,
+  buildRoleUrls,
+} from "./role_urls.mjs";
 import {
   readProcessRegistry,
   spawnDetachedProcessGroup,
@@ -208,48 +213,21 @@ try {
   spawnVite("principal", principalFe, principalBe);
   spawnVite("parent", parentFe, parentBe);
 
-  const readiness = [
-    {
-      backend: `http://127.0.0.1:${teacherBe}/docs`,
-      frontend: `http://127.0.0.1:${teacherFe}`,
-    },
-    {
-      backend: `http://127.0.0.1:${studentBe}/docs`,
-      frontend: `http://127.0.0.1:${studentFe}`,
-    },
-    {
-      backend: `http://127.0.0.1:${principalBe}/docs`,
-      frontend: `http://127.0.0.1:${principalFe}`,
-    },
-    {
-      backend: `http://127.0.0.1:${parentBe}/docs`,
-      frontend: `http://127.0.0.1:${parentFe}`,
-    },
-  ];
+  const roleUrls = buildRoleUrls({
+    teacherFe,
+    studentFe,
+    principalFe,
+    parentFe,
+    teacherBe,
+    studentBe,
+    principalBe,
+    parentBe,
+  });
 
-  for (const target of readiness) {
+  for (const target of buildReadinessTargets(roleUrls)) {
     await waitForHttpOk(target.backend, readinessTimeoutMs);
     await waitForHttpOk(target.frontend, readinessTimeoutMs);
   }
-
-  const roleUrls = {
-    teacher: {
-      frontend: `http://127.0.0.1:${teacherFe}`,
-      backend: `http://127.0.0.1:${teacherBe}`,
-    },
-    student: {
-      frontend: `http://127.0.0.1:${studentFe}`,
-      backend: `http://127.0.0.1:${studentBe}`,
-    },
-    principal: {
-      frontend: `http://127.0.0.1:${principalFe}`,
-      backend: `http://127.0.0.1:${principalBe}`,
-    },
-    parent: {
-      frontend: `http://127.0.0.1:${parentFe}`,
-      backend: `http://127.0.0.1:${parentBe}`,
-    },
-  };
 
   writeOperatorStatus({
     phase: "running",
@@ -287,6 +265,14 @@ try {
     ),
   );
 } catch (error) {
+  const cleanup = await cleanupManagedStack({ removeOwnedLocalContainer: false });
+  writeOperatorStatus({
+    phase: "start_failed",
+    classification: "NON_PRODUCTION",
+    failure_reason: String(error),
+    cleanup_process_groups: cleanup,
+    failed_at: new Date().toISOString(),
+  });
   console.error(error);
   process.exit(1);
 }

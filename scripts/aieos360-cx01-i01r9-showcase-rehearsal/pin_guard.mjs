@@ -24,6 +24,21 @@ export function verifyBackendPin() {
       `AIEOS360-CX01-I01R9 BLOCKED — Backend pin drift: HEAD ${head} != ${BACKEND_PIN_SHA}`,
     );
   }
+
+  const worktree = spawnSync(
+    "git",
+    ["-C", backendRoot, "status", "--porcelain"],
+    { encoding: "utf8" },
+  );
+  if (worktree.status !== 0) {
+    throw new Error(`Could not read backend worktree status: ${worktree.stderr}`);
+  }
+  if (worktree.stdout.trim()) {
+    throw new Error(
+      "AIEOS360-CX01-I01R9 BLOCKED — Backend checkout has modified tracked files; " +
+        "reset to clean governed tree at pin SHA",
+    );
+  }
 }
 
 export function verifyFrontendOpenApiPins() {

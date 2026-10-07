@@ -13,6 +13,17 @@ import {
   waitForHttpOk,
 } from "./process_group.mjs";
 
+const EXPECTED_MANAGED_ROLES = [
+  "teacher-backend",
+  "student-backend",
+  "principal-backend",
+  "parent-backend",
+  "teacher_frontend",
+  "student_frontend",
+  "principal_frontend",
+  "parent_frontend",
+];
+
 runPinGuard();
 
 const report = {
@@ -40,10 +51,13 @@ if (existsSync(dbReportPath)) {
 
 const registry = readProcessRegistry();
 const liveChildren = [];
+const staleRegistryEntries = [];
 for (const entry of registry.children ?? []) {
   const identity = verifyRegistryEntry(entry);
   if (identity.ok) {
     liveChildren.push(entry);
+  } else {
+    staleRegistryEntries.push({ ...entry, reason: identity.reason });
   }
 }
 
@@ -53,38 +67,56 @@ report.live_processes = liveChildren.map((entry) => ({
   pid: entry.pid,
   port: entry.port,
 }));
+report.stale_registry_entries = staleRegistryEntries;
 
 const operatorPhase = report.operator_status?.phase;
 const roleUrls = report.operator_status?.role_urls;
-const requireLive = process.env.AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE === "1";
+const skipLive = process.env.AIEOS360_CX01_I01_SHOWCASE_STATUS_SKIP_LIVE === "1";
 const healthTimeoutMs = Number(
-  process.env.AIEOS360_CX01_I01_SHOWCASE_STATUS_HEALTH_TIMEOUT_MS ||
-    (requireLive ? "90000" : "5000"),
+  process.env.AIEOS360_CX01_I01_SHOWCASE_STATUS_HEALTH_TIMEOUT_MS || "90000",
 );
 
-if (operatorPhase === "running" && roleUrls && requireLive) {
-  const checks = [];
-  for (const [role, urls] of Object.entries(roleUrls)) {
-    const backendUrl = urls.backend.endsWith("/docs")
-      ? urls.backend
-      : `${urls.backend.replace(/\/$/, "")}/docs`;
-    try {
-      await waitForHttpOk(backendUrl, healthTimeoutMs);
-      checks.push({ role, surface: "backend", ok: true });
-      await waitForHttpOk(urls.frontend, healthTimeoutMs);
-      checks.push({ role, surface: "frontend", ok: true });
-    } catch {
-      checks.push({ role, surface: "health", ok: false });
-      console.error(JSON.stringify(report, null, 2));
-      process.exit(1);
-    }
-  }
-  report.health_checks = checks;
+function failStatus(extra = {}) {
+  console.error(JSON.stringify({ ...report, ...extra }, null, 2));
+  process.exit(1);
 }
 
-if (requireLive && operatorPhase !== "running") {
-  console.error(JSON.stringify(report, null, 2));
-  process.exit(1);
+if (operatorPhase === "running") {
+  const liveRoles = new Set(liveChildren.map((entry) => entry.role));
+  const missingRoles = EXPECTED_MANAGED_ROLES.filter((role) => !liveRoles.has(role));
+  report.expected_managed_roles = EXPECTED_MANAGED_ROLES;
+  report.missing_live_roles = missingRoles;
+
+  if (missingRoles.length > 0 || staleRegistryEntries.length > 0) {
+    report.registry_truth = "stale_or_incomplete";
+    failStatus({ readiness_ok: false });
+  }
+  report.registry_truth = "live_registry_matches_expected";
+
+  if (!skipLive && roleUrls) {
+    const checks = [];
+    for (const [role, urls] of Object.entries(roleUrls)) {
+      const backendUrl = urls.backend.endsWith("/docs")
+        ? urls.backend
+        : `${urls.backend.replace(/\/$/, "")}/docs`;
+      try {
+        await waitForHttpOk(backendUrl, healthTimeoutMs);
+        checks.push({ role, surface: "backend", ok: true });
+        await waitForHttpOk(urls.frontend, healthTimeoutMs);
+        checks.push({ role, surface: "frontend", ok: true });
+      } catch {
+        checks.push({ role, surface: "health", ok: false });
+        failStatus({ readiness_ok: false, health_checks: checks });
+      }
+    }
+    report.health_checks = checks;
+    report.readiness_ok = true;
+  }
+}
+
+if (operatorPhase === "stopped" && liveChildren.length > 0) {
+  report.registry_truth = "orphan_live_processes_after_stopped_phase";
+  failStatus();
 }
 
 console.log(JSON.stringify(report, null, 2));

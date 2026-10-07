@@ -43,12 +43,14 @@ pnpm showcase:aieos360:stop     # SIGTERM → bounded wait → SIGKILL on record
 
 ## Role port map (defaults)
 
-| Role | Backend | Frontend |
+| Role | Backend | Frontend (entry path) |
 |---|---|---|
-| Teacher | 8020 | 5291 |
-| Student | 8021 | 5292 |
-| Principal | 8022 | 5293 |
-| Parent | 8023 | 5294 |
+| Teacher | 8020 | 5291 → `/teacher-os/today` |
+| Student | 8021 | 5292 → `/student-os/home` |
+| Principal | 8022 | 5293 → `/principal-os` |
+| Parent | 8023 | 5294 → `/parent-os` |
+
+`pnpm showcase:aieos360:status` probes live HTTP for all eight managed processes when `phase` is `running` (set `AIEOS360_CX01_I01_SHOWCASE_STATUS_SKIP_LIVE=1` only to skip probes). `stop` removes the governed local PostgreSQL container when this lifecycle started it; external CI PostgreSQL is never touched.
 
 Bearer tokens and principal UUIDs match backend `DevelopmentCoherentSchoolContextProvider()` defaults (see fixture after reset).
 

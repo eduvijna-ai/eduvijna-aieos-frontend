@@ -151,19 +151,19 @@ def main() -> int:
         "version_id": fixture.get("version_id"),
         "role_urls": {
             "teacher": {
-                "frontend": f"http://127.0.0.1:{teacher_fe}",
+                "frontend": f"http://127.0.0.1:{teacher_fe}/teacher-os/today",
                 "backend": f"http://127.0.0.1:{teacher_be}",
             },
             "student": {
-                "frontend": f"http://127.0.0.1:{student_fe}",
+                "frontend": f"http://127.0.0.1:{student_fe}/student-os/home",
                 "backend": f"http://127.0.0.1:{student_be}",
             },
             "principal": {
-                "frontend": f"http://127.0.0.1:{principal_fe}",
+                "frontend": f"http://127.0.0.1:{principal_fe}/principal-os",
                 "backend": f"http://127.0.0.1:{principal_be}",
             },
             "parent": {
-                "frontend": f"http://127.0.0.1:{parent_fe}",
+                "frontend": f"http://127.0.0.1:{parent_fe}/parent-os",
                 "backend": f"http://127.0.0.1:{parent_be}",
             },
         },
@@ -176,7 +176,9 @@ def main() -> int:
 
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     write_sanitized_json(str(manifest_path), manifest)
-    print(json.dumps(manifest, indent=2))
+    from export_sanitize import sanitize_object
+
+    print(json.dumps(sanitize_object(manifest), indent=2))
     return 0
 
 

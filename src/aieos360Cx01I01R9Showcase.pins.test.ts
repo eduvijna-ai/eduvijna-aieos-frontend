@@ -61,7 +61,10 @@ describe("AIEOS360-CX01-I01R9 showcase rehearsal pin and package consistency", (
     expect(start).not.toContain("SIGINT");
 
     const stop = read(`${SCRIPT_PKG}/stop.mjs`);
-    expect(stop).toContain("stopRegisteredProcessGroups");
+    expect(stop).toContain("cleanupManagedStack");
+    expect(read(`${SCRIPT_PKG}/managed_cleanup.mjs`)).toContain(
+      "removeOwnedContainer",
+    );
     expect(stop).not.toContain("canonical_shutdown");
 
     const lifecycle = read(`${SCRIPT_PKG}/lifecycle_proof.mjs`);
@@ -69,6 +72,10 @@ describe("AIEOS360-CX01-I01R9 showcase rehearsal pin and package consistency", (
     expect(lifecycle).toContain("stop.mjs");
     expect(lifecycle).toContain("four_role_runtime_proof.py");
     expect(lifecycle).not.toContain("foreground_start_sigint");
+
+    const status = read(`${SCRIPT_PKG}/status.mjs`);
+    expect(status).toContain("registry_truth");
+    expect(status).toContain("STATUS_SKIP_LIVE");
   });
 
   it("keeps historical S04-I03 pins unchanged", () => {
