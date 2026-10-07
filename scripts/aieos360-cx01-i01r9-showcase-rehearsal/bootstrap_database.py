@@ -15,14 +15,19 @@ from pathlib import Path
 EXPECTED_MIGRATION_HEAD = "a360s010004"
 
 
-def _cleanup_owned_local_container(script_dir: Path) -> None:
+def _cleanup_owned_local_container(script_dir: Path) -> str | None:
     import subprocess
 
-    subprocess.run(
+    result = subprocess.run(
         ["node", str(script_dir / "remove_owned_pg.mjs")],
         check=False,
         env=os.environ.copy(),
+        capture_output=True,
+        text=True,
     )
+    if result.returncode != 0:
+        return (result.stderr or result.stdout or "owned container cleanup failed").strip()
+    return None
 
 
 def _backend_root() -> Path:
@@ -95,6 +100,14 @@ def main() -> int:
                 "proof: simulated local bootstrap failure after owned container start"
             )
 
+        if (
+            started_container
+            and os.environ.get("AIEOS360_CX01_I01R9_PROOF_BOOTSTRAP_REPORT_WRITE_FAIL")
+            == "1"
+        ):
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            raise OSError("proof: simulated report write failure")
+
         bootstrap = wait_for_engine(b_url)
         with bootstrap.connect() as conn:
             version = conn.execute(text("SHOW server_version")).scalar_one()
@@ -136,33 +149,37 @@ def main() -> int:
                 f"Expected migration head {EXPECTED_MIGRATION_HEAD}; got {head}"
             )
         provision_runtime_grants(bootstrap)
+
+        report = {
+            "postgres_major": 18,
+            "migration_head": head,
+            "runtime_database_url": r_url,
+            "bootstrap_database_url": b_url,
+            "started_container": started_container,
+            "container_name": os.environ.get(
+                "AIEOS360_CX01_I01_SHOWCASE_PG_CONTAINER", "aieos-aieos360-cx01-i01-showcase-pg"
+            )
+            if started_container
+            else None,
+            "port": port,
+            "shared_database": True,
+            "coherent_school_context_provider": "DevelopmentCoherentSchoolContextProvider",
+        }
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(report))
     except BaseException:
         if bootstrap is not None:
             bootstrap.dispose()
         if started_container:
-            _cleanup_owned_local_container(script_dir)
+            cleanup_diag = _cleanup_owned_local_container(script_dir)
+            if cleanup_diag:
+                print(
+                    f"warning: owned container cleanup diagnostic: {cleanup_diag}",
+                    file=sys.stderr,
+                )
         raise
 
-    report = {
-        "postgres_major": 18,
-        "migration_head": head,
-        "runtime_database_url": r_url,
-        "bootstrap_database_url": b_url,
-        "started_container": started_container,
-        "container_name": os.environ.get(
-            "AIEOS360_CX01_I01_SHOWCASE_PG_CONTAINER", "aieos-aieos360-cx01-i01-showcase-pg"
-        )
-        if started_container
-        else None,
-        "port": port,
-        "shared_database": True,
-        "coherent_school_context_provider": "DevelopmentCoherentSchoolContextProvider",
-    }
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(report))
-    if bootstrap is not None:
-        bootstrap.dispose()
     return 0
 
 

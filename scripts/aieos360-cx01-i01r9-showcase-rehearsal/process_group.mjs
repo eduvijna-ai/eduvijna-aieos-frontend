@@ -203,25 +203,57 @@ async function waitForProcessGroupsExit(entries, deadlineAt) {
   return entries.every((entry) => !isProcessGroupAlive(entry.pgid));
 }
 
+const DEFAULT_KILL_RESERVE_MS = 1000;
+
+export function assertValidStopTimeoutMs(stopTimeoutMs) {
+  if (!Number.isFinite(stopTimeoutMs) || stopTimeoutMs <= 0) {
+    throw new Error(`invalid stop timeout: ${stopTimeoutMs}`);
+  }
+  return stopTimeoutMs;
+}
+
+/** Nonzero budget reserved inside the overall stop deadline for SIGKILL + final wait. */
+export function resolveKillReserveMs(stopTimeoutMs) {
+  assertValidStopTimeoutMs(stopTimeoutMs);
+  return Math.min(
+    DEFAULT_KILL_RESERVE_MS,
+    Math.max(1, Math.floor(stopTimeoutMs / 2)),
+  );
+}
+
 export function resolveStopTimeoutMs() {
-  return Number(
+  const raw = Number(
     process.env.AIEOS360_CX01_I01R9_STOP_TIMEOUT_MS ??
       process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_TIMEOUT_MS ??
       "30000",
   );
+  return assertValidStopTimeoutMs(raw);
 }
 
-/** Bounded SIGTERM grace inside the single overall stop deadline (leaves budget for SIGKILL). */
+/** Bounded SIGTERM grace strictly below overall stop timeout (leaves SIGKILL budget). */
 export function resolveTermGraceMs(stopTimeoutMs) {
+  assertValidStopTimeoutMs(stopTimeoutMs);
+  const killReserveMs = resolveKillReserveMs(stopTimeoutMs);
+  const maxTermGraceMs = stopTimeoutMs - killReserveMs;
+  if (maxTermGraceMs <= 0) {
+    throw new Error(
+      `stop timeout too small to reserve SIGKILL budget: ${stopTimeoutMs}`,
+    );
+  }
+
   const configured =
     process.env.AIEOS360_CX01_I01R9_STOP_TERM_GRACE_MS ??
     process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_TERM_GRACE_MS;
+  let requestedMs;
   if (configured !== undefined && configured !== "") {
-    return Math.min(Number(configured), stopTimeoutMs);
+    requestedMs = Number(configured);
+    if (!Number.isFinite(requestedMs) || requestedMs < 0) {
+      throw new Error(`invalid TERM grace: ${configured}`);
+    }
+  } else {
+    requestedMs = Math.floor(stopTimeoutMs / 2);
   }
-  const killReserveMs = 1000;
-  const halfBudget = Math.floor(stopTimeoutMs / 2);
-  return Math.max(0, Math.min(halfBudget, stopTimeoutMs - killReserveMs));
+  return Math.min(requestedMs, maxTermGraceMs);
 }
 
 function registryEntriesToRetain(children, alreadyStopped, rejected, survivors, liveVerified) {
@@ -343,9 +375,11 @@ export async function stopRegisteredProcessGroups() {
   writeProcessRegistry({ ...registry, children: remainingChildren });
 
   const stopElapsedMs = Date.now() - stopStartedAt;
+  const killReserveMs = resolveKillReserveMs(stopTimeoutMs);
   const stopTiming = {
     stop_timeout_ms: stopTimeoutMs,
     term_grace_ms: termGraceMs,
+    kill_reserve_ms: killReserveMs,
     stop_deadline_at_ms: stopDeadlineAt,
     term_grace_deadline_at_ms: termGraceDeadlineAt,
     stop_elapsed_ms: stopElapsedMs,

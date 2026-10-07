@@ -8,7 +8,9 @@ import {
   isProcessGroupAlive,
   linuxProcessStartTime,
   readProcessRegistry,
+  resolveKillReserveMs,
   resolveStopTimeoutMs,
+  resolveTermGraceMs,
   stopRegisteredProcessGroups,
   writeProcessRegistry,
 } from "./process_group.mjs";
@@ -195,6 +197,116 @@ async function testLeaderDeadProcessGroupStillAlive() {
   writeProcessRegistry({ children: [] });
 }
 
+function saveEnv(keys) {
+  const saved = {};
+  for (const key of keys) {
+    saved[key] = process.env[key];
+  }
+  return saved;
+}
+
+function restoreEnv(saved) {
+  for (const [key, value] of Object.entries(saved)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
+function testTermGraceConfiguredCaps() {
+  const envKeys = [
+    "AIEOS360_CX01_I01R9_STOP_TERM_GRACE_MS",
+    "AIEOS360_CX01_I01_SHOWCASE_STOP_TERM_GRACE_MS",
+  ];
+  const saved = saveEnv(envKeys);
+  const stopMs = 5000;
+  const reserve = resolveKillReserveMs(stopMs);
+  const maxGrace = stopMs - reserve;
+  try {
+    process.env.AIEOS360_CX01_I01R9_STOP_TERM_GRACE_MS = "100";
+    if (resolveTermGraceMs(stopMs) !== 100) {
+      throw new Error("TERM grace below cap should be respected");
+    }
+    process.env.AIEOS360_CX01_I01R9_STOP_TERM_GRACE_MS = String(stopMs);
+    if (resolveTermGraceMs(stopMs) !== maxGrace) {
+      throw new Error("TERM grace equal to stop timeout must be capped");
+    }
+    process.env.AIEOS360_CX01_I01R9_STOP_TERM_GRACE_MS = String(stopMs + 10_000);
+    if (resolveTermGraceMs(stopMs) !== maxGrace) {
+      throw new Error("TERM grace above stop timeout must be capped");
+    }
+    if (maxGrace >= stopMs) {
+      throw new Error("max TERM grace must be strictly below stop timeout");
+    }
+    try {
+      resolveTermGraceMs(-1);
+      throw new Error("invalid stop timeout should fail closed");
+    } catch (error) {
+      if (!String(error).includes("invalid stop timeout")) {
+        throw error;
+      }
+    }
+    try {
+      process.env.AIEOS360_CX01_I01R9_STOP_TERM_GRACE_MS = "not-a-number";
+      resolveTermGraceMs(stopMs);
+      throw new Error("invalid configured TERM grace should fail closed");
+    } catch (error) {
+      if (!String(error).includes("invalid TERM grace")) {
+        throw error;
+      }
+    }
+  } finally {
+    restoreEnv(saved);
+  }
+}
+
+async function testTermGraceEqualStopTimeoutStillKills() {
+  writeProcessRegistry({ children: [] });
+  const child = spawn(
+    "bash",
+    ["-c", 'trap "" TERM; sleep 300'],
+    { detached: true, stdio: "ignore" },
+  );
+  child.unref();
+  const pid = child.pid;
+  const pgid = pid;
+  const startTime = linuxProcessStartTime(pid);
+  appendProcessChild({
+    role: "term-ignorer-capped-grace",
+    script: "bash",
+    pid,
+    pgid,
+    startTime,
+    port: null,
+    spawned_at: new Date().toISOString(),
+  });
+  const envKeys = [
+    "AIEOS360_CX01_I01R9_STOP_TIMEOUT_MS",
+    "AIEOS360_CX01_I01R9_STOP_TERM_GRACE_MS",
+  ];
+  const saved = saveEnv(envKeys);
+  try {
+    process.env.AIEOS360_CX01_I01R9_STOP_TIMEOUT_MS = "4000";
+    process.env.AIEOS360_CX01_I01R9_STOP_TERM_GRACE_MS = "4000";
+    const outcome = await stopRegisteredProcessGroups();
+    if (!outcome.ok) {
+      killProcessGroup(pgid);
+      throw new Error(`capped grace kill failed: ${JSON.stringify(outcome)}`);
+    }
+    if (isProcessGroupAlive(pgid)) {
+      killProcessGroup(pgid);
+      throw new Error("SIGKILL should run when configured TERM grace equals stop timeout");
+    }
+    if (outcome.stopTiming.term_grace_ms >= 4000) {
+      throw new Error("configured TERM grace must be capped below stop timeout");
+    }
+  } finally {
+    restoreEnv(saved);
+  }
+}
+
 async function testTermGraceReservesSigkillBudget() {
   writeProcessRegistry({ children: [] });
   const child = spawn(
@@ -240,11 +352,13 @@ async function testTermGraceReservesSigkillBudget() {
   }
 }
 
+testTermGraceConfiguredCaps();
 const sharedDeadline = await testLiveVerifiedGroups();
 await testAlreadyDeadCleanGroup();
 await testBirthIdentityMismatch();
 await testLeaderDeadProcessGroupStillAlive();
 await testTermGraceReservesSigkillBudget();
+await testTermGraceEqualStopTimeoutStillKills();
 
 console.log(
   JSON.stringify({
@@ -255,6 +369,8 @@ console.log(
       "rejected_unsafe_identity_mismatch",
       "rejected_unsafe_leader_dead_pg_alive",
       "term_grace_then_sigkill_within_overall_deadline",
+      "term_grace_configured_caps",
+      "term_grace_equal_stop_timeout_still_kills",
     ],
     shared_stop_deadline_ms: sharedDeadline.shared_stop_deadline_ms,
     stop_timing: sharedDeadline.stop_timing,
