@@ -29,6 +29,11 @@ import {
 } from "./paths.mjs";
 import { cleanupManagedStack } from "./managed_cleanup.mjs";
 import {
+  assertPortsReleased,
+  collectManagedEvidence,
+  DEFAULT_GOVERNED_APP_PORTS,
+} from "./managed_evidence.mjs";
+import {
   buildReadinessTargets,
   buildRoleUrls,
 } from "./role_urls.mjs";
@@ -266,11 +271,23 @@ try {
   );
 } catch (error) {
   const cleanup = await cleanupManagedStack({ removeOwnedLocalContainer: false });
+  let portsReleased = false;
+  let portReleaseError = null;
+  try {
+    await assertPortsReleased(DEFAULT_GOVERNED_APP_PORTS);
+    portsReleased = true;
+  } catch (portError) {
+    portReleaseError = String(portError);
+  }
+  const managedEvidence = collectManagedEvidence();
   writeOperatorStatus({
     phase: "start_failed",
     classification: "NON_PRODUCTION",
     failure_reason: String(error),
     cleanup_process_groups: cleanup,
+    governed_app_ports_released: portsReleased,
+    port_release_error: portReleaseError,
+    managed_evidence_after_cleanup: managedEvidence,
     failed_at: new Date().toISOString(),
   });
   console.error(error);

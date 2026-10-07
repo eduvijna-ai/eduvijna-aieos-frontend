@@ -60,6 +60,18 @@ describe("AIEOS360-CX01-I01R9 Codex correction regressions", () => {
     expect(seed).not.toMatch(/print\(json\.dumps\(fixture,/);
   });
 
+  it("uses one shared stop-wide deadline for all process groups", () => {
+    const pg = read(`${scriptPkg}/process_group.mjs`);
+    expect(pg).toContain("stopDeadlineAt");
+    expect(pg).toContain("resolveStopTimeoutMs");
+    const result = spawnSync(
+      "node",
+      [path.join(repoRoot, scriptPkg, "process_group_stop.selftest.mjs")],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+  });
+
   it("pin guard rejects tracked changes but ignores untracked files", () => {
     const pinGuard = read(`${scriptPkg}/pin_guard.mjs`);
     expect(pinGuard).toContain("--untracked-files=no");

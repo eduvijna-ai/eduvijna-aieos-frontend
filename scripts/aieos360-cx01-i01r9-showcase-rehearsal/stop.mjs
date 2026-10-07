@@ -31,6 +31,7 @@ if (!cleanup.ok || cleanup.rejected?.length > 0) {
     classification: "NON_PRODUCTION",
     rejected: cleanup.rejected,
     container_outcome: cleanup.containerOutcome,
+    stop_timing: cleanup.stopTiming,
     error: cleanup.error,
     stopped_at: new Date().toISOString(),
   });
@@ -70,6 +71,7 @@ writeOperatorStatus({
   classification: "NON_PRODUCTION",
   ports_released: governedPorts.length > 0,
   owned_local_container_removed: Boolean(cleanup.containerOutcome?.removed),
+  stop_timing: cleanup.stopTiming,
   stopped_at: new Date().toISOString(),
 });
 
@@ -81,6 +83,7 @@ console.log(
       phase: "stopped",
       governed_ports_released: governedPorts.length > 0,
       owned_local_container_removed: Boolean(cleanup.containerOutcome?.removed),
+      stop_timing: cleanup.stopTiming,
     },
     null,
     2,

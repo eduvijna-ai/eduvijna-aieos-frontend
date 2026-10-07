@@ -3,6 +3,12 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  assertPortsReleased,
+  collectManagedEvidence,
+  DEFAULT_GOVERNED_APP_PORTS,
+} from "./managed_evidence.mjs";
+import { resolveStopTimeoutMs } from "./process_group.mjs";
 import { repoRoot, statusPath } from "./paths.mjs";
 
 const scriptDir = join(repoRoot, "scripts/aieos360-cx01-i01r9-showcase-rehearsal");
@@ -51,6 +57,10 @@ if (reset.status !== 0) {
 
 let stackStarted = false;
 let proofError = null;
+let governedPortsBeforeStop = [];
+let liveBeforeStop = null;
+const stopTimeoutMs = resolveStopTimeoutMs();
+let stopWatchElapsedMs = 0;
 
 try {
   const start = runNode("start.mjs", {
@@ -70,18 +80,27 @@ try {
     throw new Error("four_role_runtime_proof.py failed");
   }
 
-  const status = runNode("status.mjs", {
-    AIEOS360_CX01_I01_SHOWCASE_REQUIRE_LIVE: "1",
-  });
+  const status = runNode("status.mjs");
   if (status.status !== 0) {
     console.error(status.stdout);
     console.error(status.stderr);
     throw new Error(`status.mjs failed with ${status.status}`);
   }
+
+  liveBeforeStop = collectManagedEvidence();
+  if (liveBeforeStop.live_process_count !== 8) {
+    throw new Error(
+      `expected 8 live managed processes before stop; got ${liveBeforeStop.live_process_count}`,
+    );
+  }
+  const runningStatus = JSON.parse(readFileSync(statusPath, "utf8"));
+  governedPortsBeforeStop = runningStatus.governed_ports ?? DEFAULT_GOVERNED_APP_PORTS;
 } catch (error) {
   proofError = error;
 } finally {
+  const stopStartedAt = Date.now();
   const stop = runNode("stop.mjs");
+  stopWatchElapsedMs = Date.now() - stopStartedAt;
   if (stop.status !== 0) {
     console.error(stop.stdout);
     console.error(stop.stderr);
@@ -105,6 +124,31 @@ if (finalStatus.phase !== "stopped") {
   throw new Error(`expected phase stopped; got ${finalStatus.phase}`);
 }
 
+const liveAfterStop = collectManagedEvidence();
+if (liveAfterStop.live_process_count !== 0) {
+  throw new Error(
+    `expected no live managed processes after stop; got ${liveAfterStop.live_process_count}`,
+  );
+}
+
+const portsToCheck =
+  governedPortsBeforeStop.length > 0
+    ? governedPortsBeforeStop
+    : DEFAULT_GOVERNED_APP_PORTS;
+await assertPortsReleased(portsToCheck);
+
+const stopTiming = finalStatus.stop_timing ?? {};
+if (!stopTiming.within_deadline) {
+  throw new Error(
+    `stop exceeded shared deadline: ${JSON.stringify(stopTiming)}`,
+  );
+}
+if (stopTiming.stop_elapsed_ms > stopTimeoutMs) {
+  throw new Error(
+    `stop_elapsed_ms ${stopTiming.stop_elapsed_ms} > stop_timeout_ms ${stopTimeoutMs}`,
+  );
+}
+
 const proof = {
   lifecycle: [
     "reset",
@@ -116,6 +160,15 @@ const proof = {
   final_phase: finalStatus.phase,
   classification: "NON_PRODUCTION",
   managed_linux_process_groups: true,
+  normal_explicit_stop_cleanup: {
+    live_process_count_before_stop: liveBeforeStop?.live_process_count,
+    live_process_count_after_stop: liveAfterStop.live_process_count,
+    governed_app_ports_released: portsToCheck,
+    stop_timeout_ms: stopTimeoutMs,
+    stop_timing: stopTiming,
+    stop_watch_elapsed_ms: stopWatchElapsedMs,
+    within_shared_stop_deadline: true,
+  },
 };
 const tmpDir = join(repoRoot, "tmp");
 mkdirSync(tmpDir, { recursive: true });

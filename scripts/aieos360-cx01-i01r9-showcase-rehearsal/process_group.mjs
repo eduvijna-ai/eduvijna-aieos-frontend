@@ -138,41 +138,118 @@ export async function waitForPidExit(pid, timeoutMs) {
   return !isPidAlive(pid);
 }
 
-export async function stopRegisteredProcessGroups({
-  termTimeoutMs = Number(
-    process.env.AIEOS360_CX01_I01R9_STOP_TERM_TIMEOUT_MS || "15000",
-  ),
-} = {}) {
+function remainingMs(deadlineAt) {
+  return Math.max(0, deadlineAt - Date.now());
+}
+
+async function waitForEntriesExit(entries, deadlineAt) {
+  while (remainingMs(deadlineAt) > 0) {
+    const alive = entries.filter((entry) => isPidAlive(entry.pid));
+    if (alive.length === 0) {
+      return true;
+    }
+    await sleep(Math.min(200, remainingMs(deadlineAt)));
+  }
+  return entries.every((entry) => !isPidAlive(entry.pid));
+}
+
+export function resolveStopTimeoutMs() {
+  return Number(
+    process.env.AIEOS360_CX01_I01R9_STOP_TIMEOUT_MS ??
+      process.env.AIEOS360_CX01_I01_SHOWCASE_STOP_TIMEOUT_MS ??
+      "30000",
+  );
+}
+
+/** One shared absolute deadline for the entire managed stack stop operation. */
+export async function stopRegisteredProcessGroups() {
+  const stopTimeoutMs = resolveStopTimeoutMs();
+  const stopStartedAt = Date.now();
+  const stopDeadlineAt = stopStartedAt + stopTimeoutMs;
+
   const registry = readProcessRegistry();
   const children = registry.children ?? [];
   const rejected = [];
+  const verified = [];
 
   for (const entry of children) {
     const identity = verifyRegistryEntry(entry);
     if (!identity.ok) {
-      rejected.push({ ...entry, reason: identity.reason });
-      continue;
-    }
-    try {
-      process.kill(-entry.pgid, "SIGTERM");
-    } catch (error) {
-      rejected.push({ ...entry, reason: String(error) });
-      continue;
-    }
-    const exited = await waitForPidExit(entry.pid, termTimeoutMs);
-    if (!exited && isPidAlive(entry.pid)) {
-      try {
-        process.kill(-entry.pgid, "SIGKILL");
-      } catch (error) {
-        rejected.push({ ...entry, reason: `SIGKILL failed: ${error}` });
-        continue;
-      }
-      await waitForPidExit(entry.pid, 5_000);
+      rejected.push({ ...entry, phase: "pre_signal", reason: identity.reason });
+    } else {
+      verified.push(entry);
     }
   }
 
+  for (const entry of verified) {
+    try {
+      process.kill(-entry.pgid, "SIGTERM");
+    } catch (error) {
+      rejected.push({ ...entry, phase: "sigterm", reason: String(error) });
+    }
+  }
+
+  const termPhaseStarted = Date.now();
+  const termTargets = verified.filter(
+    (entry) => !rejected.some((r) => r.pid === entry.pid),
+  );
+  await waitForEntriesExit(termTargets, stopDeadlineAt);
+  const termPhaseEnded = Date.now();
+
+  const killTargets = termTargets.filter((entry) => {
+    const identity = verifyRegistryEntry(entry);
+    return identity.ok && isPidAlive(entry.pid);
+  });
+
+  for (const entry of killTargets) {
+    if (remainingMs(stopDeadlineAt) <= 0) {
+      break;
+    }
+    const identity = verifyRegistryEntry(entry);
+    if (!identity.ok) {
+      rejected.push({ ...entry, phase: "pre_kill", reason: identity.reason });
+      continue;
+    }
+    try {
+      process.kill(-entry.pgid, "SIGKILL");
+    } catch (error) {
+      rejected.push({ ...entry, phase: "sigkill", reason: String(error) });
+    }
+  }
+
+  await waitForEntriesExit(
+    termTargets.filter((entry) => !rejected.some((r) => r.pid === entry.pid)),
+    stopDeadlineAt,
+  );
+
+  const survivors = termTargets.filter((entry) => {
+    const identity = verifyRegistryEntry(entry);
+    return identity.ok && isPidAlive(entry.pid);
+  });
+  for (const entry of survivors) {
+    rejected.push({
+      ...entry,
+      phase: "survivor",
+      reason: "survived stop-wide deadline",
+    });
+  }
+
   writeProcessRegistry({ ...registry, children: [] });
-  return { stopped: children.length, rejected };
+
+  const stopElapsedMs = Date.now() - stopStartedAt;
+  const stopTiming = {
+    stop_timeout_ms: stopTimeoutMs,
+    stop_deadline_at_ms: stopDeadlineAt,
+    stop_elapsed_ms: stopElapsedMs,
+    term_phase_ms: termPhaseEnded - termPhaseStarted,
+    kill_phase_ms: Date.now() - termPhaseEnded,
+    rejected_count: rejected.length,
+    survivor_count: survivors.length,
+    within_deadline: stopElapsedMs <= stopTimeoutMs && survivors.length === 0,
+  };
+
+  const ok = rejected.length === 0 && survivors.length === 0;
+  return { stopped: children.length, rejected, stopTiming, ok };
 }
 
 export async function waitForHttpOk(url, timeoutMs = 120_000) {

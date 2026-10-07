@@ -78,10 +78,10 @@ export async function cleanupManagedStack({
     }
   }
 
-  const processOk = outcome.rejected.length === 0;
+  const processOk = outcome.ok === true;
   return {
     ...outcome,
     containerOutcome,
-    ok: processOk,
+    ok: processOk && !outcome.error,
   };
 }

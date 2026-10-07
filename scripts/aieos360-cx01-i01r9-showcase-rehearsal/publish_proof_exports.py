@@ -21,6 +21,8 @@ def main() -> int:
         "aieos360-cx01-i01-showcase-shared-db-proof.json",
         "aieos360-cx01-i01-showcase-four-role-runtime-proof.json",
         "aieos360-cx01-i01-showcase-lifecycle-proof.json",
+        "aieos360-cx01-i01-showcase-partial-start-cleanup-proof.json",
+        "aieos360-cx01-i01-showcase-owned-local-pg-cleanup-proof.json",
         "aieos360-cx01-i01-showcase-manifest.json",
     )
     merged: dict = {
