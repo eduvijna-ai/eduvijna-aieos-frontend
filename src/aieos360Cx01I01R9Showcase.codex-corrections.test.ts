@@ -43,6 +43,11 @@ describe("AIEOS360-CX01-I01R9 Codex correction regressions", () => {
     const start = read(`${scriptPkg}/start.mjs`);
     expect(start).toContain("cleanupManagedStack");
     expect(start).toContain('phase: "start_failed"');
+    const partialProof = read(`${scriptPkg}/partial_start_cleanup_proof.mjs`);
+    expect(partialProof).toContain("AIEOS360_CX01_I01R9_PROOF_FAIL_STUDENT_BACKEND");
+    expect(partialProof).not.toContain("59997");
+    const studentServe = read(`${scriptPkg}/serve_student_app.py`);
+    expect(studentServe).toContain("AIEOS360_CX01_I01R9_PROOF_FAIL_STUDENT_BACKEND");
   });
 
   it("stop removes only governed owned local PostgreSQL when lifecycle started it", () => {

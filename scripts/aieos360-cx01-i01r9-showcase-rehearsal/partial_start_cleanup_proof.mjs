@@ -39,14 +39,15 @@ if (reset.status !== 0) {
   process.exit(reset.status ?? 1);
 }
 
-const blockedStudentPort = 59997;
 const start = runNode("start.mjs", {
   AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET: "1",
-  AIEOS360_CX01_I01_SHOWCASE_STUDENT_BACKEND_PORT: String(blockedStudentPort),
-  AIEOS360_CX01_I01_SHOWCASE_START_READINESS_TIMEOUT_MS: "8000",
+  AIEOS360_CX01_I01R9_PROOF_FAIL_STUDENT_BACKEND: "1",
+  AIEOS360_CX01_I01_SHOWCASE_START_READINESS_TIMEOUT_MS: "120000",
 });
 if (start.status === 0) {
-  console.error("expected start.mjs to fail with blocked student backend port");
+  console.error(
+    "expected start.mjs to fail with AIEOS360_CX01_I01R9_PROOF_FAIL_STUDENT_BACKEND=1",
+  );
   runNode("stop.mjs");
   process.exit(1);
 }
@@ -86,7 +87,7 @@ const proof = {
   start_exit_status: start.status,
   operator_phase: operatorStatus.phase,
   teacher_backend_port: DEFAULT_TEACHER_BACKEND_PORT,
-  blocked_student_backend_port: blockedStudentPort,
+  proof_fail_student_backend_hook: "AIEOS360_CX01_I01R9_PROOF_FAIL_STUDENT_BACKEND=1",
   governed_app_ports_released: operatorStatus.governed_app_ports_released,
   live_process_count_after_cleanup: evidence.live_process_count,
   cleanup_stop_timing: cleanup.stopTiming,

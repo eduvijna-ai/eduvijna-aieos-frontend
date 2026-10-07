@@ -20,6 +20,10 @@ def _backend_root() -> Path:
 
 
 def main() -> int:
+    # PROOF-ONLY: deterministic student-backend failure for partial-start cleanup CI proof.
+    if os.environ.get("AIEOS360_CX01_I01R9_PROOF_FAIL_STUDENT_BACKEND") == "1":
+        raise SystemExit(71)
+
     backend = _backend_root()
     sys.path.insert(0, str(backend / "src"))
     sys.path.insert(0, str(backend))
