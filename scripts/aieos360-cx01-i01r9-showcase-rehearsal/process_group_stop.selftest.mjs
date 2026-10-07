@@ -2,18 +2,29 @@
 /** Mandatory local semantic selftest: PGID-aware stop classification + shared deadline. */
 import { spawn } from "node:child_process";
 import {
+  existsSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import {
   appendProcessChild,
+  assertManagedStartRegistryGate,
   classifyRegistryEntry,
+  emptyProcessRegistry,
   isPidAlive,
   isProcessGroupAlive,
   linuxProcessStartTime,
   readProcessRegistry,
+  REGISTRY_OWNER,
+  REGISTRY_VERSION,
   resolveKillReserveMs,
   resolveStopTimeoutMs,
   resolveTermGraceMs,
   stopRegisteredProcessGroups,
   writeProcessRegistry,
 } from "./process_group.mjs";
+import { processesPath } from "./paths.mjs";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -27,6 +38,137 @@ function killProcessGroup(pgid) {
       process.kill(pgid, "SIGKILL");
     } catch {
       /* gone */
+    }
+  }
+}
+
+function assertThrows(fn, includes) {
+  try {
+    fn();
+    throw new Error(`expected throw containing "${includes}"`);
+  } catch (error) {
+    if (!String(error).includes(includes)) {
+      throw error;
+    }
+  }
+}
+
+function testProcessRegistryContracts() {
+  const hadRegistry = existsSync(processesPath);
+  const priorBytes = hadRegistry ? readFileSync(processesPath) : null;
+
+  try {
+    if (hadRegistry) {
+      unlinkSync(processesPath);
+    }
+    const absent = readProcessRegistry();
+    const canonical = emptyProcessRegistry();
+    if (
+      absent.owner !== canonical.owner ||
+      absent.registry_version !== canonical.registry_version ||
+      absent.children.length !== 0
+    ) {
+      throw new Error("absent registry must yield canonical empty document");
+    }
+
+    writeFileSync(processesPath, "{not-json\n", "utf8");
+    const malformedBytes = readFileSync(processesPath);
+    assertThrows(() => readProcessRegistry(), "process registry parse failed");
+    if (!readFileSync(processesPath).equals(malformedBytes)) {
+      throw new Error("malformed registry file must remain unchanged on read failure");
+    }
+
+    const wrongOwner = JSON.stringify({
+      owner: "foreign",
+      registry_version: 1,
+      children: [],
+    });
+    writeFileSync(processesPath, wrongOwner, "utf8");
+    assertThrows(() => readProcessRegistry(), "invalid process registry owner");
+    if (readFileSync(processesPath, "utf8") !== wrongOwner) {
+      throw new Error("wrong-owner registry must remain unchanged on read failure");
+    }
+
+    const wrongVersion = JSON.stringify({
+      owner: REGISTRY_OWNER,
+      registry_version: 99,
+      children: [],
+    });
+    writeFileSync(processesPath, wrongVersion, "utf8");
+    assertThrows(() => readProcessRegistry(), "unsupported process registry version");
+    if (readFileSync(processesPath, "utf8") !== wrongVersion) {
+      throw new Error("wrong-version registry must remain unchanged on read failure");
+    }
+
+    const badChildren = JSON.stringify({
+      owner: REGISTRY_OWNER,
+      registry_version: REGISTRY_VERSION,
+      children: "not-an-array",
+    });
+    writeFileSync(processesPath, badChildren, "utf8");
+    assertThrows(() => readProcessRegistry(), "children must be an array");
+    if (readFileSync(processesPath, "utf8") !== badChildren) {
+      throw new Error("invalid children shape must remain unchanged on read failure");
+    }
+
+    writeProcessRegistry({ children: [] });
+    writeProcessRegistry({
+      owner: "evil",
+      registry_version: 99,
+      children: [],
+    });
+    const written = readProcessRegistry();
+    if (written.owner !== REGISTRY_OWNER || written.registry_version !== REGISTRY_VERSION) {
+      throw new Error("writer must not persist foreign owner/version");
+    }
+
+    const live = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+    live.unref();
+    const livePid = live.pid;
+    const liveStart = linuxProcessStartTime(livePid);
+    writeProcessRegistry({
+      children: [
+        {
+          role: "gate-live",
+          script: "sleep",
+          pid: livePid,
+          pgid: livePid,
+          startTime: liveStart,
+          port: null,
+          spawned_at: new Date().toISOString(),
+        },
+      ],
+    });
+    const runningGate = assertManagedStartRegistryGate();
+    if (runningGate.ok || runningGate.code !== "already_running") {
+      killProcessGroup(livePid);
+      throw new Error("live_verified registry must block managed start");
+    }
+    killProcessGroup(livePid);
+
+    writeProcessRegistry({
+      children: [
+        {
+          role: "gate-unsafe",
+          script: "sleep",
+          pid: livePid,
+          pgid: livePid + 1,
+          startTime: liveStart,
+          port: null,
+          spawned_at: new Date().toISOString(),
+        },
+      ],
+    });
+    const unsafeGate = assertManagedStartRegistryGate();
+    if (unsafeGate.ok || unsafeGate.code !== "unsafe_unresolved") {
+      throw new Error("rejected_unsafe registry must block managed start");
+    }
+    writeProcessRegistry({ children: [] });
+  } finally {
+    if (priorBytes !== null) {
+      writeFileSync(processesPath, priorBytes);
+    } else if (existsSync(processesPath)) {
+      unlinkSync(processesPath);
     }
   }
 }
@@ -46,6 +188,49 @@ function spawnSleep(role) {
     spawned_at: new Date().toISOString(),
   });
   return { pid, pgid: pid, startTime };
+}
+
+async function testCorruptedPgidRegistryEntry() {
+  writeProcessRegistry({ children: [] });
+  const groupA = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+  groupA.unref();
+  const groupB = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+  groupB.unref();
+  const pidA = groupA.pid;
+  const pidB = groupB.pid;
+  const startA = linuxProcessStartTime(pidA);
+  writeProcessRegistry({
+    children: [
+      {
+        role: "corrupted-pgid",
+        script: "sleep",
+        pid: pidA,
+        pgid: pidB,
+        startTime: startA,
+        port: null,
+        spawned_at: new Date().toISOString(),
+      },
+    ],
+  });
+  const outcome = await stopRegisteredProcessGroups();
+  if (outcome.ok) {
+    killProcessGroup(pidA);
+    killProcessGroup(pidB);
+    throw new Error("corrupted pgid entry must fail stop closed");
+  }
+  if ((readProcessRegistry().children?.length ?? 0) !== 1) {
+    killProcessGroup(pidA);
+    killProcessGroup(pidB);
+    throw new Error("corrupted registry entry must be preserved");
+  }
+  if (!isProcessGroupAlive(pidB) || !isProcessGroupAlive(pidA)) {
+    killProcessGroup(pidA);
+    killProcessGroup(pidB);
+    throw new Error("corrupted entry must not signal unrelated or true process groups");
+  }
+  writeProcessRegistry({ children: [] });
+  killProcessGroup(pidA);
+  killProcessGroup(pidB);
 }
 
 async function testLiveVerifiedGroups() {
@@ -257,6 +442,24 @@ function testTermGraceConfiguredCaps() {
         throw error;
       }
     }
+    try {
+      process.env.AIEOS360_CX01_I01R9_STOP_TERM_GRACE_MS = "0";
+      resolveTermGraceMs(stopMs);
+      throw new Error("zero configured TERM grace should fail closed");
+    } catch (error) {
+      if (!String(error).includes("invalid TERM grace")) {
+        throw error;
+      }
+    }
+    try {
+      process.env.AIEOS360_CX01_I01R9_STOP_TERM_GRACE_MS = "-1";
+      resolveTermGraceMs(stopMs);
+      throw new Error("negative configured TERM grace should fail closed");
+    } catch (error) {
+      if (!String(error).includes("invalid TERM grace")) {
+        throw error;
+      }
+    }
   } finally {
     restoreEnv(saved);
   }
@@ -352,7 +555,9 @@ async function testTermGraceReservesSigkillBudget() {
   }
 }
 
+testProcessRegistryContracts();
 testTermGraceConfiguredCaps();
+await testCorruptedPgidRegistryEntry();
 const sharedDeadline = await testLiveVerifiedGroups();
 await testAlreadyDeadCleanGroup();
 await testBirthIdentityMismatch();
@@ -364,6 +569,12 @@ console.log(
   JSON.stringify({
     ok: true,
     cases: [
+      "registry_absent_canonical_empty",
+      "registry_malformed_fail_closed",
+      "registry_owner_version_shape_fail_closed",
+      "registry_writer_owner_version_authoritative",
+      "managed_start_gate_live_and_unsafe",
+      "rejected_unsafe_corrupted_pgid",
       "live_verified",
       "already_stopped",
       "rejected_unsafe_identity_mismatch",

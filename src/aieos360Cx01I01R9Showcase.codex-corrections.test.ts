@@ -78,6 +78,10 @@ describe("AIEOS360-CX01-I01R9 Codex correction regressions", () => {
     expect(pg).toContain("resolveKillReserveMs");
     expect(pg).toContain("term_grace_deadline_at_ms");
     expect(pg).toContain("kill_reserve_ms");
+    expect(pg).toContain("signalAuthorityRejectedReason");
+    expect(pg).toContain("assertManagedStartRegistryGate");
+    expect(pg).toContain('error?.code === "ENOENT"');
+    expect(pg).toContain("process registry parse failed");
     const bootstrap = read(`${scriptPkg}/bootstrap_database.py`);
     expect(bootstrap).toContain("_cleanup_owned_local_container");
     expect(bootstrap).toContain("remove_owned_pg.mjs");

@@ -38,9 +38,9 @@ import {
   buildRoleUrls,
 } from "./role_urls.mjs";
 import {
+  assertManagedStartRegistryGate,
   readProcessRegistry,
   spawnDetachedProcessGroup,
-  verifyRegistryEntry,
   waitForHttpOk,
   writeOperatorStatus,
   writeProcessRegistry,
@@ -58,10 +58,10 @@ mkdirSync(tmpDir, { recursive: true });
 runPinGuard();
 
 function assertNotAlreadyRunning() {
-  const registry = readProcessRegistry();
-  for (const entry of registry.children ?? []) {
-    const identity = verifyRegistryEntry(entry);
-    if (identity.ok) {
+  const gate = assertManagedStartRegistryGate();
+  if (!gate.ok) {
+    const entry = gate.entry;
+    if (gate.code === "already_running") {
       console.error(
         JSON.stringify(
           {
@@ -73,8 +73,22 @@ function assertNotAlreadyRunning() {
           2,
         ),
       );
-      process.exit(1);
+    } else {
+      console.error(
+        JSON.stringify(
+          {
+            error: "CX01-I01R9 showcase registry has unsafe unresolved evidence",
+            code: gate.code,
+            pid: entry.pid,
+            role: entry.role,
+            reason: gate.reason,
+          },
+          null,
+          2,
+        ),
+      );
     }
+    process.exit(1);
   }
 }
 

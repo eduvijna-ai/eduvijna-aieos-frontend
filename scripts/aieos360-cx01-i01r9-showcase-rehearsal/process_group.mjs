@@ -3,29 +3,72 @@ import { spawn } from "node:child_process";
 import { dirname } from "node:path";
 import { processesPath, statusPath } from "./paths.mjs";
 
-const REGISTRY_OWNER = "aieos360-cx01-i01r9-showcase";
+export const REGISTRY_OWNER = "aieos360-cx01-i01r9-showcase";
+export const REGISTRY_VERSION = 1;
+
+export function emptyProcessRegistry() {
+  return {
+    owner: REGISTRY_OWNER,
+    registry_version: REGISTRY_VERSION,
+    children: [],
+  };
+}
+
+function isSafePositiveInteger(value) {
+  return Number.isInteger(value) && value > 0;
+}
+
+export function validateRegistryDocument(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("invalid process registry: not an object");
+  }
+  if (parsed.owner !== REGISTRY_OWNER) {
+    throw new Error(`invalid process registry owner: ${parsed.owner}`);
+  }
+  if (parsed.registry_version !== REGISTRY_VERSION) {
+    throw new Error(
+      `unsupported process registry version: ${parsed.registry_version}`,
+    );
+  }
+  if (!Array.isArray(parsed.children)) {
+    throw new Error("invalid process registry: children must be an array");
+  }
+  return parsed;
+}
 
 export function readProcessRegistry() {
+  let raw;
   try {
-    return JSON.parse(readFileSync(processesPath, "utf8"));
-  } catch {
-    return { owner: REGISTRY_OWNER, children: [] };
+    raw = readFileSync(processesPath, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return emptyProcessRegistry();
+    }
+    throw new Error(`process registry read failed: ${error?.message ?? error}`);
   }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`process registry parse failed: ${error?.message ?? error}`);
+  }
+  return validateRegistryDocument(parsed);
 }
 
 export function writeProcessRegistry(registry) {
+  const children = registry?.children;
+  if (!Array.isArray(children)) {
+    throw new Error("invalid process registry write: children must be an array");
+  }
   mkdirSync(dirname(processesPath), { recursive: true });
+  const document = {
+    owner: REGISTRY_OWNER,
+    registry_version: REGISTRY_VERSION,
+    children,
+  };
   writeFileSync(
     processesPath,
-    JSON.stringify(
-      {
-        owner: REGISTRY_OWNER,
-        registry_version: 1,
-        ...registry,
-      },
-      null,
-      2,
-    ) + "\n",
+    JSON.stringify(document, null, 2) + "\n",
     "utf8",
   );
 }
@@ -78,6 +121,27 @@ export function isProcessGroupAlive(pgid) {
   }
 }
 
+/** Signal-authority preconditions before any negative-PGID signal eligibility. */
+export function signalAuthorityRejectedReason(entry) {
+  if (!entry || typeof entry !== "object") {
+    return "incomplete registry entry";
+  }
+  const { pid, pgid, startTime } = entry;
+  if (pid === undefined && pgid === undefined && startTime === undefined) {
+    return "incomplete registry entry";
+  }
+  if (!isSafePositiveInteger(pid) || !isSafePositiveInteger(pgid)) {
+    return "invalid signal authority pid/pgid";
+  }
+  if (typeof startTime !== "string" || startTime.length === 0) {
+    return "invalid signal authority birth identity";
+  }
+  if (pgid !== pid) {
+    return "pgid must equal detached leader pid";
+  }
+  return null;
+}
+
 /**
  * PRE-SIGNAL classification for governed registry entries.
  * - live_verified: leader alive + matching birth identity
@@ -85,10 +149,11 @@ export function isProcessGroupAlive(pgid) {
  * - rejected_unsafe: incomplete, identity mismatch, or leader dead while PG still exists
  */
 export function classifyRegistryEntry(entry) {
-  if (!entry?.pid || !entry?.pgid || !entry?.startTime) {
+  const authorityReason = signalAuthorityRejectedReason(entry);
+  if (authorityReason) {
     return {
       classification: "rejected_unsafe",
-      reason: "incomplete registry entry",
+      reason: authorityReason,
     };
   }
 
@@ -129,10 +194,37 @@ export function verifyRegistryEntry(entry) {
   return { ok: false, reason: classified.reason };
 }
 
+/**
+ * Managed start may proceed only when the registry is empty or all entries are already_stopped.
+ * live_verified and rejected_unsafe entries block start (running or unsafe recovery evidence).
+ */
+export function assertManagedStartRegistryGate(registry = readProcessRegistry()) {
+  for (const entry of registry.children ?? []) {
+    const classified = classifyRegistryEntry(entry);
+    if (classified.classification === "live_verified") {
+      return {
+        ok: false,
+        code: "already_running",
+        entry,
+        reason: classified.reason,
+      };
+    }
+    if (classified.classification === "rejected_unsafe") {
+      return {
+        ok: false,
+        code: "unsafe_unresolved",
+        entry,
+        reason: classified.reason,
+      };
+    }
+  }
+  return { ok: true };
+}
+
 export function appendProcessChild(entry) {
   const registry = readProcessRegistry();
-  const children = [...(registry.children ?? []), entry];
-  writeProcessRegistry({ ...registry, children });
+  const children = [...registry.children, entry];
+  writeProcessRegistry({ children });
   return entry;
 }
 
@@ -247,7 +339,7 @@ export function resolveTermGraceMs(stopTimeoutMs) {
   let requestedMs;
   if (configured !== undefined && configured !== "") {
     requestedMs = Number(configured);
-    if (!Number.isFinite(requestedMs) || requestedMs < 0) {
+    if (!Number.isFinite(requestedMs) || requestedMs <= 0) {
       throw new Error(`invalid TERM grace: ${configured}`);
     }
   } else {
@@ -372,7 +464,7 @@ export async function stopRegisteredProcessGroups() {
     survivors,
     verifiedAtPreSignal,
   );
-  writeProcessRegistry({ ...registry, children: remainingChildren });
+  writeProcessRegistry({ children: remainingChildren });
 
   const stopElapsedMs = Date.now() - stopStartedAt;
   const killReserveMs = resolveKillReserveMs(stopTimeoutMs);
