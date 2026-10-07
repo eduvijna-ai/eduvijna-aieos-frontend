@@ -62,21 +62,42 @@ export function isPidAlive(pid) {
   }
 }
 
-export function verifyRegistryEntry(entry) {
+/**
+ * Classify a governed registry entry at stop/cleanup time.
+ * - already_stopped: PID not alive — cleanup success, never rejected
+ * - owned_live: PID alive with matching birth identity — safe to signal
+ * - unsafe_identity_mismatch: PID alive but identity mismatch — fail closed, do not signal
+ */
+export function classifyRegistryEntry(entry) {
   if (!entry?.pid || !entry?.pgid || !entry?.startTime) {
-    return { ok: false, reason: "incomplete registry entry" };
+    return {
+      classification: "unsafe_identity_mismatch",
+      reason: "incomplete registry entry",
+    };
   }
   if (!isPidAlive(entry.pid)) {
-    return { ok: false, reason: "pid not alive" };
+    return { classification: "already_stopped" };
   }
   const currentStart = linuxProcessStartTime(entry.pid);
   if (currentStart !== entry.startTime) {
     return {
-      ok: false,
+      classification: "unsafe_identity_mismatch",
       reason: `birth identity mismatch (expected ${entry.startTime}, got ${currentStart})`,
     };
   }
-  return { ok: true };
+  return { classification: "owned_live" };
+}
+
+/** True only when the entry is a live governed process with matching birth identity. */
+export function verifyRegistryEntry(entry) {
+  const classified = classifyRegistryEntry(entry);
+  if (classified.classification === "owned_live") {
+    return { ok: true };
+  }
+  if (classified.classification === "already_stopped") {
+    return { ok: false, reason: "pid not alive" };
+  }
+  return { ok: false, reason: classified.reason };
 }
 
 export function appendProcessChild(entry) {
@@ -170,18 +191,26 @@ export async function stopRegisteredProcessGroups() {
   const registry = readProcessRegistry();
   const children = registry.children ?? [];
   const rejected = [];
-  const verified = [];
+  const alreadyStopped = [];
+  const ownedLive = [];
 
   for (const entry of children) {
-    const identity = verifyRegistryEntry(entry);
-    if (!identity.ok) {
-      rejected.push({ ...entry, phase: "pre_signal", reason: identity.reason });
+    const classified = classifyRegistryEntry(entry);
+    if (classified.classification === "already_stopped") {
+      alreadyStopped.push({ ...entry, classification: "already_stopped" });
+    } else if (classified.classification === "owned_live") {
+      ownedLive.push(entry);
     } else {
-      verified.push(entry);
+      rejected.push({
+        ...entry,
+        phase: "pre_signal",
+        classification: "unsafe_identity_mismatch",
+        reason: classified.reason,
+      });
     }
   }
 
-  for (const entry of verified) {
+  for (const entry of ownedLive) {
     try {
       process.kill(-entry.pgid, "SIGTERM");
     } catch (error) {
@@ -190,24 +219,32 @@ export async function stopRegisteredProcessGroups() {
   }
 
   const termPhaseStarted = Date.now();
-  const termTargets = verified.filter(
+  const termTargets = ownedLive.filter(
     (entry) => !rejected.some((r) => r.pid === entry.pid),
   );
   await waitForEntriesExit(termTargets, stopDeadlineAt);
   const termPhaseEnded = Date.now();
 
   const killTargets = termTargets.filter((entry) => {
-    const identity = verifyRegistryEntry(entry);
-    return identity.ok && isPidAlive(entry.pid);
+    const classified = classifyRegistryEntry(entry);
+    return classified.classification === "owned_live";
   });
 
   for (const entry of killTargets) {
     if (remainingMs(stopDeadlineAt) <= 0) {
       break;
     }
-    const identity = verifyRegistryEntry(entry);
-    if (!identity.ok) {
-      rejected.push({ ...entry, phase: "pre_kill", reason: identity.reason });
+    const classified = classifyRegistryEntry(entry);
+    if (classified.classification === "already_stopped") {
+      continue;
+    }
+    if (classified.classification === "unsafe_identity_mismatch") {
+      rejected.push({
+        ...entry,
+        phase: "pre_kill",
+        classification: "unsafe_identity_mismatch",
+        reason: classified.reason,
+      });
       continue;
     }
     try {
@@ -223,8 +260,8 @@ export async function stopRegisteredProcessGroups() {
   );
 
   const survivors = termTargets.filter((entry) => {
-    const identity = verifyRegistryEntry(entry);
-    return identity.ok && isPidAlive(entry.pid);
+    const classified = classifyRegistryEntry(entry);
+    return classified.classification === "owned_live";
   });
   for (const entry of survivors) {
     rejected.push({
@@ -244,12 +281,19 @@ export async function stopRegisteredProcessGroups() {
     term_phase_ms: termPhaseEnded - termPhaseStarted,
     kill_phase_ms: Date.now() - termPhaseEnded,
     rejected_count: rejected.length,
+    already_stopped_count: alreadyStopped.length,
     survivor_count: survivors.length,
     within_deadline: stopElapsedMs <= stopTimeoutMs && survivors.length === 0,
   };
 
   const ok = rejected.length === 0 && survivors.length === 0;
-  return { stopped: children.length, rejected, stopTiming, ok };
+  return {
+    stopped: children.length,
+    already_stopped: alreadyStopped,
+    rejected,
+    stopTiming,
+    ok,
+  };
 }
 
 export async function waitForHttpOk(url, timeoutMs = 120_000) {
