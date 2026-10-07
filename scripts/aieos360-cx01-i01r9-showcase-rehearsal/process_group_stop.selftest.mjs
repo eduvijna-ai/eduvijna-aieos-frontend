@@ -10,8 +10,6 @@ import {
   writeProcessRegistry,
 } from "./process_group.mjs";
 
-const __dirname = fileURLToPath(new URL(".", import.meta.url));
-
 function spawnSleep(role) {
   const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
   child.unref();

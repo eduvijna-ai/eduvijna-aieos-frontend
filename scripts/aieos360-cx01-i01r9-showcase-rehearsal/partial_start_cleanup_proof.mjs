@@ -5,10 +5,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  DEFAULT_STUDENT_BACKEND_PORT,
-  DEFAULT_TEACHER_BACKEND_PORT,
-} from "./constants.mjs";
+import { DEFAULT_TEACHER_BACKEND_PORT } from "./constants.mjs";
 import {
   assertPortsReleased,
   collectManagedEvidence,
