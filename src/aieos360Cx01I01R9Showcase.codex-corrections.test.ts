@@ -60,8 +60,18 @@ describe("AIEOS360-CX01-I01R9 Codex correction regressions", () => {
     expect(seed).not.toMatch(/print\(json\.dumps\(fixture,/);
   });
 
-  it("pin guard rejects dirty backend worktrees", () => {
+  it("pin guard rejects tracked changes but ignores untracked files", () => {
     const pinGuard = read(`${scriptPkg}/pin_guard.mjs`);
-    expect(pinGuard).toContain('status", "--porcelain"');
+    expect(pinGuard).toContain("--untracked-files=no");
+    const result = spawnSync(
+      "node",
+      [path.join(repoRoot, scriptPkg, "pin_guard_tracked_tree.selftest.mjs")],
+      { encoding: "utf8" },
+    );
+    if (result.status !== 0) {
+      console.error(result.stdout);
+      console.error(result.stderr);
+    }
+    expect(result.status).toBe(0);
   });
 });

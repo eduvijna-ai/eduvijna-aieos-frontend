@@ -25,9 +25,14 @@ export function verifyBackendPin() {
     );
   }
 
+  verifyBackendTrackedTreeClean(backendRoot);
+}
+
+/** Reject staged/unstaged tracked changes; ignore benign untracked files. */
+export function verifyBackendTrackedTreeClean(backendRoot) {
   const worktree = spawnSync(
     "git",
-    ["-C", backendRoot, "status", "--porcelain"],
+    ["-C", backendRoot, "status", "--porcelain", "--untracked-files=no"],
     { encoding: "utf8" },
   );
   if (worktree.status !== 0) {
