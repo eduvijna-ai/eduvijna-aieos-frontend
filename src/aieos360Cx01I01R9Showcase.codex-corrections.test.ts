@@ -70,8 +70,10 @@ describe("AIEOS360-CX01-I01R9 Codex correction regressions", () => {
     expect(pg).toContain("stopDeadlineAt");
     expect(pg).toContain("resolveStopTimeoutMs");
     expect(pg).toContain("classifyRegistryEntry");
+    expect(pg).toContain("isProcessGroupAlive");
     expect(pg).toContain("already_stopped");
-    expect(pg).toContain("unsafe_identity_mismatch");
+    expect(pg).toContain("live_verified");
+    expect(pg).toContain("rejected_unsafe");
     const result = spawnSync(
       "node",
       [path.join(repoRoot, scriptPkg, "process_group_stop.selftest.mjs")],
