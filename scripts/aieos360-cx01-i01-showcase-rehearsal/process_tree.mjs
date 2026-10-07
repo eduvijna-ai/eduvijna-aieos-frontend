@@ -417,8 +417,24 @@ export async function executeStopWideShutdown(plans, options = {}) {
   const activePlans = plans.filter((plan) => !plan.rejected);
   const signaled = [];
   const signaledByPlan = new Map();
+  const observedByPlan = new Map();
+
+  function observePlanTarget(plan, pid) {
+    if (!pid) {
+      return;
+    }
+    let set = observedByPlan.get(plan);
+    if (!set) {
+      set = new Set();
+      observedByPlan.set(plan, set);
+    }
+    set.add(pid);
+  }
 
   for (const plan of activePlans) {
+    for (const pid of plan.targets) {
+      observePlanTarget(plan, pid);
+    }
     const planSignaled = [];
     for (const pid of plan.targets) {
       if (!maySignalPid(pid, plan)) {
@@ -427,6 +443,7 @@ export async function executeStopWideShutdown(plans, options = {}) {
       signalTerminate(pid);
       planSignaled.push(pid);
       signaled.push(pid);
+      observePlanTarget(plan, pid);
     }
     signaledByPlan.set(plan, planSignaled);
   }
@@ -435,6 +452,11 @@ export async function executeStopWideShutdown(plans, options = {}) {
   await waitForAllPidsExit(uniqueSignaled, treeGraceMs);
 
   const preKillTargets = collectAllVerifiedTargets(activePlans);
+  for (const plan of activePlans) {
+    for (const pid of collectVerifiedTargetsForPlan(plan)) {
+      observePlanTarget(plan, pid);
+    }
+  }
   const killCandidates = preKillTargets.filter((pid) => isPidAlive(pid));
   for (const pid of killCandidates) {
     const plan = activePlans.find((candidate) =>
@@ -443,6 +465,7 @@ export async function executeStopWideShutdown(plans, options = {}) {
     if (!plan || !mayForceKillPid(pid, plan)) {
       continue;
     }
+    observePlanTarget(plan, pid);
     signalForceKill(pid);
   }
 
@@ -452,6 +475,11 @@ export async function executeStopWideShutdown(plans, options = {}) {
   );
 
   const postKillTargets = collectAllVerifiedTargets(activePlans);
+  for (const plan of activePlans) {
+    for (const pid of collectVerifiedTargetsForPlan(plan)) {
+      observePlanTarget(plan, pid);
+    }
+  }
   const survivorSet = new Set(postKillTargets.filter((pid) => isPidAlive(pid)));
 
   const perEntry = plans.map((plan) => {
@@ -470,7 +498,11 @@ export async function executeStopWideShutdown(plans, options = {}) {
     const finalTargets = collectVerifiedTargetsForPlan(plan);
     plan.targets = finalTargets;
     const planSurvivors = finalTargets.filter((pid) => survivorSet.has(pid));
-    const descendantExit = finalTargets.map((pid) => ({
+    const observedTargets = [
+      ...(observedByPlan.get(plan) ?? new Set()),
+      ...finalTargets,
+    ];
+    const descendantExit = [...new Set(observedTargets)].map((pid) => ({
       pid,
       exited: !isPidAlive(pid),
       is_root: pid === plan.entry.pid,
