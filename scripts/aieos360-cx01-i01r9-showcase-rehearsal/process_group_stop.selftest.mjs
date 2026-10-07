@@ -3,10 +3,12 @@
 import { spawn } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
   readFileSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { dirname } from "node:path";
 import {
   appendProcessChild,
   assertManagedStartRegistryGate,
@@ -58,6 +60,7 @@ function testProcessRegistryContracts() {
   const priorBytes = hadRegistry ? readFileSync(processesPath) : null;
 
   try {
+    mkdirSync(dirname(processesPath), { recursive: true });
     if (hadRegistry) {
       unlinkSync(processesPath);
     }

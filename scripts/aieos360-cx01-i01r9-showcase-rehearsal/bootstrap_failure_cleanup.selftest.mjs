@@ -2,9 +2,11 @@
 /** Proof: owned local PG container cleanup on bootstrap failures after container start. */
 import { createServer } from "node:net";
 import { spawnSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CX01_SHOWCASE_CONTAINER, DEDICATED_PG_HOST_PORT } from "./constants.mjs";
+import { tmpDir } from "./paths.mjs";
 import {
   readOwnershipRecord,
   writeOwnershipRecord,
@@ -64,6 +66,8 @@ if (!backendRoot) {
   console.log(JSON.stringify({ ok: true, skipped: "AIEOS_BACKEND_ROOT_unset" }));
   process.exit(0);
 }
+
+mkdirSync(tmpDir, { recursive: true });
 
 spawnSync("node", [join(scriptDir, "remove_owned_pg.mjs")], {
   cwd: repoRoot,
