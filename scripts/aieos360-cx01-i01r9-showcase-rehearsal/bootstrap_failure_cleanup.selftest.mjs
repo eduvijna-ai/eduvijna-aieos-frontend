@@ -2,12 +2,13 @@
 /** Proof: owned local PG container cleanup on bootstrap failures after container start. */
 import { createServer } from "node:net";
 import { spawnSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CX01_SHOWCASE_CONTAINER, DEDICATED_PG_HOST_PORT } from "./constants.mjs";
 import { tmpDir } from "./paths.mjs";
 import {
+  ownershipFilePath,
   readOwnershipRecord,
   writeOwnershipRecord,
 } from "./docker_ownership.mjs";
@@ -125,6 +126,56 @@ if (!(await portAvailable(DEDICATED_PG_HOST_PORT))) {
   process.exit(1);
 }
 
+spawnSync("node", [join(scriptDir, "remove_owned_pg.mjs")], {
+  cwd: repoRoot,
+  env: process.env,
+});
+const ownershipPath = ownershipFilePath();
+if (existsSync(ownershipPath)) {
+  rmSync(ownershipPath, { recursive: true, force: true });
+}
+mkdirSync(ownershipPath, { recursive: true });
+const ownershipPersistFail = spawnSync("node", [join(scriptDir, "start_governed_pg.mjs")], {
+  cwd: repoRoot,
+  env: process.env,
+  encoding: "utf8",
+});
+if (ownershipPersistFail.status === 0) {
+  console.error("expected governed PG start to fail when ownership persistence is blocked");
+  rmSync(ownershipPath, { recursive: true, force: true });
+  spawnSync("docker", ["rm", "-f", containerName]);
+  process.exit(1);
+}
+if (
+  !String(ownershipPersistFail.stderr + ownershipPersistFail.stdout).match(
+    /EISDIR|ownership|ENOENT|not a directory|read-only/i,
+  )
+) {
+  console.error("original ownership persistence failure must remain primary error");
+  rmSync(ownershipPath, { recursive: true, force: true });
+  spawnSync("docker", ["rm", "-f", containerName]);
+  process.exit(1);
+}
+if (dockerInspect(containerName).status === 0) {
+  console.error("governed container must be rolled back after ownership persistence failure");
+  rmSync(ownershipPath, { recursive: true, force: true });
+  spawnSync("docker", ["rm", "-f", containerName]);
+  process.exit(1);
+}
+if (!(await portAvailable(DEDICATED_PG_HOST_PORT))) {
+  console.error(`port ${DEDICATED_PG_HOST_PORT} must be released after ownership rollback`);
+  rmSync(ownershipPath, { recursive: true, force: true });
+  process.exit(1);
+}
+try {
+  readOwnershipRecord();
+  console.error("false successful ownership evidence must not remain after blocked persistence");
+  process.exit(1);
+} catch {
+  /* expected: ownership path is not a readable record */
+}
+rmSync(ownershipPath, { recursive: true, force: true });
+
 const pgStart = spawnSync("node", [join(scriptDir, "start_governed_pg.mjs")], {
   cwd: repoRoot,
   env: process.env,
@@ -189,6 +240,7 @@ console.log(
     cases: [
       "bootstrap_failure_owned_pg_cleanup",
       "bootstrap_report_write_failure_cleanup",
+      "ownership_persistence_failure_container_rollback",
       "ownership_mismatch_refuses_removal",
       "external_ci_pg_untouched",
     ],

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Mandatory local semantic selftest: PGID-aware stop classification + shared deadline. */
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import {
   existsSync,
   mkdirSync,
@@ -25,10 +26,12 @@ import {
   resolveTermGraceMs,
   signalAuthorityRejectedReason,
   isSafePositiveInteger,
+  killOwnedDetachedProcessGroup,
+  spawnDetachedProcessGroup,
   stopRegisteredProcessGroups,
   writeProcessRegistry,
 } from "./process_group.mjs";
-import { processesPath } from "./paths.mjs";
+import { processesPath, repoRoot } from "./paths.mjs";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -193,6 +196,63 @@ function spawnSleep(role) {
     spawned_at: new Date().toISOString(),
   });
   return { pid, pgid: pid, startTime };
+}
+
+function portAvailable(port) {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once("error", () => resolve(false));
+    server.listen(port, "127.0.0.1", () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+async function testUnregisteredChildRollbackOnRegistryFailure() {
+  writeProcessRegistry({ children: [] });
+  const testPort = 37651;
+  let capturedPid = null;
+  try {
+    spawnDetachedProcessGroup({
+      command: process.execPath,
+      args: [
+        "-e",
+        `require('net').createServer().listen(${testPort},'127.0.0.1')`,
+      ],
+      cwd: repoRoot,
+      env: process.env,
+      role: "registry-fail-rollback",
+      script: "node-listener",
+      port: testPort,
+      registerChild: (entry) => {
+        capturedPid = entry.pid;
+        throw new Error("proof: simulated registry persistence failure");
+      },
+    });
+    throw new Error("expected registry persistence failure");
+  } catch (error) {
+    if (!String(error).includes("proof: simulated registry persistence failure")) {
+      if (capturedPid) {
+        killOwnedDetachedProcessGroup(capturedPid);
+      }
+      throw error;
+    }
+  }
+  await sleep(400);
+  if (!capturedPid) {
+    throw new Error("expected captured pid from failed registration");
+  }
+  if (isProcessGroupAlive(capturedPid)) {
+    killOwnedDetachedProcessGroup(capturedPid);
+    throw new Error("unregistered child must be rolled back after registry failure");
+  }
+  if (!(await portAvailable(testPort))) {
+    throw new Error("test port must be released after child rollback");
+  }
+  const children = readProcessRegistry().children ?? [];
+  if (children.some((entry) => entry.pid === capturedPid)) {
+    throw new Error("registry must not contain unregistered child after rollback");
+  }
 }
 
 function testSafeIntegerSignalAuthority() {
@@ -705,6 +765,7 @@ async function testTermGraceReservesSigkillBudget() {
 
 testProcessRegistryContracts();
 testSafeIntegerSignalAuthority();
+await testUnregisteredChildRollbackOnRegistryFailure();
 testTermGraceConfiguredCaps();
 await testDuplicatePidAlreadyStoppedAndRejected();
 await testDuplicatePidLiveVerifiedAndRejected();
@@ -726,6 +787,7 @@ console.log(
       "registry_writer_owner_version_authoritative",
       "managed_start_gate_live_and_unsafe",
       "safe_integer_signal_authority",
+      "unregistered_child_registry_failure_rollback",
       "duplicate_pid_already_stopped_plus_rejected",
       "duplicate_pid_live_verified_plus_rejected",
       "rejected_unsafe_corrupted_pgid",

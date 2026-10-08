@@ -31,7 +31,6 @@ import { cleanupManagedStack } from "./managed_cleanup.mjs";
 import {
   assertPortsReleased,
   collectManagedEvidence,
-  DEFAULT_GOVERNED_APP_PORTS,
 } from "./managed_evidence.mjs";
 import {
   buildReadinessTargets,
@@ -125,9 +124,7 @@ const parentFe = Number(
     DEFAULT_PARENT_FRONTEND_PORT,
 );
 
-assertNotAlreadyRunning();
-
-await assertPortsAvailable([
+const governedConfiguredPorts = [
   teacherBe,
   studentBe,
   principalBe,
@@ -136,7 +133,11 @@ await assertPortsAvailable([
   studentFe,
   principalFe,
   parentFe,
-]);
+];
+
+assertNotAlreadyRunning();
+
+await assertPortsAvailable(governedConfiguredPorts);
 
 if (!skipReset) {
   const result = spawnSync("node", [join(scriptDir, "reset.mjs")], {
@@ -255,16 +256,7 @@ try {
     start_mode: "managed",
     platform: "linux",
     role_urls: roleUrls,
-    governed_ports: [
-      teacherBe,
-      studentBe,
-      principalBe,
-      parentBe,
-      teacherFe,
-      studentFe,
-      principalFe,
-      parentFe,
-    ],
+    governed_ports: governedConfiguredPorts,
     status_path: statusPath,
     started_at: new Date().toISOString(),
   });
@@ -288,7 +280,7 @@ try {
   let portsReleased = false;
   let portReleaseError = null;
   try {
-    await assertPortsReleased(DEFAULT_GOVERNED_APP_PORTS);
+    await assertPortsReleased(governedConfiguredPorts);
     portsReleased = true;
   } catch (portError) {
     portReleaseError = String(portError);
@@ -299,6 +291,7 @@ try {
     classification: "NON_PRODUCTION",
     failure_reason: String(error),
     cleanup_process_groups: cleanup,
+    configured_governed_ports: governedConfiguredPorts,
     governed_app_ports_released: portsReleased,
     port_release_error: portReleaseError,
     managed_evidence_after_cleanup: managedEvidence,

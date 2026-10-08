@@ -228,6 +228,22 @@ export function appendProcessChild(entry) {
   return entry;
 }
 
+/** Terminate only the detached group created by this invocation (exact PGID). */
+export function killOwnedDetachedProcessGroup(pgid) {
+  if (!pgid) {
+    return;
+  }
+  try {
+    process.kill(-pgid, "SIGKILL");
+  } catch {
+    try {
+      process.kill(pgid, "SIGKILL");
+    } catch {
+      /* already exited */
+    }
+  }
+}
+
 export function spawnDetachedProcessGroup({
   command,
   args,
@@ -236,6 +252,7 @@ export function spawnDetachedProcessGroup({
   role,
   script,
   port,
+  registerChild = appendProcessChild,
 }) {
   const child = spawn(command, args, {
     cwd,
@@ -250,6 +267,7 @@ export function spawnDetachedProcessGroup({
   }
   const startTime = linuxProcessStartTime(pid);
   if (!startTime) {
+    killOwnedDetachedProcessGroup(pid);
     throw new Error(`failed to read birth identity for ${role} pid=${pid}`);
   }
   const entry = {
@@ -261,7 +279,12 @@ export function spawnDetachedProcessGroup({
     port: port ?? null,
     spawned_at: new Date().toISOString(),
   };
-  appendProcessChild(entry);
+  try {
+    registerChild(entry);
+  } catch (error) {
+    killOwnedDetachedProcessGroup(pid);
+    throw error;
+  }
   return entry;
 }
 

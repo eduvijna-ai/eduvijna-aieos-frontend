@@ -48,6 +48,20 @@ export function writeOwnershipRecord(record) {
   writeFileSync(ownershipPath, JSON.stringify(record, null, 2) + "\n", "utf8");
 }
 
+/** Remove exactly one container by invocation-established Docker ID. */
+export function removeContainerById(containerId) {
+  if (!containerId || typeof containerId !== "string") {
+    return { removed: false, error: "missing container id" };
+  }
+  const docker = spawnSync("docker", ["rm", "-f", containerId], {
+    encoding: "utf8",
+  });
+  if (docker.status !== 0) {
+    return { removed: false, error: docker.stderr || docker.stdout || "docker rm failed" };
+  }
+  return { removed: true, containerId };
+}
+
 export function assertNoUnownedContainerBeforeMutation(
   containerName = CX01_SHOWCASE_CONTAINER,
 ) {
@@ -154,23 +168,39 @@ export function startGovernedPostgresContainer({
   if (run.status !== 0) {
     throw new Error(run.stderr || run.stdout || "docker run failed");
   }
-  const inspect = dockerInspect(containerName);
-  if (inspect.state === "error") {
-    throw new Error(`DOCKER INSPECTION BLOCKED — ${inspect.error}`);
+  const createdContainerId = (run.stdout || "").trim();
+  if (!createdContainerId) {
+    throw new Error("docker run succeeded but returned no container id");
   }
-  if (inspect.state !== "ok") {
-    throw new Error("governed postgres container did not start");
+  try {
+    const inspect = dockerInspect(containerName);
+    if (inspect.state === "error") {
+      throw new Error(`DOCKER INSPECTION BLOCKED — ${inspect.error}`);
+    }
+    if (inspect.state !== "ok") {
+      throw new Error("governed postgres container did not start");
+    }
+    const record = {
+      ownerRunId,
+      containerId: inspect.containerId,
+      containerName,
+      image: inspect.image,
+      hostPort: String(hostPort),
+      recordedAt: new Date().toISOString(),
+    };
+    writeOwnershipRecord(record);
+    return record;
+  } catch (error) {
+    const rollback = removeContainerById(createdContainerId);
+    if (!rollback.removed) {
+      const wrapped = new Error(
+        `ownership persistence failed; container rollback failed: ${rollback.error ?? "unknown"}`,
+      );
+      wrapped.cause = error;
+      throw wrapped;
+    }
+    throw error;
   }
-  const record = {
-    ownerRunId,
-    containerId: inspect.containerId,
-    containerName,
-    image: inspect.image,
-    hostPort: String(hostPort),
-    recordedAt: new Date().toISOString(),
-  };
-  writeOwnershipRecord(record);
-  return record;
 }
 
 export function removeOwnedContainer(containerName = CX01_SHOWCASE_CONTAINER) {
