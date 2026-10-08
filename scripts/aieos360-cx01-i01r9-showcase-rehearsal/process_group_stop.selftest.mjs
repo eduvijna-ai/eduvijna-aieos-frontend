@@ -23,6 +23,8 @@ import {
   resolveKillReserveMs,
   resolveStopTimeoutMs,
   resolveTermGraceMs,
+  signalAuthorityRejectedReason,
+  isSafePositiveInteger,
   stopRegisteredProcessGroups,
   writeProcessRegistry,
 } from "./process_group.mjs";
@@ -191,6 +193,149 @@ function spawnSleep(role) {
     spawned_at: new Date().toISOString(),
   });
   return { pid, pgid: pid, startTime };
+}
+
+function testSafeIntegerSignalAuthority() {
+  const unsafe = Number.MAX_SAFE_INTEGER + 1;
+  let classified = classifyRegistryEntry({
+    pid: unsafe,
+    pgid: unsafe,
+    startTime: "1",
+  });
+  if (classified.classification !== "rejected_unsafe") {
+    throw new Error("unsafe PID/PGID must be rejected before liveness probes");
+  }
+  if (!String(classified.reason).includes("invalid signal authority pid/pgid")) {
+    throw new Error(`unexpected unsafe integer reason: ${classified.reason}`);
+  }
+  classified = classifyRegistryEntry({
+    pid: 42,
+    pgid: unsafe,
+    startTime: "1",
+  });
+  if (classified.classification !== "rejected_unsafe") {
+    throw new Error("unsafe PGID must be rejected");
+  }
+  const boundary = Number.MAX_SAFE_INTEGER;
+  if (!isSafePositiveInteger(boundary)) {
+    throw new Error("MAX_SAFE_INTEGER boundary must be acceptable to authority predicate");
+  }
+  if (signalAuthorityRejectedReason({
+    pid: boundary,
+    pgid: boundary,
+    startTime: "boundary",
+  }) !== null) {
+    throw new Error("safe-integer boundary must pass signal authority predicate");
+  }
+}
+
+async function testDuplicatePidAlreadyStoppedAndRejected() {
+  writeProcessRegistry({ children: [] });
+  const groupA = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+  groupA.unref();
+  const pidA = groupA.pid;
+  const startA = linuxProcessStartTime(pidA);
+  killProcessGroup(pidA);
+  await sleep(400);
+  if (isPidAlive(pidA) || isProcessGroupAlive(pidA)) {
+    throw new Error("fixture: group A must be gone before duplicate-PID proof A");
+  }
+  const groupB = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+  groupB.unref();
+  const pidB = groupB.pid;
+  writeProcessRegistry({
+    children: [
+      {
+        role: "dup-a-already-stopped",
+        script: "sleep",
+        pid: pidA,
+        pgid: pidA,
+        startTime: startA,
+        port: null,
+        spawned_at: new Date().toISOString(),
+      },
+      {
+        role: "dup-a-rejected-pgid-b",
+        script: "sleep",
+        pid: pidA,
+        pgid: pidB,
+        startTime: startA,
+        port: null,
+        spawned_at: new Date().toISOString(),
+      },
+    ],
+  });
+  const outcome = await stopRegisteredProcessGroups();
+  if (outcome.ok) {
+    killProcessGroup(pidB);
+    throw new Error("duplicate-PID proof A must fail closed");
+  }
+  const remaining = readProcessRegistry().children ?? [];
+  if (remaining.length !== 1 || remaining[0].role !== "dup-a-rejected-pgid-b") {
+    killProcessGroup(pidB);
+    throw new Error("rejected duplicate entry must remain despite shared PID");
+  }
+  const gate = assertManagedStartRegistryGate();
+  if (gate.ok || gate.code !== "unsafe_unresolved") {
+    killProcessGroup(pidB);
+    throw new Error("rejected duplicate must block managed start");
+  }
+  killProcessGroup(pidB);
+  writeProcessRegistry({ children: [] });
+}
+
+async function testDuplicatePidLiveVerifiedAndRejected() {
+  writeProcessRegistry({ children: [] });
+  const groupA = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+  groupA.unref();
+  const pidA = groupA.pid;
+  const startA = linuxProcessStartTime(pidA);
+  const groupB = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+  groupB.unref();
+  const pidB = groupB.pid;
+  writeProcessRegistry({
+    children: [
+      {
+        role: "dup-live-a",
+        script: "sleep",
+        pid: pidA,
+        pgid: pidA,
+        startTime: startA,
+        port: null,
+        spawned_at: new Date().toISOString(),
+      },
+      {
+        role: "dup-rejected-b-pgid",
+        script: "sleep",
+        pid: pidA,
+        pgid: pidB,
+        startTime: startA,
+        port: null,
+        spawned_at: new Date().toISOString(),
+      },
+    ],
+  });
+  const outcome = await stopRegisteredProcessGroups();
+  if (outcome.ok) {
+    killProcessGroup(pidA);
+    killProcessGroup(pidB);
+    throw new Error("duplicate-PID proof B must fail closed with unresolved evidence");
+  }
+  if (isProcessGroupAlive(pidA)) {
+    killProcessGroup(pidA);
+    killProcessGroup(pidB);
+    throw new Error("valid live_verified duplicate must still be stopped");
+  }
+  if (!isProcessGroupAlive(pidB)) {
+    throw new Error("corrupted duplicate must not signal unrelated group B");
+  }
+  const remaining = readProcessRegistry().children ?? [];
+  if (remaining.length !== 1 || remaining[0].role !== "dup-rejected-b-pgid") {
+    killProcessGroup(pidB);
+    throw new Error("rejected duplicate must remain after valid entry stopped");
+  }
+  killProcessGroup(pidB);
+  writeProcessRegistry({ children: [] });
 }
 
 async function testCorruptedPgidRegistryEntry() {
@@ -559,7 +704,10 @@ async function testTermGraceReservesSigkillBudget() {
 }
 
 testProcessRegistryContracts();
+testSafeIntegerSignalAuthority();
 testTermGraceConfiguredCaps();
+await testDuplicatePidAlreadyStoppedAndRejected();
+await testDuplicatePidLiveVerifiedAndRejected();
 await testCorruptedPgidRegistryEntry();
 const sharedDeadline = await testLiveVerifiedGroups();
 await testAlreadyDeadCleanGroup();
@@ -577,6 +725,9 @@ console.log(
       "registry_owner_version_shape_fail_closed",
       "registry_writer_owner_version_authoritative",
       "managed_start_gate_live_and_unsafe",
+      "safe_integer_signal_authority",
+      "duplicate_pid_already_stopped_plus_rejected",
+      "duplicate_pid_live_verified_plus_rejected",
       "rejected_unsafe_corrupted_pgid",
       "live_verified",
       "already_stopped",

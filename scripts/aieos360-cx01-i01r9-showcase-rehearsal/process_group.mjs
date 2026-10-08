@@ -14,8 +14,8 @@ export function emptyProcessRegistry() {
   };
 }
 
-function isSafePositiveInteger(value) {
-  return Number.isInteger(value) && value > 0;
+export function isSafePositiveInteger(value) {
+  return Number.isSafeInteger(value) && value > 0;
 }
 
 export function validateRegistryDocument(parsed) {
@@ -348,22 +348,6 @@ export function resolveTermGraceMs(stopTimeoutMs) {
   return Math.min(requestedMs, maxTermGraceMs);
 }
 
-function registryEntriesToRetain(children, alreadyStopped, rejected, survivors, liveVerified) {
-  const removePids = new Set(alreadyStopped.map((entry) => entry.pid));
-  for (const entry of liveVerified) {
-    if (rejected.some((r) => r.pid === entry.pid)) {
-      continue;
-    }
-    if (survivors.some((s) => s.pid === entry.pid)) {
-      continue;
-    }
-    if (!isProcessGroupAlive(entry.pgid)) {
-      removePids.add(entry.pid);
-    }
-  }
-  return children.filter((entry) => !removePids.has(entry.pid));
-}
-
 /** One shared absolute deadline for the entire managed stack stop operation. */
 export async function stopRegisteredProcessGroups() {
   const stopTimeoutMs = resolveStopTimeoutMs();
@@ -377,51 +361,67 @@ export async function stopRegisteredProcessGroups() {
 
   const registry = readProcessRegistry();
   const children = registry.children ?? [];
+  const indexedChildren = children.map((entry, index) => ({ index, entry }));
   const rejected = [];
+  const rejectedIndices = new Set();
   const alreadyStopped = [];
-  const liveVerified = [];
+  const alreadyStoppedIndices = [];
+  const liveVerifiedIndexed = [];
 
-  for (const entry of children) {
+  const markRejected = (index, entry, phase, reason) => {
+    if (rejectedIndices.has(index)) {
+      return;
+    }
+    rejectedIndices.add(index);
+    rejected.push({
+      ...entry,
+      phase,
+      classification: "rejected_unsafe",
+      reason,
+    });
+  };
+
+  for (const { index, entry } of indexedChildren) {
     const classified = classifyRegistryEntry(entry);
     if (classified.classification === "already_stopped") {
+      alreadyStoppedIndices.push(index);
       alreadyStopped.push({ ...entry, classification: "already_stopped" });
     } else if (classified.classification === "live_verified") {
-      liveVerified.push(entry);
+      liveVerifiedIndexed.push({ index, entry });
     } else {
-      rejected.push({
-        ...entry,
-        phase: "pre_signal",
-        classification: "rejected_unsafe",
-        reason: classified.reason,
-      });
+      markRejected(index, entry, "pre_signal", classified.reason);
     }
   }
 
-  const verifiedAtPreSignal = [...liveVerified];
+  const verifiedAtPreSignal = [...liveVerifiedIndexed];
 
-  for (const entry of liveVerified) {
+  for (const { index, entry } of liveVerifiedIndexed) {
+    if (rejectedIndices.has(index)) {
+      continue;
+    }
     try {
       process.kill(-entry.pgid, "SIGTERM");
     } catch (error) {
-      rejected.push({
-        ...entry,
-        phase: "sigterm",
-        classification: "rejected_unsafe",
-        reason: String(error),
-      });
+      markRejected(index, entry, "sigterm", String(error));
     }
   }
 
   const termPhaseStarted = Date.now();
   const termTargets = verifiedAtPreSignal.filter(
-    (entry) => !rejected.some((r) => r.pid === entry.pid),
+    ({ index }) => !rejectedIndices.has(index),
   );
-  await waitForProcessGroupsExit(termTargets, termGraceDeadlineAt);
+  await waitForProcessGroupsExit(
+    termTargets.map(({ entry }) => entry),
+    termGraceDeadlineAt,
+  );
   const termPhaseEnded = Date.now();
 
-  for (const entry of termTargets) {
+  for (const { index, entry } of termTargets) {
     if (remainingMs(stopDeadlineAt) <= 0) {
       break;
+    }
+    if (rejectedIndices.has(index)) {
+      continue;
     }
     if (!isProcessGroupAlive(entry.pgid)) {
       continue;
@@ -429,41 +429,36 @@ export async function stopRegisteredProcessGroups() {
     try {
       process.kill(-entry.pgid, "SIGKILL");
     } catch (error) {
-      rejected.push({
-        ...entry,
-        phase: "sigkill",
-        classification: "rejected_unsafe",
-        reason: String(error),
-      });
+      markRejected(index, entry, "sigkill", String(error));
     }
   }
 
   await waitForProcessGroupsExit(
-    termTargets.filter((entry) => !rejected.some((r) => r.pid === entry.pid)),
+    termTargets
+      .filter(({ index }) => !rejectedIndices.has(index))
+      .map(({ entry }) => entry),
     stopDeadlineAt,
   );
 
   const survivors = termTargets.filter(
-    (entry) =>
-      !rejected.some((r) => r.pid === entry.pid) &&
-      isProcessGroupAlive(entry.pgid),
+    ({ index, entry }) =>
+      !rejectedIndices.has(index) && isProcessGroupAlive(entry.pgid),
   );
-  for (const entry of survivors) {
-    rejected.push({
-      ...entry,
-      phase: "survivor",
-      classification: "rejected_unsafe",
-      reason: "survived stop-wide deadline",
-    });
+  for (const { index, entry } of survivors) {
+    markRejected(index, entry, "survivor", "survived stop-wide deadline");
   }
 
-  const remainingChildren = registryEntriesToRetain(
-    children,
-    alreadyStopped,
-    rejected,
-    survivors,
-    verifiedAtPreSignal,
-  );
+  const removeIndices = new Set(alreadyStoppedIndices);
+  for (const { index, entry } of verifiedAtPreSignal) {
+    if (rejectedIndices.has(index)) {
+      continue;
+    }
+    if (!isProcessGroupAlive(entry.pgid)) {
+      removeIndices.add(index);
+    }
+  }
+
+  const remainingChildren = children.filter((_, index) => !removeIndices.has(index));
   writeProcessRegistry({ children: remainingChildren });
 
   const stopElapsedMs = Date.now() - stopStartedAt;
