@@ -8,7 +8,7 @@ import {
   collectManagedEvidence,
   DEFAULT_GOVERNED_APP_PORTS,
 } from "./managed_evidence.mjs";
-import { resolveStopTimeoutMs } from "./process_group.mjs";
+import { readProcessRegistry, resolveStopTimeoutMs } from "./process_group.mjs";
 import { repoRoot, statusPath } from "./paths.mjs";
 
 const scriptDir = join(repoRoot, "scripts/aieos360-cx01-i01r9-showcase-rehearsal");
@@ -59,8 +59,11 @@ let stackStarted = false;
 let proofError = null;
 let governedPortsBeforeStop = [];
 let liveBeforeStop = null;
+let registryChildrenBeforeCorruptStop = 0;
 const stopTimeoutMs = resolveStopTimeoutMs();
 let stopWatchElapsedMs = 0;
+let resetWhileLiveRefused = false;
+let malformedStatusStopRecovery = false;
 
 try {
   const start = runNode("start.mjs", {
@@ -94,20 +97,68 @@ try {
     );
   }
   const runningStatus = JSON.parse(readFileSync(statusPath, "utf8"));
+  if (runningStatus.phase !== "running") {
+    throw new Error(`expected running phase before reset refusal; got ${runningStatus.phase}`);
+  }
   governedPortsBeforeStop = runningStatus.governed_ports ?? DEFAULT_GOVERNED_APP_PORTS;
-} catch (error) {
-  proofError = error;
-} finally {
+  registryChildrenBeforeCorruptStop = readProcessRegistry().children?.length ?? 0;
+  if (registryChildrenBeforeCorruptStop !== 8) {
+    throw new Error(
+      `expected 8 registry children before reset refusal; got ${registryChildrenBeforeCorruptStop}`,
+    );
+  }
+
+  const resetWhileLive = runNode("reset.mjs");
+  if (resetWhileLive.status === 0) {
+    throw new Error("reset.mjs must fail while managed stack is live");
+  }
+  resetWhileLiveRefused = true;
+
+  const statusAfterRefusedReset = JSON.parse(readFileSync(statusPath, "utf8"));
+  if (statusAfterRefusedReset.phase !== "running") {
+    throw new Error(
+      `operator phase must remain running after refused reset; got ${statusAfterRefusedReset.phase}`,
+    );
+  }
+  const liveAfterRefusedReset = collectManagedEvidence();
+  if (liveAfterRefusedReset.live_process_count !== 8) {
+    throw new Error(
+      `expected 8 live processes after refused reset; got ${liveAfterRefusedReset.live_process_count}`,
+    );
+  }
+  const registryAfterRefusedReset = readProcessRegistry().children?.length ?? 0;
+  if (registryAfterRefusedReset !== 8) {
+    throw new Error(
+      `registry must remain intact after refused reset; got ${registryAfterRefusedReset} children`,
+    );
+  }
+
+  const statusRecheck = runNode("status.mjs");
+  if (statusRecheck.status !== 0) {
+    console.error(statusRecheck.stdout);
+    console.error(statusRecheck.stderr);
+    throw new Error("status.mjs must remain healthy after refused reset");
+  }
+
+  writeFileSync(statusPath, "{ truncated operator status metadata", "utf8");
+  malformedStatusStopRecovery = true;
+
   const stopStartedAt = Date.now();
   const stop = runNode("stop.mjs");
   stopWatchElapsedMs = Date.now() - stopStartedAt;
   if (stop.status !== 0) {
     console.error(stop.stdout);
     console.error(stop.stderr);
-    proofError = proofError ?? new Error(`stop.mjs failed with ${stop.status}`);
+    throw new Error(`stop.mjs failed with ${stop.status}`);
   }
-  if (stackStarted && stop.status !== 0) {
-    proofError = proofError ?? new Error("stop failed after managed start");
+} catch (error) {
+  proofError = error;
+  if (stackStarted) {
+    const emergencyStop = runNode("stop.mjs");
+    if (emergencyStop.status !== 0) {
+      console.error(emergencyStop.stdout);
+      console.error(emergencyStop.stderr);
+    }
   }
 }
 
@@ -123,6 +174,9 @@ const finalStatus = JSON.parse(readFileSync(statusPath, "utf8"));
 if (finalStatus.phase !== "stopped") {
   throw new Error(`expected phase stopped; got ${finalStatus.phase}`);
 }
+if (!finalStatus.status_metadata_recovered) {
+  throw new Error("final stop status must record malformed status metadata recovery");
+}
 
 const liveAfterStop = collectManagedEvidence();
 if (liveAfterStop.live_process_count !== 0) {
@@ -132,9 +186,11 @@ if (liveAfterStop.live_process_count !== 0) {
 }
 
 const portsToCheck =
-  governedPortsBeforeStop.length > 0
-    ? governedPortsBeforeStop
-    : DEFAULT_GOVERNED_APP_PORTS;
+  finalStatus.governed_ports_checked?.length > 0
+    ? finalStatus.governed_ports_checked
+    : governedPortsBeforeStop.length > 0
+      ? governedPortsBeforeStop
+      : DEFAULT_GOVERNED_APP_PORTS;
 await assertPortsReleased(portsToCheck);
 
 const stopTiming = finalStatus.stop_timing ?? {};
@@ -155,11 +211,16 @@ const proof = {
     "managed_start",
     "four_role_runtime_http",
     "status_live",
-    "explicit_stop",
+    "reset_refused_while_live",
+    "runtime_still_healthy",
+    "malformed_status_metadata",
+    "explicit_stop_with_recovery",
   ],
   final_phase: finalStatus.phase,
   classification: "NON_PRODUCTION",
   managed_linux_process_groups: true,
+  reset_while_live_refused: resetWhileLiveRefused,
+  malformed_status_stop_recovery: malformedStatusStopRecovery,
   normal_explicit_stop_cleanup: {
     live_process_count_before_stop: liveBeforeStop?.live_process_count,
     live_process_count_after_stop: liveAfterStop.live_process_count,
@@ -168,6 +229,7 @@ const proof = {
     stop_timing: stopTiming,
     stop_watch_elapsed_ms: stopWatchElapsedMs,
     within_shared_stop_deadline: true,
+    status_metadata_recovered: finalStatus.status_metadata_recovered,
   },
 };
 const tmpDir = join(repoRoot, "tmp");

@@ -5,6 +5,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { runPinGuard } from "./pin_guard.mjs";
 import { runPython } from "./run-python.mjs";
+import { assertManagedStartRegistryGate } from "./process_group.mjs";
 import {
   dbReportPath,
   fixturePath,
@@ -21,6 +22,24 @@ if (process.env.AIEOS360_CX01_I01_SHOWCASE_FORCE_RESET_FAIL === "1") {
 }
 
 runPinGuard();
+
+const resetGate = assertManagedStartRegistryGate();
+if (!resetGate.ok) {
+  console.error(
+    JSON.stringify(
+      {
+        error: "CX01-I01R9 reset blocked by managed process registry",
+        code: resetGate.code,
+        role: resetGate.entry?.role,
+        pid: resetGate.entry?.pid,
+        reason: resetGate.reason,
+      },
+      null,
+      2,
+    ),
+  );
+  process.exit(1);
+}
 
 const commonEnv = {
   AIEOS360_CX01_I01_SHOWCASE_DB_REPORT: dbReportPath,

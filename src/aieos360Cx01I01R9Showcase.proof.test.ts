@@ -101,9 +101,6 @@ describe("AIEOS360-CX01-I01R9 showcase rehearsal proofs", () => {
         console.error(lifecycle.stderr);
       }
       expect(lifecycle.status).toBe(0);
-
-      const publish = runUvPython("publish_proof_exports.py");
-      expect(publish.status).toBe(0);
     },
     1_800_000,
   );
@@ -124,5 +121,18 @@ describe("AIEOS360-CX01-I01R9 showcase rehearsal proofs", () => {
       expect(ownedLocal.status).toBe(0);
     },
     600_000,
+  );
+
+  it.runIf(runIntegration || runOwnedLocalPgProof)(
+    "publish sanitized proof exports after all proof-producing tests",
+    () => {
+      const publish = runUvPython("publish_proof_exports.py");
+      if (publish.status !== 0) {
+        console.error(publish.stdout);
+        console.error(publish.stderr);
+      }
+      expect(publish.status).toBe(0);
+    },
+    120_000,
   );
 });
