@@ -9,7 +9,7 @@ import {
   DEFAULT_GOVERNED_APP_PORTS,
 } from "./managed_evidence.mjs";
 import { readProcessRegistry, resolveStopTimeoutMs } from "./process_group.mjs";
-import { repoRoot, statusPath } from "./paths.mjs";
+import { dbReportPath, repoRoot, statusPath } from "./paths.mjs";
 
 const scriptDir = join(repoRoot, "scripts/aieos360-cx01-i01r9-showcase-rehearsal");
 const backendRoot = process.env.AIEOS_BACKEND_ROOT;
@@ -64,6 +64,7 @@ const stopTimeoutMs = resolveStopTimeoutMs();
 let stopWatchElapsedMs = 0;
 let resetWhileLiveRefused = false;
 let malformedStatusStopRecovery = false;
+let malformedDbReportStopRecovery = false;
 
 try {
   const start = runNode("start.mjs", {
@@ -142,6 +143,10 @@ try {
 
   writeFileSync(statusPath, "{ truncated operator status metadata", "utf8");
   malformedStatusStopRecovery = true;
+  if (existsSync(dbReportPath)) {
+    writeFileSync(dbReportPath, "{ truncated db report metadata", "utf8");
+    malformedDbReportStopRecovery = true;
+  }
 
   const stopStartedAt = Date.now();
   const stop = runNode("stop.mjs");
@@ -176,6 +181,9 @@ if (finalStatus.phase !== "stopped") {
 }
 if (!finalStatus.status_metadata_recovered) {
   throw new Error("final stop status must record malformed status metadata recovery");
+}
+if (malformedDbReportStopRecovery && !finalStatus.db_report_metadata_recovered) {
+  throw new Error("final stop status must record malformed db report metadata recovery");
 }
 
 const liveAfterStop = collectManagedEvidence();
@@ -214,6 +222,7 @@ const proof = {
     "reset_refused_while_live",
     "runtime_still_healthy",
     "malformed_status_metadata",
+    "malformed_db_report_metadata",
     "explicit_stop_with_recovery",
   ],
   final_phase: finalStatus.phase,
@@ -221,6 +230,7 @@ const proof = {
   managed_linux_process_groups: true,
   reset_while_live_refused: resetWhileLiveRefused,
   malformed_status_stop_recovery: malformedStatusStopRecovery,
+  malformed_db_report_stop_recovery: malformedDbReportStopRecovery,
   normal_explicit_stop_cleanup: {
     live_process_count_before_stop: liveBeforeStop?.live_process_count,
     live_process_count_after_stop: liveAfterStop.live_process_count,
@@ -230,6 +240,7 @@ const proof = {
     stop_watch_elapsed_ms: stopWatchElapsedMs,
     within_shared_stop_deadline: true,
     status_metadata_recovered: finalStatus.status_metadata_recovered,
+    db_report_metadata_recovered: finalStatus.db_report_metadata_recovered,
   },
 };
 const tmpDir = join(repoRoot, "tmp");

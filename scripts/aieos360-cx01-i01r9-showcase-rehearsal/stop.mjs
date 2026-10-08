@@ -2,12 +2,14 @@
 import { readFileSync, existsSync } from "node:fs";
 import { failClosedNonLinuxExit } from "./linux_platform.mjs";
 import { runPinGuard } from "./pin_guard.mjs";
-import { statusPath } from "./paths.mjs";
+import { dbReportPath, statusPath } from "./paths.mjs";
+import { DEDICATED_PG_HOST_PORT } from "./constants.mjs";
 import {
   cleanupManagedStack,
-  localOwnedContainerExpected,
+  usesExternalCiPostgres,
   assertPortsReleased,
 } from "./managed_cleanup.mjs";
+import { removeOwnedContainer } from "./docker_ownership.mjs";
 import { readProcessRegistry, writeOperatorStatus } from "./process_group.mjs";
 
 failClosedNonLinuxExit("showcase:aieos360:stop");
@@ -27,6 +29,16 @@ function portsFromRegistryChildren(children) {
   return safeTcpPorts((children ?? []).map((entry) => entry?.port));
 }
 
+function writeStopFailed(payload) {
+  writeOperatorStatus({
+    classification: "NON_PRODUCTION",
+    stopped_at: new Date().toISOString(),
+    ...payload,
+  });
+  console.error(JSON.stringify(payload, null, 2));
+  process.exit(1);
+}
+
 let governedPortsFromStatus = [];
 let statusMetadataError = null;
 if (existsSync(statusPath)) {
@@ -38,6 +50,17 @@ if (existsSync(statusPath)) {
   }
 }
 
+let dbReportMetadataError = null;
+let dbReportStartedContainerEvidence = null;
+if (existsSync(dbReportPath)) {
+  try {
+    const dbReport = JSON.parse(readFileSync(dbReportPath, "utf8"));
+    dbReportStartedContainerEvidence = dbReport.started_container === true;
+  } catch (error) {
+    dbReportMetadataError = String(error);
+  }
+}
+
 let registryPortEvidence = [];
 try {
   const registry = readProcessRegistry();
@@ -46,36 +69,68 @@ try {
   /* registry read remains fail-closed elsewhere; stop teardown uses cleanup path */
 }
 
-const removeContainer = localOwnedContainerExpected();
+const externalCiPostgres = usesExternalCiPostgres();
+
 const cleanup = await cleanupManagedStack({
-  removeOwnedLocalContainer: removeContainer,
-  assertGovernedPgPortReleased: removeContainer,
+  removeOwnedLocalContainer: false,
+  assertGovernedPgPortReleased: false,
 });
 
+let containerOutcome = cleanup.containerOutcome ?? null;
+
 if (!cleanup.ok || cleanup.rejected?.length > 0) {
-  writeOperatorStatus({
+  writeStopFailed({
     phase: "stop_failed",
-    classification: "NON_PRODUCTION",
     rejected: cleanup.rejected,
-    container_outcome: cleanup.containerOutcome,
+    container_outcome: containerOutcome,
     stop_timing: cleanup.stopTiming,
     error: cleanup.error,
     status_metadata_error: statusMetadataError,
-    stopped_at: new Date().toISOString(),
+    db_report_metadata_error: dbReportMetadataError,
+    process_stop_ok: false,
   });
-  console.error(
-    JSON.stringify(
-      {
+}
+
+if (!externalCiPostgres) {
+  containerOutcome = removeOwnedContainer();
+  if (containerOutcome.inspection_error) {
+    writeStopFailed({
+      phase: "stop_failed",
+      container_outcome: containerOutcome,
+      stop_timing: cleanup.stopTiming,
+      error: containerOutcome.error,
+      status_metadata_error: statusMetadataError,
+      db_report_metadata_error: dbReportMetadataError,
+      process_stop_ok: true,
+    });
+  }
+  if (!containerOutcome.removed && !containerOutcome.missing) {
+    writeStopFailed({
+      phase: "stop_failed",
+      container_outcome: containerOutcome,
+      stop_timing: cleanup.stopTiming,
+      error: containerOutcome.error || "owned container not removed",
+      status_metadata_error: statusMetadataError,
+      db_report_metadata_error: dbReportMetadataError,
+      process_stop_ok: true,
+    });
+  }
+  if (containerOutcome.removed) {
+    try {
+      await assertPortsReleased([DEDICATED_PG_HOST_PORT]);
+    } catch (error) {
+      writeStopFailed({
         phase: "stop_failed",
-        rejected: cleanup.rejected,
-        container: cleanup.containerOutcome,
-        error: cleanup.error,
-      },
-      null,
-      2,
-    ),
-  );
-  process.exit(1);
+        port_release_error: String(error),
+        governed_pg_port_checked: DEDICATED_PG_HOST_PORT,
+        container_outcome: containerOutcome,
+        stop_timing: cleanup.stopTiming,
+        status_metadata_error: statusMetadataError,
+        db_report_metadata_error: dbReportMetadataError,
+        process_stop_ok: true,
+      });
+    }
+  }
 }
 
 const portsToVerify =
@@ -83,24 +138,22 @@ const portsToVerify =
     ? governedPortsFromStatus
     : registryPortEvidence;
 let portsReleased = false;
-let portReleaseError = null;
 
 if (portsToVerify.length > 0) {
   try {
     await assertPortsReleased(portsToVerify);
     portsReleased = true;
   } catch (error) {
-    portReleaseError = String(error);
-    writeOperatorStatus({
+    writeStopFailed({
       phase: "stop_failed",
-      classification: "NON_PRODUCTION",
-      port_release_error: portReleaseError,
+      port_release_error: String(error),
       governed_ports_checked: portsToVerify,
       status_metadata_error: statusMetadataError,
-      stopped_at: new Date().toISOString(),
+      db_report_metadata_error: dbReportMetadataError,
+      container_outcome: containerOutcome,
+      stop_timing: cleanup.stopTiming,
+      process_stop_ok: true,
     });
-    console.error(JSON.stringify({ phase: "stop_failed", error: portReleaseError }, null, 2));
-    process.exit(1);
   }
 }
 
@@ -113,7 +166,13 @@ writeOperatorStatus({
     governedPortsFromStatus.length > 0 ? "operator_status" : "process_registry",
   status_metadata_error: statusMetadataError,
   status_metadata_recovered: Boolean(statusMetadataError),
-  owned_local_container_removed: Boolean(cleanup.containerOutcome?.removed),
+  db_report_metadata_error: dbReportMetadataError,
+  db_report_metadata_recovered: Boolean(dbReportMetadataError),
+  db_report_started_container_evidence: dbReportStartedContainerEvidence,
+  owned_local_container_removed: Boolean(containerOutcome?.removed),
+  container_outcome: containerOutcome,
+  process_stop_ok: true,
+  external_ci_postgres: externalCiPostgres,
   stop_timing: cleanup.stopTiming,
   stopped_at: new Date().toISOString(),
 });
@@ -126,9 +185,11 @@ console.log(
       phase: "stopped",
       governed_ports_released: portsReleased,
       governed_ports_checked: portsToVerify,
-      owned_local_container_removed: Boolean(cleanup.containerOutcome?.removed),
+      owned_local_container_removed: Boolean(containerOutcome?.removed),
       stop_timing: cleanup.stopTiming,
       status_metadata_recovered: Boolean(statusMetadataError),
+      db_report_metadata_recovered: Boolean(dbReportMetadataError),
+      process_stop_ok: true,
     },
     null,
     2,
