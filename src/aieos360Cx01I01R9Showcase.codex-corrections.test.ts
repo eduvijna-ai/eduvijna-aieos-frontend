@@ -52,8 +52,13 @@ describe("AIEOS360-CX01-I01R9 Codex correction regressions", () => {
 
   it("stop removes only governed owned local PostgreSQL when lifecycle started it", () => {
     const stop = read(`${scriptPkg}/stop.mjs`);
-    expect(stop).toContain("removeOwnedLocalContainer");
-    expect(stop).toContain("localOwnedContainerExpected");
+    expect(stop).toContain("usesExternalCiPostgres");
+    expect(stop).toContain("cleanupManagedStack");
+    expect(stop).toContain("removeOwnedLocalContainer: false");
+    expect(stop).toContain("removeOwnedContainer");
+    expect(stop).toContain("DEDICATED_PG_HOST_PORT");
+    expect(stop).toContain("assertPortsReleased");
+    expect(stop).not.toContain("localOwnedContainerExpected");
     const cleanup = read(`${scriptPkg}/managed_cleanup.mjs`);
     expect(cleanup).toContain("removeOwnedContainer");
     expect(cleanup).toContain("usesExternalCiPostgres");
