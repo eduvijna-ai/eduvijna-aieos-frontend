@@ -119,6 +119,10 @@ export function Aieos360ShowcaseLauncherPage() {
                   rel="noopener noreferrer"
                 >
                   {stage.label}
+                  <span className="aieos360-showcase__sr-only">
+                    {" "}
+                    (opens in a new tab)
+                  </span>
                 </a>
                 {index < STORY_STAGE_ORDER.length - 1 ? (
                   <span

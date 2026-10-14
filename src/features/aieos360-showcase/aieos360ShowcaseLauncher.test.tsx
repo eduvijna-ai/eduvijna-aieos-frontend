@@ -62,14 +62,16 @@ describe("AIEOS360 showcase launcher page", () => {
     const steps = within(storyMap).getAllByRole("listitem");
     expect(steps).toHaveLength(6);
     expect(
-      steps.map((step) => within(step).getByRole("link").textContent),
+      steps.map((step) =>
+        within(step).getByRole("link", { name: /opens in a new tab/i }).textContent,
+      ),
     ).toEqual([
-      "Teacher",
-      "Student",
-      "Assessment",
-      "Improve",
-      "Principal",
-      "Parent",
+      "Teacher (opens in a new tab)",
+      "Student (opens in a new tab)",
+      "Assessment (opens in a new tab)",
+      "Improve (opens in a new tab)",
+      "Principal (opens in a new tab)",
+      "Parent (opens in a new tab)",
     ]);
 
     expect(screen.queryByText(/bearer/i)).not.toBeInTheDocument();
@@ -90,6 +92,12 @@ describe("AIEOS360 showcase launcher page", () => {
     const teacherLink = screen.getByRole("link", { name: /Open Teacher OS/i });
     expect(teacherLink).toHaveAttribute("target", "_blank");
     expect(teacherLink).toHaveAttribute("rel", "noopener noreferrer");
+
+    const assessmentLink = screen.getByRole("link", {
+      name: /Assessment.*opens in a new tab/i,
+    });
+    expect(assessmentLink).toHaveAttribute("target", "_blank");
+    expect(assessmentLink).toHaveAttribute("rel", "noopener noreferrer");
 
     vi.unstubAllGlobals();
   });
