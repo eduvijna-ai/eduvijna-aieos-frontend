@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   getStudentAssignment,
   startLearningAttempt,
@@ -24,10 +24,18 @@ import {
 } from "../attemptIdempotency";
 import { studentMessageForApiError } from "../studentMessages";
 import { LearnerWork } from "../attempts/LearnerWork";
+import { ShowcaseBackLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
+import {
+  isShowcaseActive,
+  useWithShowcase,
+  withShowcaseQuery,
+} from "@/features/aieos360-showcase/showcaseContext";
 
 export function AssignmentDetailPage() {
   const { assignmentId = "" } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const showcaseActive = isShowcaseActive(searchParams);
   const { isConnected, isProduction } = useSession();
   const [status, setStatus] = useState<
     "loading" | "ready" | "error" | "unavailable"
@@ -40,6 +48,13 @@ export function AssignmentDetailPage() {
   const [starting, setStarting] = useState(false);
   const startKeyRef = useRef<string | null>(null);
   const startMaterialRef = useRef<string | null>(null);
+  const resumeHandoffPath =
+    assignment?.attempt_id != null
+      ? `/student-os/attempts/${assignment.attempt_id}`
+      : "/student-os/home";
+  const resumeHref = useWithShowcase(resumeHandoffPath);
+  const homeHref = useWithShowcase("/student-os/home");
+  const assignmentsHref = useWithShowcase("/student-os/assignments");
 
   const load = useCallback(async () => {
     if (!isConnected && !isProduction) {
@@ -78,7 +93,12 @@ export function AssignmentDetailPage() {
         assignment.assignment_id,
         key,
       );
-      navigate(`/student-os/attempts/${data.attempt_id}`);
+      navigate(
+        withShowcaseQuery(
+          `/student-os/attempts/${data.attempt_id}`,
+          showcaseActive,
+        ),
+      );
     } catch (error) {
       setActionError(studentMessageForApiError(error));
     } finally {
@@ -118,19 +138,15 @@ export function AssignmentDetailPage() {
   const canStart =
     assignment.currently_consumable &&
     assignment.attempt_summary === "NOT_STARTED";
-  const resumeHref =
-    assignment.attempt_id != null
-      ? `/student-os/attempts/${assignment.attempt_id}`
-      : null;
-
   return (
     <article className="stack sos-page">
       <header>
         <p className="muted">
-          <Link to="/student-os/home">Home</Link> ·{" "}
-          <Link to="/student-os/assignments">Assignments</Link>
+          <Link to={homeHref}>Home</Link> ·{" "}
+          <Link to={assignmentsHref}>Assignments</Link>
         </p>
         <h1>{title}</h1>
+        <ShowcaseBackLink />
         <p className="muted">{typeLabel}</p>
         <div className="sos-actions">
           <StatusBadge
@@ -188,12 +204,14 @@ export function AssignmentDetailPage() {
             {starting ? "Starting…" : "Start this work"}
           </button>
         ) : null}
-        {resumeHref && assignment.attempt_summary === "IN_PROGRESS" ? (
+        {assignment.attempt_id != null &&
+        assignment.attempt_summary === "IN_PROGRESS" ? (
           <Link className="btn" to={resumeHref}>
             Continue this work
           </Link>
         ) : null}
-        {resumeHref && assignment.attempt_summary === "SUBMITTED" ? (
+        {assignment.attempt_id != null &&
+        assignment.attempt_summary === "SUBMITTED" ? (
           <Link className="btn" to={resumeHref}>
             View submitted work
           </Link>

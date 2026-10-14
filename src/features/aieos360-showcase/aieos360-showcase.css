@@ -163,6 +163,27 @@
   user-select: none;
 }
 
+.aieos360-showcase-continuity {
+  margin: var(--space-4) 0 0;
+}
+
+.aieos360-showcase-continuity__label {
+  margin: 0 0 var(--space-2);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.aieos360-showcase-continuity__handoff {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 600;
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
 .aieos360-showcase__sr-only {
   position: absolute;
   width: 1px;

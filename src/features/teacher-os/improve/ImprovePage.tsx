@@ -40,6 +40,7 @@ import {
   isEligibleForImprove,
   voidedImproveMessage,
 } from "./improvePresentation";
+import { ShowcaseBackLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
 import "./improve.css";
 
 type Step = "hub" | "review" | "goal" | "context" | "confirm";
@@ -451,6 +452,7 @@ export function ImprovePage() {
       <header>
         <p className="muted">Teacher OS · Improve</p>
         <h1>Improve</h1>
+        <ShowcaseBackLink />
         <p className="improve-lede">
           Improve is your deliberate choice to start a remediation preparation
           from a recorded class assessment. Assessed does not mean improvement

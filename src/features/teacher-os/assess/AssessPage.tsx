@@ -57,6 +57,8 @@ import {
   type ClassResultLevel,
 } from "./assessmentPresentation";
 import { improveHrefForAssessment } from "../improve/improvePresentation";
+import { ShowcaseBackLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
+import { useWithShowcase } from "@/features/aieos360-showcase/showcaseContext";
 import "../teach/teach.css";
 import "./assess.css";
 
@@ -112,6 +114,11 @@ export function AssessPage() {
     null,
   );
   const [selectedEtag, setSelectedEtag] = useState<string | null>(null);
+  const showcaseImproveHref = useWithShowcase(
+    selected && isAssessmentRecorded(selected)
+      ? improveHrefForAssessment(selected.assessment_id)
+      : "/teacher-os/improve",
+  );
 
   const [resultLevel, setResultLevel] =
     useState<ClassResultLevel>("DEMONSTRATED");
@@ -852,6 +859,7 @@ export function AssessPage() {
       <header>
         <p className="muted">Teacher OS · Assess</p>
         <h1>Assess</h1>
+        <ShowcaseBackLink />
         <p className="muted">
           Class-level ClassroomAssessment only. Assigned ≠ Taught ≠ Assessed ≠
           Mastered. Taught ≠ Assessed. Completing a lesson does not create an
@@ -1341,7 +1349,7 @@ export function AssessPage() {
                   <div className="detail-actions">
                     <Link
                       className="btn btn-secondary"
-                      to={improveHrefForAssessment(selected.assessment_id)}
+                      to={showcaseImproveHref}
                     >
                       Improve this class
                     </Link>

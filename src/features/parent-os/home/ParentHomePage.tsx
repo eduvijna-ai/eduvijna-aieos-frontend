@@ -17,6 +17,7 @@ import {
   formatCurrentFactsAsOf,
   formatTimeBasisCopy,
 } from "../parentPresentation";
+import { ShowcaseBackLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
 import "../parent-os.css";
 
 export function ParentHomePage() {
@@ -101,6 +102,7 @@ export function ParentHomePage() {
       <header className="parent-os-page-header">
         <div>
           <h1>Parent home</h1>
+          <ShowcaseBackLink />
           <p className="parent-os-basis">{formatCurrentFactsAsOf(data.generated_at)}</p>
           <p className="muted">{formatTimeBasisCopy()}</p>
         </div>
