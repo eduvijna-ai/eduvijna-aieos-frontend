@@ -5,6 +5,7 @@ import {
   SHOWCASE_QUERY_KEY,
   withShowcaseAbsoluteUrl,
   withShowcaseQuery,
+  withShowcaseSearchParamFields,
 } from "./showcaseContext";
 
 describe("showcase context helpers", () => {
@@ -23,6 +24,25 @@ describe("showcase context helpers", () => {
       `/teacher-os/assess?assignment_id=abc&${SHOWCASE_QUERY_KEY}=${SHOWCASE_ACTIVE_VALUE}`,
     );
     expect(withShowcaseQuery("/student-os/home", false)).toBe("/student-os/home");
+  });
+
+  it("preserves showcase in assess query rewrites only when active", () => {
+    expect(
+      withShowcaseSearchParamFields(
+        { assignment_id: "a1", assessment_id: "as1" },
+        true,
+      ),
+    ).toEqual({
+      assignment_id: "a1",
+      assessment_id: "as1",
+      [SHOWCASE_QUERY_KEY]: SHOWCASE_ACTIVE_VALUE,
+    });
+    expect(
+      withShowcaseSearchParamFields(
+        { assignment_id: "a1", assessment_id: "as1" },
+        false,
+      ),
+    ).toEqual({ assignment_id: "a1", assessment_id: "as1" });
   });
 
   it("merges showcase into absolute rehearsal URLs", () => {

@@ -58,7 +58,12 @@ import {
 } from "./assessmentPresentation";
 import { improveHrefForAssessment } from "../improve/improvePresentation";
 import { ShowcaseBackLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
-import { useWithShowcase } from "@/features/aieos360-showcase/showcaseContext";
+import {
+  useShowcaseActive,
+  useWithShowcase,
+  withShowcaseSearchParamFields,
+} from "@/features/aieos360-showcase/showcaseContext";
+import { ShowcaseLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
 import "../teach/teach.css";
 import "./assess.css";
 
@@ -84,6 +89,7 @@ function bindingKey(binding: TeachingExecutionContentBindingResponse): string {
 export function AssessPage() {
   const { session } = useSession();
   const [searchParams, setSearchParams] = useSearchParams();
+  const showcaseActive = useShowcaseActive();
   const executionIdParam = searchParams.get("execution_id");
   const assessmentIdParam = searchParams.get("assessment_id");
   const assignmentIdParam = searchParams.get("assignment_id");
@@ -446,10 +452,13 @@ export function AssessPage() {
         clearMutationAssociation("record");
         applySelectedAssessment(response.data, response.etag);
         setSearchParams(
-          {
-            assignment_id: assignment.assignment_id,
-            assessment_id: response.data.assessment_id,
-          },
+          withShowcaseSearchParamFields(
+            {
+              assignment_id: assignment.assignment_id,
+              assessment_id: response.data.assessment_id,
+            },
+            showcaseActive,
+          ),
           { replace: true },
         );
         setActionMessage(
@@ -524,10 +533,13 @@ export function AssessPage() {
       clearMutationAssociation("record");
       applySelectedAssessment(response.data, response.etag);
       setSearchParams(
-        {
-          execution_id: execution.execution_id,
-          assessment_id: response.data.assessment_id,
-        },
+        withShowcaseSearchParamFields(
+          {
+            execution_id: execution.execution_id,
+            assessment_id: response.data.assessment_id,
+          },
+          showcaseActive,
+        ),
         { replace: true },
       );
       setActionMessage(
@@ -937,11 +949,11 @@ export function AssessPage() {
                 <div>
                   <dt>Assignment</dt>
                   <dd>
-                    <Link
+                    <ShowcaseLink
                       to={`/teacher-os/teach/assignments/${assignment.assignment_id}`}
                     >
                       <code>{assignment.assignment_id}</code>
-                    </Link>
+                    </ShowcaseLink>
                   </dd>
                 </div>
                 <div>
@@ -1492,15 +1504,18 @@ export function AssessPage() {
                           onClick={(event) => {
                             event.preventDefault();
                             setSearchParams(
-                              {
-                                ...(item.execution_id
-                                  ? { execution_id: item.execution_id }
-                                  : {}),
-                                ...(item.assignment_id
-                                  ? { assignment_id: item.assignment_id }
-                                  : {}),
-                                assessment_id: item.assessment_id,
-                              },
+                              withShowcaseSearchParamFields(
+                                {
+                                  ...(item.execution_id
+                                    ? { execution_id: item.execution_id }
+                                    : {}),
+                                  ...(item.assignment_id
+                                    ? { assignment_id: item.assignment_id }
+                                    : {}),
+                                  assessment_id: item.assessment_id,
+                                },
+                                showcaseActive,
+                              ),
                               { replace: false },
                             );
                           }}

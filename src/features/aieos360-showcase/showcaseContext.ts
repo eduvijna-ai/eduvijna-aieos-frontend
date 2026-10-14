@@ -44,3 +44,20 @@ export function useWithShowcase(path: string): string {
   const active = useShowcaseActive();
   return useMemo(() => withShowcaseQuery(path, active), [path, active]);
 }
+
+/** Merge assess/improve query rewrites without dropping active showcase context. */
+export function withShowcaseSearchParamFields(
+  fields: Record<string, string | undefined>,
+  showcaseActive: boolean,
+): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value) {
+      next[key] = value;
+    }
+  }
+  if (showcaseActive) {
+    next[SHOWCASE_QUERY_KEY] = SHOWCASE_ACTIVE_VALUE;
+  }
+  return next;
+}

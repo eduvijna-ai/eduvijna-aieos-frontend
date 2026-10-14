@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { ShowcaseLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
 import { getStudentHome } from "@/services/api/studentLearningApi";
 import type { StudentAssignmentResponse } from "@/services/api/studentLearningApi";
 import { useSession } from "@/services/session/useSession";
@@ -104,13 +104,13 @@ export function StudentHomePage() {
 
       {count > items.length ? (
         <p>
-          <Link className="btn btn-secondary" to="/student-os/assignments">
+          <ShowcaseLink className="btn btn-secondary" to="/student-os/assignments">
             See all {count} assignments
-          </Link>
+          </ShowcaseLink>
         </p>
       ) : (
         <p>
-          <Link to="/student-os/assignments">See all assignments</Link>
+          <ShowcaseLink to="/student-os/assignments">See all assignments</ShowcaseLink>
         </p>
       )}
     </article>

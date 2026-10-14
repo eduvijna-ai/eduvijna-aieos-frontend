@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { ShowcaseLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
 import { StatusBadge } from "@/shared/components/StatusBadge";
 import type { StudentAssignmentResponse } from "@/services/api/studentLearningApi";
 import {
@@ -66,9 +66,9 @@ export function AssignmentCard({
         </dl>
       </div>
       <div className="sos-actions">
-        <Link className="btn" to={href}>
+        <ShowcaseLink className="btn" to={href}>
           {label}
-        </Link>
+        </ShowcaseLink>
       </div>
     </li>
   );

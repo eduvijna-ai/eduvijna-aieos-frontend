@@ -1,11 +1,47 @@
-import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import type { MouseEvent, ReactNode } from "react";
+import { Link, NavLink, type NavLinkProps } from "react-router-dom";
 import "./aieos360-showcase.css";
 import {
   SHOWCASE_LAUNCHER_PATH,
   useShowcaseActive,
   useWithShowcase,
 } from "./showcaseContext";
+
+type ShowcaseLinkProps = {
+  to: string;
+  className?: string;
+  children: ReactNode;
+  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
+};
+
+export function ShowcaseLink({
+  to,
+  className,
+  children,
+  onClick,
+}: ShowcaseLinkProps) {
+  const destination = useWithShowcase(to);
+  return (
+    <Link to={destination} className={className} onClick={onClick}>
+      {children}
+    </Link>
+  );
+}
+
+type ShowcaseNavLinkProps = {
+  to: string;
+  className?: NavLinkProps["className"];
+  children: ReactNode;
+};
+
+export function ShowcaseNavLink({ to, className, children }: ShowcaseNavLinkProps) {
+  const destination = useWithShowcase(to);
+  return (
+    <NavLink to={destination} className={className}>
+      {children}
+    </NavLink>
+  );
+}
 
 type ShowcaseExternalHandoffProps = {
   href: string;
