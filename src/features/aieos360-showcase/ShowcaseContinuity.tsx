@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from "react";
+import type { ComponentProps, MouseEvent, ReactNode } from "react";
 import { Link, NavLink, type NavLinkProps } from "react-router-dom";
 import "./aieos360-showcase.css";
 import {
@@ -12,17 +12,23 @@ type ShowcaseLinkProps = {
   className?: string;
   children: ReactNode;
   onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
-};
+} & Omit<ComponentProps<typeof Link>, "to" | "children" | "className">;
 
 export function ShowcaseLink({
   to,
   className,
   children,
   onClick,
+  ...rest
 }: ShowcaseLinkProps) {
   const destination = useWithShowcase(to);
   return (
-    <Link to={destination} className={className} onClick={onClick}>
+    <Link
+      to={destination}
+      className={className}
+      onClick={onClick}
+      {...rest}
+    >
       {children}
     </Link>
   );
