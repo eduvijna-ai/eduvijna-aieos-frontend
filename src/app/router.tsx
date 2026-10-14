@@ -26,11 +26,16 @@ import { SchoolIntelligencePage } from "@/features/principal-os/school-intellige
 import { ParentOsShell } from "@/features/parent-os/shell/ParentOsShell";
 import { ParentHomePage } from "@/features/parent-os/home/ParentHomePage";
 import { ParentChildPage } from "@/features/parent-os/child/ParentChildPage";
+import { Aieos360ShowcaseLauncherPage } from "@/features/aieos360-showcase/Aieos360ShowcaseLauncherPage";
 
 export function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/teacher-os/today" replace />} />
+      <Route
+        path="/showcase/aieos360"
+        element={<Aieos360ShowcaseLauncherPage />}
+      />
       <Route path="/parent-os" element={<ParentOsShell />}>
         <Route index element={<ParentHomePage />} />
         <Route
