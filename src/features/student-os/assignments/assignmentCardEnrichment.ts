@@ -53,7 +53,7 @@ export function useEnrichedAssignmentForCard(
     }
 
     let cancelled = false;
-    let request =
+    const request =
       inFlightDetail.get(assignmentId) ??
       getStudentAssignment(assignmentId)
         .then(({ data }) => {

@@ -32,7 +32,9 @@ test.describe("[AIEOS360-S01-I04R1:student-product-e2e] Student real-stack journ
         name: fixture.worksheet_title,
       }),
     ).toBeVisible();
-    await expect(page.getByText(/Worksheet/i)).toBeVisible();
+    await expect(
+      page.locator(".sos-card-type").getByText("Worksheet", { exact: true }),
+    ).toBeVisible();
     await expect(
       page.locator(`a[href="/student-os/assignments/${fixture.assignment_id}"]`),
     ).toBeVisible();
