@@ -6,13 +6,14 @@ import {
   formatTimeBasisCopy,
   GENERIC_SOURCE_PROVENANCE,
   isAuthorizedScopeEmpty,
+  schoolSummaryHighlights,
 } from "./schoolIntelligencePresentation";
 import { emptyAuthorizedScope, sampleSchoolIntelligence } from "../schoolIntelligence.fixtures";
 
 describe("School Intelligence presentation", () => {
-  it("formats freshness as current facts as of the backend timestamp", () => {
+  it("formats freshness as school activity as of the backend timestamp", () => {
     expect(formatCurrentFactsAsOf("2026-01-15T12:00:00Z")).toBe(
-      "Current facts as of 2026-01-15T12:00:00Z",
+      "School activity as of 2026-01-15T12:00:00Z",
     );
   });
 
@@ -37,12 +38,25 @@ describe("School Intelligence presentation", () => {
       submitted_count: 10,
       current_policy_evaluated_count: 8,
     });
-    expect(text).toBe(
-      "Current-policy evaluations: 8 of 10 submitted evidence records",
-    );
+    expect(text).toBe("8 of 10 submitted work evaluated");
     expect(text).not.toContain("%");
     expect(text.toLowerCase()).not.toContain("rate");
     expect(text).not.toContain("80");
+    expect(text.toLowerCase()).not.toContain("current-policy");
+  });
+
+  it("prioritizes leadership summary metrics", () => {
+    const labels = schoolSummaryHighlights(sampleSchoolIntelligence().summary).map(
+      (item) => item.label,
+    );
+    expect(labels).toEqual([
+      "Classes in scope",
+      "Classes with assignment activity",
+      "Learner submissions",
+      "Evaluation coverage (submitted work)",
+      "Classes with recorded classroom assessment",
+      "Remediation activity",
+    ]);
   });
 
   it("treats zero authorized classes as an empty authorized scope", () => {

@@ -498,7 +498,7 @@ test.describe("[AIEOS360-S04-I03-E2E] integrated cross-role journey", () => {
     await expect(
       page.getByRole("heading", { name: "School Intelligence" }),
     ).toBeVisible();
-    await expect(page.getByText("In-scope classes: 2")).toBeVisible();
+    await expect(page.getByText("Authorized classes: 2")).toBeVisible();
     await expect(page.getByTestId("class-card-class-5a")).toContainText(
       "Grade 5A",
     );
@@ -565,7 +565,7 @@ test.describe("[AIEOS360-S04-I03-E2E] integrated cross-role journey", () => {
     );
 
     await expect(
-      page.getByRole("heading", { name: "Parent home" }),
+      page.getByRole("heading", { name: "Family home" }),
     ).toBeVisible();
     await expect(
       page.getByRole("heading", { name: fixture.worksheet_title }),
@@ -584,7 +584,7 @@ test.describe("[AIEOS360-S04-I03-E2E] integrated cross-role journey", () => {
         response.status() === 200,
     );
     await page
-      .getByRole("link", { name: /View current facts for Child 1/i })
+      .getByRole("link", { name: /View all assignments for Child 1/i })
       .click();
     const childResponse = await childPromise;
     expect(parentChildUrl(childResponse.url())?.pathname).toBe(childPath);

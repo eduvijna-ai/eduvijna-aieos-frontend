@@ -15,8 +15,50 @@
   margin-bottom: var(--space-2);
 }
 
+.parent-os-lead {
+  margin: 0 0 var(--space-2);
+  font-weight: 600;
+}
+
 .parent-os-basis {
   margin: 0;
+}
+
+.parent-os-child-summary {
+  margin: 0 0 var(--space-2);
+  font-weight: 600;
+}
+
+.parent-os-ordinal-note {
+  margin: 0 0 var(--space-3);
+  font-size: 0.85rem;
+}
+
+.parent-os-assignment-header h3 {
+  margin: 0 0 var(--space-2);
+}
+
+.parent-os-assignment-primary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+  align-items: baseline;
+}
+
+.parent-os-assignment-secondary {
+  margin: var(--space-2) 0 0;
+  font-size: 0.9rem;
+}
+
+.parent-os-assignment-more {
+  list-style: none;
+}
+
+.parent-os-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .parent-os-child-list,

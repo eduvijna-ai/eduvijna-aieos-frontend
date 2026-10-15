@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 import {
   getParentOsHome,
@@ -12,12 +11,19 @@ import { ParentAssignmentList } from "../ParentAssignmentList";
 import { parentErrorTitle, parentMessageForApiError } from "../parentMessages";
 import {
   assignmentsOf,
+  authorizedChildrenLead,
   childOrdinalLabel,
   childrenOf,
+  formatAssignmentStatusSummary,
   formatCurrentFactsAsOf,
   formatTimeBasisCopy,
+  parentChildDetailPath,
+  summarizeAssignmentStatuses,
 } from "../parentPresentation";
-import { ShowcaseBackLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
+import {
+  ShowcaseBackLink,
+  ShowcaseLink,
+} from "@/features/aieos360-showcase/ShowcaseContinuity";
 import "../parent-os.css";
 
 export function ParentHomePage() {
@@ -57,7 +63,7 @@ export function ParentHomePage() {
     return (
       <article className="stack parent-os-page">
         <header>
-          <h1>Parent home</h1>
+          <h1>Family home</h1>
         </header>
         <EmptyState
           title="Connect a development session"
@@ -68,7 +74,7 @@ export function ParentHomePage() {
   }
 
   if (status === "loading") {
-    return <LoadingState label="Loading Parent facts…" />;
+    return <LoadingState label="Loading your family view…" />;
   }
 
   if (status === "error") {
@@ -101,8 +107,9 @@ export function ParentHomePage() {
     <article className="stack parent-os-page">
       <header className="parent-os-page-header">
         <div>
-          <h1>Parent home</h1>
+          <h1>Family home</h1>
           <ShowcaseBackLink />
+          <p className="parent-os-lead">{authorizedChildrenLead(children.length)}</p>
           <p className="parent-os-basis">{formatCurrentFactsAsOf(data.generated_at)}</p>
           <p className="muted">{formatTimeBasisCopy()}</p>
         </div>
@@ -118,27 +125,35 @@ export function ParentHomePage() {
         />
       ) : (
         <section className="stack" aria-labelledby="parent-children-heading">
-          <h2 id="parent-children-heading">Children currently available</h2>
+          <h2 id="parent-children-heading">Your children</h2>
           <ul className="parent-os-child-list">
-            {children.map((child, index) => (
-              <li
-                key={child.learner_principal_id}
-                className="panel parent-os-child-card"
-                data-testid={`parent-child-card-${index}`}
-              >
-                <h2>{childOrdinalLabel(index)}</h2>
-                <p className="muted">
-                  Presentation order only. This is not an authoritative name.
-                </p>
-                <ParentAssignmentList assignments={assignmentsOf(child)} />
-                <Link
-                  className="btn parent-os-child-link"
-                  to={`/parent-os/children/${encodeURIComponent(child.learner_principal_id)}`}
+            {children.map((child, index) => {
+              const assignments = assignmentsOf(child);
+              const summary = summarizeAssignmentStatuses(assignments);
+              return (
+                <li
+                  key={child.learner_principal_id}
+                  className="panel parent-os-child-card"
+                  data-testid={`parent-child-card-${index}`}
                 >
-                  View current facts for {childOrdinalLabel(index)}
-                </Link>
-              </li>
-            ))}
+                  <h2>{childOrdinalLabel(index)}</h2>
+                  <p className="parent-os-child-summary">
+                    {formatAssignmentStatusSummary(summary)}
+                  </p>
+                  <p className="muted parent-os-ordinal-note">
+                    Labels such as Child 1 follow presentation order only; they are not
+                    official names.
+                  </p>
+                  <ParentAssignmentList assignments={assignments} compact />
+                  <ShowcaseLink
+                    className="btn parent-os-child-link"
+                    to={parentChildDetailPath(child.learner_principal_id)}
+                  >
+                    View all assignments for {childOrdinalLabel(index)}
+                  </ShowcaseLink>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
