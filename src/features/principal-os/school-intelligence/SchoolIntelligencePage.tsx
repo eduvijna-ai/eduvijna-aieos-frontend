@@ -16,7 +16,6 @@ import {
 import {
   classActivityHighlights,
   formatActivityPresence,
-  formatCoverageAmongSubmitted,
   formatCurrentFactsAsOf,
   formatProjectionCopy,
   formatTimeBasisCopy,
