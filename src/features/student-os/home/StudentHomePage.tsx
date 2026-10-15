@@ -6,7 +6,8 @@ import { useSession } from "@/services/session/useSession";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ErrorState } from "@/shared/components/ErrorState";
 import { LoadingState } from "@/shared/components/LoadingState";
-import { AssignmentCard } from "../assignments/AssignmentCard";
+import { AssignmentCardFromList } from "../assignments/AssignmentCardFromList";
+import { currentAssignmentCountLead } from "../assignmentPresentation";
 import { studentMessageForApiError } from "../studentMessages";
 
 export function StudentHomePage() {
@@ -78,13 +79,7 @@ export function StudentHomePage() {
     <article className="stack sos-page">
       <header className="sos-page-header">
         <h1>Your work</h1>
-        <p className="sos-lead">
-          {count === 0
-            ? "You have no assignments to work on right now."
-            : count === 1
-              ? "You have 1 assignment to work on."
-              : `You have ${count} assignments to work on.`}
-        </p>
+        <p className="sos-lead">{currentAssignmentCountLead(count)}</p>
         {moreOnAssignmentsPage ? (
           <p className="muted sos-home-hint">
             A few assignments are shown below. Open the full list to see everything
@@ -105,7 +100,7 @@ export function StudentHomePage() {
           </h2>
           <ul className="sos-list">
             {items.map((assignment) => (
-              <AssignmentCard
+              <AssignmentCardFromList
                 key={assignment.assignment_id}
                 assignment={assignment}
               />

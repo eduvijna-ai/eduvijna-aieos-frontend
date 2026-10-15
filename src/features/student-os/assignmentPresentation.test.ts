@@ -3,6 +3,7 @@ import {
   assignedVersionExplanation,
   assignmentPrimaryActionLabel,
   assignmentTimingSummary,
+  currentAssignmentCountLead,
 } from "./assignmentPresentation";
 import { sampleAssignment } from "./studentOs.fixtures";
 
@@ -18,6 +19,12 @@ describe("assignment presentation helpers", () => {
   it("explains assigned version in student-friendly language", () => {
     expect(assignedVersionExplanation()).toMatch(/teacher assigned/i);
     expect(assignedVersionExplanation()).not.toMatch(/publication|version id/i);
+  });
+
+  it("describes current assignment count without implying unfinished work", () => {
+    expect(currentAssignmentCountLead(2)).toBe("You have 2 current assignments.");
+    expect(currentAssignmentCountLead(2)).not.toMatch(/work on/i);
+    expect(currentAssignmentCountLead(0)).toBe("You have no current assignments.");
   });
 
   it("prefers due date in card timing summary", () => {

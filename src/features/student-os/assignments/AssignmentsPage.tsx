@@ -6,7 +6,7 @@ import { useSession } from "@/services/session/useSession";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ErrorState } from "@/shared/components/ErrorState";
 import { LoadingState } from "@/shared/components/LoadingState";
-import { AssignmentCard } from "./AssignmentCard";
+import { AssignmentCardFromList } from "./AssignmentCardFromList";
 import { studentMessageForApiError } from "../studentMessages";
 
 const PAGE_SIZE = 20;
@@ -123,7 +123,7 @@ export function AssignmentsPage() {
       ) : (
         <ul className="sos-list">
           {items.map((assignment) => (
-            <AssignmentCard
+            <AssignmentCardFromList
               key={assignment.assignment_id}
               assignment={assignment}
             />

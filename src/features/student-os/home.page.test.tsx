@@ -7,7 +7,11 @@ import {
   renderApp,
   stubFetch,
 } from "@/test/test-utils";
-import { sampleAssignment, sampleHome } from "./studentOs.fixtures";
+import {
+  ASSIGNMENT_ID,
+  sampleAssignment,
+  sampleHome,
+} from "./studentOs.fixtures";
 
 describe("Student Home", () => {
   it("uses the exact backend current_assignment_count, not the item slice length", async () => {
@@ -26,7 +30,7 @@ describe("Student Home", () => {
     renderApp("/student-os/home");
 
     expect(
-      await screen.findByText(/You have 12 assignments to work on/i),
+      await screen.findByText(/You have 12 current assignments/i),
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Leaf parts worksheet" })).toBeInTheDocument();
     expect(
@@ -41,8 +45,64 @@ describe("Student Home", () => {
     renderApp("/student-os/home");
     expect(await screen.findByText(/No assignments yet/i)).toBeInTheDocument();
     expect(
-      await screen.findByText(/no assignments to work on right now/i),
+      await screen.findByText(/no current assignments/i),
     ).toBeInTheDocument();
+  });
+
+  it("does not describe the count as unfinished when a submitted item is included", async () => {
+    stubFetch((call) => {
+      if (call.url === "/api/v1/student-os/home") {
+        return mockJsonResponse(
+          sampleHome({
+            current_assignment_count: 2,
+            items: [
+              sampleAssignment({
+                resource: null,
+                attempt_summary: "SUBMITTED",
+                attempt_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              }),
+            ],
+          }),
+        );
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        return mockJsonResponse(
+          sampleAssignment({
+            attempt_summary: "SUBMITTED",
+            attempt_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          }),
+        );
+      }
+      return mockJsonResponse({ items: [], next_cursor: null, has_more: false });
+    });
+
+    renderApp("/student-os/home");
+    expect(
+      await screen.findByText(/You have 2 current assignments/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/to work on/i)).not.toBeInTheDocument();
+  });
+
+  it("enriches home cards from assignment detail when list omits resource", async () => {
+    stubFetch((call) => {
+      if (call.url === "/api/v1/student-os/home") {
+        return mockJsonResponse(
+          sampleHome({
+            items: [sampleAssignment({ resource: null })],
+          }),
+        );
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        return mockJsonResponse(sampleAssignment());
+      }
+      return mockJsonResponse({ items: [], next_cursor: null, has_more: false });
+    });
+
+    renderApp("/student-os/home");
+    expect(
+      await screen.findByRole("heading", { name: "Leaf parts worksheet" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Worksheet")).toBeInTheDocument();
   });
 
   it("shows authorization denial without treating it as success", async () => {

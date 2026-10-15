@@ -71,6 +71,13 @@ export function assignedVersionExplanation(): string {
   return "You are working from the copy your teacher assigned. If they publish updates later, this assignment stays the same.";
 }
 
+/** Home lead line: count includes submitted and not-yet-started current assignments. */
+export function currentAssignmentCountLead(count: number): string {
+  if (count === 0) return "You have no current assignments.";
+  if (count === 1) return "You have 1 current assignment.";
+  return `You have ${count} current assignments.`;
+}
+
 export function assignmentTimingSummary(
   assignment: StudentAssignmentResponse,
 ): string {

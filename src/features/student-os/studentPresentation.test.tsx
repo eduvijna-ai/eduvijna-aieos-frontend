@@ -33,9 +33,12 @@ describe("Student presentation (CX01-I04)", () => {
         return mockJsonResponse({
           current_assignment_count: 3,
           items: [
-            sampleAssignment({ attempt_summary: "NOT_STARTED" }),
+            sampleAssignment({ attempt_summary: "NOT_STARTED", resource: null }),
           ],
         });
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        return mockJsonResponse(sampleAssignment());
       }
       return mockJsonResponse({ items: [], next_cursor: null, has_more: false });
     });
