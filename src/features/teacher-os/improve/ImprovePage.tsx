@@ -40,6 +40,12 @@ import {
   isEligibleForImprove,
   voidedImproveMessage,
 } from "./improvePresentation";
+import { ShowcaseBackLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
+import {
+  isShowcaseActive,
+  withShowcaseQuery,
+  withShowcaseSearchParamFields,
+} from "@/features/aieos360-showcase/showcaseContext";
 import "./improve.css";
 
 type Step = "hub" | "review" | "goal" | "context" | "confirm";
@@ -67,6 +73,7 @@ export function ImprovePage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const assessmentIdParam = searchParams.get("assessment_id");
+  const showcaseActive = isShowcaseActive(searchParams);
   const { isConnected, isProduction } = useSession();
   const sessionReady = isConnected || isProduction;
 
@@ -217,7 +224,10 @@ export function ImprovePage() {
 
   function onChooseAssessment(assessment: ClassroomAssessmentResponse) {
     setSearchParams(
-      { assessment_id: assessment.assessment_id },
+      withShowcaseSearchParamFields(
+        { assessment_id: assessment.assessment_id },
+        showcaseActive,
+      ),
       { replace: false },
     );
   }
@@ -434,7 +444,9 @@ export function ImprovePage() {
         idempotencyKey,
       );
       setActionMessage("Remediation preparation created.");
-      navigate(`/teacher-os/work/${data.work_id}`);
+      navigate(
+        withShowcaseQuery(`/teacher-os/work/${data.work_id}`, showcaseActive),
+      );
     } catch (error) {
       await handleCreateError(error);
     } finally {
@@ -451,6 +463,7 @@ export function ImprovePage() {
       <header>
         <p className="muted">Teacher OS · Improve</p>
         <h1>Improve</h1>
+        <ShowcaseBackLink />
         <p className="improve-lede">
           Improve is your deliberate choice to start a remediation preparation
           from a recorded class assessment. Assessed does not mean improvement
@@ -545,7 +558,10 @@ export function ImprovePage() {
                         type="button"
                         className="btn btn-secondary"
                         onClick={() => {
-                          setSearchParams({}, { replace: false });
+                          setSearchParams(
+                            withShowcaseSearchParamFields({}, showcaseActive),
+                            { replace: false },
+                          );
                           setSelected(null);
                           setReviewedRevision(null);
                           setStep("hub");

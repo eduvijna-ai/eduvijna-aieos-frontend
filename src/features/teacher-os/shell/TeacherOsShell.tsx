@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Outlet } from "react-router-dom";
+import { ShowcaseNavLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
 import { DevSessionPanel } from "./DevSessionPanel";
 import "./shell.css";
 
@@ -28,14 +29,14 @@ export function TeacherOsShell() {
           <ul className="tos-nav-list">
             {NAV_ITEMS.map((item) => (
               <li key={item.to}>
-                <NavLink
+                <ShowcaseNavLink
                   to={item.to}
                   className={({ isActive }) =>
                     isActive ? "tos-nav-link is-active" : "tos-nav-link"
                   }
                 >
                   {item.label}
-                </NavLink>
+                </ShowcaseNavLink>
               </li>
             ))}
           </ul>

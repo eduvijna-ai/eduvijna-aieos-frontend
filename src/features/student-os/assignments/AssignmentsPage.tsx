@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { ShowcaseLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
 import { listStudentAssignments } from "@/services/api/studentLearningApi";
 import type { StudentAssignmentResponse } from "@/services/api/studentLearningApi";
 import { useSession } from "@/services/session/useSession";
@@ -68,7 +68,7 @@ export function AssignmentsPage() {
       <article className="stack sos-page">
         <header>
           <p className="muted">
-            <Link to="/student-os/home">Home</Link> · Assignments
+            <ShowcaseLink to="/student-os/home">Home</ShowcaseLink> · Assignments
           </p>
           <h1>Assignments</h1>
         </header>
@@ -100,7 +100,7 @@ export function AssignmentsPage() {
     <article className="stack sos-page">
       <header>
         <p className="muted">
-          <Link to="/student-os/home">Home</Link> · Assignments
+          <ShowcaseLink to="/student-os/home">Home</ShowcaseLink> · Assignments
         </p>
         <h1>Assignments</h1>
         <p className="muted">

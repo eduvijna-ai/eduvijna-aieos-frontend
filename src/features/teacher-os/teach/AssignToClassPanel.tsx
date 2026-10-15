@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { ShowcaseLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
 import {
   createTeachingAssignment,
   listAssignableClasses,
@@ -219,12 +219,12 @@ export function AssignToClassPanel({
           </div>
         </dl>
         <div className="work-actions">
-          <Link
+          <ShowcaseLink
             className="btn"
             to={`/teacher-os/teach/assignments/${created.assignment_id}`}
           >
             View in Teach
-          </Link>
+          </ShowcaseLink>
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Close
           </button>

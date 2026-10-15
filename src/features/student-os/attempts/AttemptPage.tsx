@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   getLearningAttempt,
@@ -31,6 +31,12 @@ import {
 import { studentMessageForApiError } from "../studentMessages";
 import { LearnerWork } from "./LearnerWork";
 import { ResponseEditor } from "./ResponseEditor";
+import {
+  ShowcaseBackLink,
+  ShowcaseExternalHandoff,
+} from "@/features/aieos360-showcase/ShowcaseContinuity";
+import { buildTeacherAssessShowcaseUrl } from "@/features/aieos360-showcase/showcaseCrossRoleUrls";
+import { useWithShowcase } from "@/features/aieos360-showcase/showcaseContext";
 
 function SubmittedAnswerList({ attempt }: { attempt: AttemptResponse }) {
   if (attempt.responses.length === 0) {
@@ -77,6 +83,19 @@ export function AttemptPage() {
   const saveMaterialRef = useRef<string | null>(null);
   const submitKeyRef = useRef<string | null>(null);
   const submitMaterialRef = useRef<string | null>(null);
+  const homeHref = useWithShowcase("/student-os/home");
+  const assignmentPath = `/student-os/assignments/${attempt?.teaching_assignment_id ?? ""}`;
+  const assignmentHref = useWithShowcase(
+    attempt?.teaching_assignment_id
+      ? assignmentPath
+      : "/student-os/assignments",
+  );
+  const teacherAssessHref = useMemo(() => {
+    const assignmentId = attempt?.teaching_assignment_id;
+    return assignmentId
+      ? buildTeacherAssessShowcaseUrl(assignmentId)
+      : null;
+  }, [attempt]);
 
   const applyAttempt = useCallback((data: AttemptResponse, nextEtag: string | null) => {
     setAttempt(data);
@@ -224,14 +243,11 @@ export function AttemptPage() {
     <article className="stack sos-page">
       <header>
         <p className="muted">
-          <Link to="/student-os/home">Home</Link> ·{" "}
-          <Link
-            to={`/student-os/assignments/${attempt.teaching_assignment_id}`}
-          >
-            Assignment
-          </Link>
+          <Link to={homeHref}>Home</Link> ·{" "}
+          <Link to={assignmentHref}>Assignment</Link>
         </p>
         <h1>{title}</h1>
+        <ShowcaseBackLink />
         {typeLabel ? <p className="muted">{typeLabel}</p> : null}
         <StatusBadge
           label={attemptProgressLabel(attempt.lifecycle_state)}
@@ -303,6 +319,15 @@ export function AttemptPage() {
             Submit work
           </button>
         </div>
+      ) : null}
+
+      {readOnly && teacherAssessHref ? (
+        <ShowcaseExternalHandoff
+          href={teacherAssessHref}
+          testId="showcase-continue-teacher-assess"
+        >
+          Continue showcase: Teacher Assessment Intelligence for this assignment
+        </ShowcaseExternalHandoff>
       ) : null}
 
       {confirmingSubmit ? (

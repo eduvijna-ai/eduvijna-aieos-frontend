@@ -2,6 +2,7 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -55,6 +56,11 @@ import {
   summarizeResolvedLifecycle,
   type ArtifactLifecycleActions,
 } from "./lifecycle";
+import {
+  ShowcaseBackLink,
+  ShowcaseExternalHandoff,
+} from "@/features/aieos360-showcase/ShowcaseContinuity";
+import { buildPrincipalShowcaseUrl } from "@/features/aieos360-showcase/showcaseCrossRoleUrls";
 import "./work.css";
 
 const OUT_OF_DATE_MESSAGE =
@@ -438,6 +444,7 @@ export function WorkPage() {
   const workKindLabel = isRemediation
     ? "Remediation preparation"
     : "Preparation";
+  const principalShowcaseHref = useMemo(() => buildPrincipalShowcaseUrl(), []);
 
   return (
     <article className="stack work-page">
@@ -447,6 +454,15 @@ export function WorkPage() {
           {workKindLabel}
         </p>
         <h1>{work ? lessonTitle(work) : workKindLabel}</h1>
+        <ShowcaseBackLink />
+        {status === "ready" && work && isRemediation ? (
+          <ShowcaseExternalHandoff
+            href={principalShowcaseHref}
+            testId="showcase-continue-principal"
+          >
+            Continue showcase: Principal School Intelligence
+          </ShowcaseExternalHandoff>
+        ) : null}
         {status === "ready" && work ? (
           <>
             {lessonContextLine(work) || work.target_date ? (

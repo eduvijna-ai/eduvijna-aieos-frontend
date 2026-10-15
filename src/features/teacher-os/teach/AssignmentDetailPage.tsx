@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 import {
   cancelTeachingAssignment,
   closeTeachingAssignment,
@@ -26,6 +26,13 @@ import {
   isActiveAssignment,
 } from "./assignmentPresentation";
 import { assessHrefForAssignment } from "../assess/assessmentPresentation";
+import {
+  ShowcaseBackLink,
+  ShowcaseExternalHandoff,
+  ShowcaseLink,
+} from "@/features/aieos360-showcase/ShowcaseContinuity";
+import { buildStudentAssignmentShowcaseUrl } from "@/features/aieos360-showcase/showcaseCrossRoleUrls";
+import { useWithShowcase } from "@/features/aieos360-showcase/showcaseContext";
 import "./teach.css";
 
 const TERMINAL_STATE_NOTICE =
@@ -291,12 +298,22 @@ export function AssignmentDetailPage() {
   const artifactHref = assignment
     ? artifactLinkForAssignment(assignment)
     : null;
+  const assessHref = useWithShowcase(
+    assignment ? assessHrefForAssignment(assignment.assignment_id) : "/teacher-os/assess",
+  );
+  const studentShowcaseHref = useMemo(
+    () =>
+      assignment
+        ? buildStudentAssignmentShowcaseUrl(assignment.assignment_id)
+        : null,
+    [assignment],
+  );
 
   return (
     <article className="stack teach-page">
       <header>
         <p className="muted">
-          <Link to="/teacher-os/teach">Assignments</Link>
+          <ShowcaseLink to="/teacher-os/teach">Assignments</ShowcaseLink>
           {" · "}
           Detail
         </p>
@@ -305,6 +322,7 @@ export function AssignmentDetailPage() {
             assignment?.class_ref ??
             "Assignment"}
         </h1>
+        <ShowcaseBackLink />
       </header>
 
       <div className="status-region" aria-live="polite">
@@ -389,7 +407,7 @@ export function AssignmentDetailPage() {
                   <dt>Source work</dt>
                   <dd>
                     {artifactHref ? (
-                      <Link to={artifactHref}>Open artifact</Link>
+                      <ShowcaseLink to={artifactHref}>Open artifact</ShowcaseLink>
                     ) : (
                       <code>{assignment.source_work_id}</code>
                     )}
@@ -427,15 +445,24 @@ export function AssignmentDetailPage() {
               learners or create judgment.
             </p>
             <p>
-              <Link
+              <ShowcaseLink
                 className="btn"
-                to={assessHrefForAssignment(assignment.assignment_id)}
+                to={assessHref}
                 data-testid="review-assessment-intelligence"
               >
                 Review assessment intelligence
-              </Link>
+              </ShowcaseLink>
             </p>
           </section>
+
+          {studentShowcaseHref ? (
+            <ShowcaseExternalHandoff
+              href={studentShowcaseHref}
+              testId="showcase-continue-student-assignment"
+            >
+              Continue showcase: open this assignment in Student OS
+            </ShowcaseExternalHandoff>
+          ) : null}
 
           {active ? (
             <section

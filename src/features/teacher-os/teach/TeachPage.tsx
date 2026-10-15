@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { ShowcaseLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
+import {
+  isShowcaseActive,
+  withShowcaseQuery,
+} from "@/features/aieos360-showcase/showcaseContext";
 import {
   listAssignableClasses,
   listTeachingAssignments,
@@ -57,6 +62,8 @@ function bindingKey(
  */
 export function TeachPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const showcaseActive = isShowcaseActive(searchParams);
   const { isConnected, isProduction } = useSession();
   const sessionReady = isConnected || isProduction;
 
@@ -232,7 +239,10 @@ export function TeachPage() {
       clearIdempotencyAssociation(startKeyRef, startMaterialRef);
       setActionMessage("Lesson started.");
       navigate(
-        `/teacher-os/teach/executions/${response.data.execution_id}`,
+        withShowcaseQuery(
+          `/teacher-os/teach/executions/${response.data.execution_id}`,
+          showcaseActive,
+        ),
       );
     } catch (error) {
       const problemCode = problemCodeFromApiError(error);
@@ -594,11 +604,11 @@ export function TeachPage() {
                         <section className="panel teach-card">
                           <div className="teach-card-header">
                             <h3>
-                              <Link
+                              <ShowcaseLink
                                 to={`/teacher-os/teach/assignments/${item.assignment_id}`}
                               >
                                 {item.audience_display_label ?? item.class_ref}
-                              </Link>
+                              </ShowcaseLink>
                             </h3>
                             <span
                               className="lifecycle-pill"
@@ -642,11 +652,11 @@ export function TeachPage() {
                       <section className="panel teach-card">
                         <div className="teach-card-header">
                           <h3>
-                            <Link
+                            <ShowcaseLink
                               to={`/teacher-os/teach/assignments/${item.assignment_id}`}
                             >
                               {item.audience_display_label ?? item.class_ref}
-                            </Link>
+                            </ShowcaseLink>
                           </h3>
                           <span
                             className="lifecycle-pill"

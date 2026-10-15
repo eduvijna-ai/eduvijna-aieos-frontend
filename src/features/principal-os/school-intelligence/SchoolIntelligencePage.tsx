@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getPrincipalSchoolIntelligence,
   type PrincipalSchoolIntelligenceClassCardResponse,
@@ -22,10 +22,16 @@ import {
   GENERIC_SOURCE_PROVENANCE,
   isAuthorizedScopeEmpty,
 } from "./schoolIntelligencePresentation";
+import {
+  ShowcaseBackLink,
+  ShowcaseExternalHandoff,
+} from "@/features/aieos360-showcase/ShowcaseContinuity";
+import { buildParentShowcaseUrl } from "@/features/aieos360-showcase/showcaseCrossRoleUrls";
 import "./school-intelligence.css";
 
 export function SchoolIntelligencePage() {
   const { isConnected, isProduction } = useSession();
+  const parentShowcaseHref = useMemo(() => buildParentShowcaseUrl(), []);
   const [status, setStatus] = useState<
     "no-session" | "loading" | "ready" | "error"
   >("loading");
@@ -112,11 +118,19 @@ export function SchoolIntelligencePage() {
           <p className="muted">
             In-scope classes: {data.summary.in_scope_class_count}
           </p>
+          <ShowcaseBackLink />
         </div>
         <button type="button" className="btn btn-secondary" onClick={() => void load()}>
           Refresh
         </button>
       </header>
+
+      <ShowcaseExternalHandoff
+        href={parentShowcaseHref}
+        testId="showcase-continue-parent"
+      >
+        Continue showcase: Parent OS
+      </ShowcaseExternalHandoff>
 
       {emptyScope ? (
         <EmptyState

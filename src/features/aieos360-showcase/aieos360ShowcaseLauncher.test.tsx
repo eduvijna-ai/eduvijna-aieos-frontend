@@ -35,17 +35,26 @@ describe("AIEOS360 showcase launcher page", () => {
       screen.getByRole("link", { name: /Open Teacher OS/i }),
     ).toHaveAttribute(
       "href",
-      "http://presenter.local:5291/teacher-os/today",
+      "http://presenter.local:5291/teacher-os/today?showcase=1",
     );
     expect(
       screen.getByRole("link", { name: /Open Student OS/i }),
-    ).toHaveAttribute("href", "http://presenter.local:5292/student-os/home");
+    ).toHaveAttribute(
+      "href",
+      "http://presenter.local:5292/student-os/home?showcase=1",
+    );
     expect(
       screen.getByRole("link", { name: /Open Principal OS/i }),
-    ).toHaveAttribute("href", "http://presenter.local:5293/principal-os");
+    ).toHaveAttribute(
+      "href",
+      "http://presenter.local:5293/principal-os?showcase=1",
+    );
     expect(
       screen.getByRole("link", { name: /Open Parent OS/i }),
-    ).toHaveAttribute("href", "http://presenter.local:5294/parent-os");
+    ).toHaveAttribute(
+      "href",
+      "http://presenter.local:5294/parent-os?showcase=1",
+    );
 
     vi.unstubAllGlobals();
   });

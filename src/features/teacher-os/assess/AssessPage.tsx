@@ -57,6 +57,13 @@ import {
   type ClassResultLevel,
 } from "./assessmentPresentation";
 import { improveHrefForAssessment } from "../improve/improvePresentation";
+import { ShowcaseBackLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
+import {
+  useShowcaseActive,
+  useWithShowcase,
+  withShowcaseSearchParamFields,
+} from "@/features/aieos360-showcase/showcaseContext";
+import { ShowcaseLink } from "@/features/aieos360-showcase/ShowcaseContinuity";
 import "../teach/teach.css";
 import "./assess.css";
 
@@ -82,6 +89,7 @@ function bindingKey(binding: TeachingExecutionContentBindingResponse): string {
 export function AssessPage() {
   const { session } = useSession();
   const [searchParams, setSearchParams] = useSearchParams();
+  const showcaseActive = useShowcaseActive();
   const executionIdParam = searchParams.get("execution_id");
   const assessmentIdParam = searchParams.get("assessment_id");
   const assignmentIdParam = searchParams.get("assignment_id");
@@ -112,6 +120,11 @@ export function AssessPage() {
     null,
   );
   const [selectedEtag, setSelectedEtag] = useState<string | null>(null);
+  const showcaseImproveHref = useWithShowcase(
+    selected && isAssessmentRecorded(selected)
+      ? improveHrefForAssessment(selected.assessment_id)
+      : "/teacher-os/improve",
+  );
 
   const [resultLevel, setResultLevel] =
     useState<ClassResultLevel>("DEMONSTRATED");
@@ -439,10 +452,13 @@ export function AssessPage() {
         clearMutationAssociation("record");
         applySelectedAssessment(response.data, response.etag);
         setSearchParams(
-          {
-            assignment_id: assignment.assignment_id,
-            assessment_id: response.data.assessment_id,
-          },
+          withShowcaseSearchParamFields(
+            {
+              assignment_id: assignment.assignment_id,
+              assessment_id: response.data.assessment_id,
+            },
+            showcaseActive,
+          ),
           { replace: true },
         );
         setActionMessage(
@@ -517,10 +533,13 @@ export function AssessPage() {
       clearMutationAssociation("record");
       applySelectedAssessment(response.data, response.etag);
       setSearchParams(
-        {
-          execution_id: execution.execution_id,
-          assessment_id: response.data.assessment_id,
-        },
+        withShowcaseSearchParamFields(
+          {
+            execution_id: execution.execution_id,
+            assessment_id: response.data.assessment_id,
+          },
+          showcaseActive,
+        ),
         { replace: true },
       );
       setActionMessage(
@@ -852,6 +871,7 @@ export function AssessPage() {
       <header>
         <p className="muted">Teacher OS · Assess</p>
         <h1>Assess</h1>
+        <ShowcaseBackLink />
         <p className="muted">
           Class-level ClassroomAssessment only. Assigned ≠ Taught ≠ Assessed ≠
           Mastered. Taught ≠ Assessed. Completing a lesson does not create an
@@ -929,11 +949,11 @@ export function AssessPage() {
                 <div>
                   <dt>Assignment</dt>
                   <dd>
-                    <Link
+                    <ShowcaseLink
                       to={`/teacher-os/teach/assignments/${assignment.assignment_id}`}
                     >
                       <code>{assignment.assignment_id}</code>
-                    </Link>
+                    </ShowcaseLink>
                   </dd>
                 </div>
                 <div>
@@ -1341,7 +1361,7 @@ export function AssessPage() {
                   <div className="detail-actions">
                     <Link
                       className="btn btn-secondary"
-                      to={improveHrefForAssessment(selected.assessment_id)}
+                      to={showcaseImproveHref}
                     >
                       Improve this class
                     </Link>
@@ -1484,15 +1504,18 @@ export function AssessPage() {
                           onClick={(event) => {
                             event.preventDefault();
                             setSearchParams(
-                              {
-                                ...(item.execution_id
-                                  ? { execution_id: item.execution_id }
-                                  : {}),
-                                ...(item.assignment_id
-                                  ? { assignment_id: item.assignment_id }
-                                  : {}),
-                                assessment_id: item.assessment_id,
-                              },
+                              withShowcaseSearchParamFields(
+                                {
+                                  ...(item.execution_id
+                                    ? { execution_id: item.execution_id }
+                                    : {}),
+                                  ...(item.assignment_id
+                                    ? { assignment_id: item.assignment_id }
+                                    : {}),
+                                  assessment_id: item.assessment_id,
+                                },
+                                showcaseActive,
+                              ),
                               { replace: false },
                             );
                           }}

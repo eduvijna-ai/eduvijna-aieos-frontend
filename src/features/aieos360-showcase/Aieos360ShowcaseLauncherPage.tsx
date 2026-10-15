@@ -8,6 +8,7 @@ import {
   STORY_STAGE_ORDER,
   type ShowcaseRole,
 } from "./roleUrls";
+import { withShowcaseAbsoluteUrl } from "./showcaseContext";
 import "./aieos360-showcase.css";
 
 const ROLE_CARDS: ReadonlyArray<{
@@ -44,6 +45,15 @@ export function Aieos360ShowcaseLauncherPage() {
     () => resolveRoleLaunchUrls(host, overrides),
     [host, overrides],
   );
+  const showcaseRoleUrls = useMemo(
+    () => ({
+      teacher: withShowcaseAbsoluteUrl(roleUrls.teacher),
+      student: withShowcaseAbsoluteUrl(roleUrls.student),
+      principal: withShowcaseAbsoluteUrl(roleUrls.principal),
+      parent: withShowcaseAbsoluteUrl(roleUrls.parent),
+    }),
+    [roleUrls],
+  );
 
   return (
     <div className="aieos360-showcase">
@@ -76,7 +86,7 @@ export function Aieos360ShowcaseLauncherPage() {
                   </p>
                   <a
                     className="aieos360-showcase__launch"
-                    href={roleUrls[card.role]}
+                    href={showcaseRoleUrls[card.role]}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -109,11 +119,13 @@ export function Aieos360ShowcaseLauncherPage() {
               <li key={stage.id} className="aieos360-showcase__story-step">
                 <a
                   className="aieos360-showcase__story-link"
-                  href={resolveStoryStageUrl(
-                    stage.id,
-                    host,
-                    roleUrls,
-                    overrides,
+                  href={withShowcaseAbsoluteUrl(
+                    resolveStoryStageUrl(
+                      stage.id,
+                      host,
+                      roleUrls,
+                      overrides,
+                    ),
                   )}
                   target="_blank"
                   rel="noopener noreferrer"
