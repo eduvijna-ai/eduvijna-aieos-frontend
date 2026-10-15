@@ -57,3 +57,39 @@ export function questionKindLabel(questionType: string): string {
   if (questionType === "TRUE_FALSE") return "True or false";
   return "Answer";
 }
+
+/** Primary card/detail CTA from real attempt summary (no invented progress). */
+export function assignmentPrimaryActionLabel(
+  attemptSummary: string,
+): string {
+  if (attemptSummary === ATTEMPT_SUMMARY_IN_PROGRESS) return "Continue";
+  if (attemptSummary === ATTEMPT_SUMMARY_SUBMITTED) return "Review submitted work";
+  return "Start";
+}
+
+export function assignedVersionExplanation(): string {
+  return "You are working from the copy your teacher assigned. If they publish updates later, this assignment stays the same.";
+}
+
+/** Home lead line: count includes submitted and not-yet-started current assignments. */
+export function currentAssignmentCountLead(count: number): string {
+  if (count === 0) return "You have no current assignments.";
+  if (count === 1) return "You have 1 current assignment.";
+  return `You have ${count} current assignments.`;
+}
+
+export function assignmentTimingSummary(
+  assignment: StudentAssignmentResponse,
+): string {
+  const due = dueLabel(assignment);
+  const available = availableFromLabel(assignment);
+  if (due !== "No due date") {
+    return due;
+  }
+  if (!assignment.available_from) {
+    return "No due date set";
+  }
+  return available.startsWith("Available from ")
+    ? available
+    : "Check availability below";
+}

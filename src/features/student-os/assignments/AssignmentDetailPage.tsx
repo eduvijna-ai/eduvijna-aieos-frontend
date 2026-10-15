@@ -11,6 +11,7 @@ import { ErrorState } from "@/shared/components/ErrorState";
 import { LoadingState } from "@/shared/components/LoadingState";
 import { StatusBadge } from "@/shared/components/StatusBadge";
 import {
+  assignedVersionExplanation,
   assignmentAvailabilityLabel,
   assignmentTitle,
   attemptProgressLabel,
@@ -110,7 +111,7 @@ export function AssignmentDetailPage() {
     return (
       <EmptyState
         title="Connect a student session"
-        description="Assignment details load from AIEOS."
+        description="Sign in with a student session to open this assignment."
       />
     );
   }
@@ -140,44 +141,33 @@ export function AssignmentDetailPage() {
     assignment.attempt_summary === "NOT_STARTED";
   return (
     <article className="stack sos-page">
-      <header>
-        <p className="muted">
+      <header className="sos-page-header">
+        <p className="muted sos-breadcrumbs">
           <Link to={homeHref}>Home</Link> ·{" "}
           <Link to={assignmentsHref}>Assignments</Link>
         </p>
         <h1>{title}</h1>
         <ShowcaseBackLink />
-        <p className="muted">{typeLabel}</p>
-        <div className="sos-actions">
+        <p className="sos-card-type">{typeLabel}</p>
+        <div className="sos-card-badges">
           <StatusBadge
             label={attemptProgressLabel(assignment.attempt_summary)}
             kind={assignment.attempt_summary}
           />
           <StatusBadge label={assignmentAvailabilityLabel(assignment)} />
         </div>
-      </header>
-
-      <section className="panel stack">
-        <h2>Assigned version</h2>
-        <p>
-          This is the exact version assigned to you. Later publications do not
-          replace this work.
-        </p>
-        <dl className="sos-meta">
+        <dl className="sos-timing-inline">
           <div>
-            <dt>Timing</dt>
-            <dd>
-              {availableFromLabel(assignment)}
-              <br />
-              {dueLabel(assignment)}
-            </dd>
+            <dt>Opens</dt>
+            <dd>{availableFromLabel(assignment)}</dd>
           </div>
           <div>
-            <dt>Class</dt>
-            <dd>{assignment.class_ref}</dd>
+            <dt>Due</dt>
+            <dd>{dueLabel(assignment)}</dd>
           </div>
         </dl>
-      </section>
+        <p className="sos-version-note">{assignedVersionExplanation()}</p>
+      </header>
 
       {assignment.resource ? (
         <LearnerWork resource={assignment.resource} />
@@ -191,7 +181,7 @@ export function AssignmentDetailPage() {
         </p>
       ) : null}
 
-      <div className="sos-actions">
+      <div className="sos-actions sos-detail-actions">
         {canStart ? (
           <button
             type="button"
@@ -201,25 +191,25 @@ export function AssignmentDetailPage() {
             }}
             disabled={starting}
           >
-            {starting ? "Starting…" : "Start this work"}
+            {starting ? "Starting…" : "Start"}
           </button>
         ) : null}
         {assignment.attempt_id != null &&
         assignment.attempt_summary === "IN_PROGRESS" ? (
           <Link className="btn" to={resumeHref}>
-            Continue this work
+            Continue
           </Link>
         ) : null}
         {assignment.attempt_id != null &&
         assignment.attempt_summary === "SUBMITTED" ? (
           <Link className="btn" to={resumeHref}>
-            View submitted work
+            Review submitted work
           </Link>
         ) : null}
         {!assignment.currently_consumable &&
         assignment.attempt_summary === "NOT_STARTED" ? (
           <p className="muted">
-            This assignment is not currently available to start.
+            This assignment is not open yet. Check the opening time above.
           </p>
         ) : null}
       </div>

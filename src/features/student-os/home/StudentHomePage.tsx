@@ -6,7 +6,8 @@ import { useSession } from "@/services/session/useSession";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ErrorState } from "@/shared/components/ErrorState";
 import { LoadingState } from "@/shared/components/LoadingState";
-import { AssignmentCard } from "../assignments/AssignmentCard";
+import { AssignmentCardFromList } from "../assignments/AssignmentCardFromList";
+import { currentAssignmentCountLead } from "../assignmentPresentation";
 import { studentMessageForApiError } from "../studentMessages";
 
 export function StudentHomePage() {
@@ -45,12 +46,12 @@ export function StudentHomePage() {
   if (status === "unavailable") {
     return (
       <article className="stack sos-page">
-        <header>
+        <header className="sos-page-header">
           <h1>Your work</h1>
         </header>
         <EmptyState
           title="Connect a student session"
-          description="Student Home uses the AIEOS assignment list. Connect a development session to see your current work."
+          description="Sign in with a student session to see assignments from your classes."
         />
       </article>
     );
@@ -72,18 +73,19 @@ export function StudentHomePage() {
     );
   }
 
+  const moreOnAssignmentsPage = count > items.length;
+
   return (
     <article className="stack sos-page">
-      <header>
+      <header className="sos-page-header">
         <h1>Your work</h1>
-        <p className="sos-count">
-          You have <strong>{count}</strong>{" "}
-          {count === 1 ? "current assignment" : "current assignments"}.
-        </p>
-        <p className="muted">
-          This count comes from your current class assignments. It is not the
-          number of cards on this page.
-        </p>
+        <p className="sos-lead">{currentAssignmentCountLead(count)}</p>
+        {moreOnAssignmentsPage ? (
+          <p className="muted sos-home-hint">
+            A few assignments are shown below. Open the full list to see everything
+            available to you.
+          </p>
+        ) : null}
       </header>
 
       {items.length === 0 ? (
@@ -92,27 +94,30 @@ export function StudentHomePage() {
           description="When a teacher assigns work that is available now, it will appear here."
         />
       ) : (
-        <ul className="sos-list">
-          {items.map((assignment) => (
-            <AssignmentCard
-              key={assignment.assignment_id}
-              assignment={assignment}
-            />
-          ))}
-        </ul>
+        <section aria-labelledby="sos-home-current-heading">
+          <h2 id="sos-home-current-heading" className="sos-section-title">
+            Start here
+          </h2>
+          <ul className="sos-list">
+            {items.map((assignment) => (
+              <AssignmentCardFromList
+                key={assignment.assignment_id}
+                assignment={assignment}
+              />
+            ))}
+          </ul>
+        </section>
       )}
 
-      {count > items.length ? (
-        <p>
+      <p className="sos-home-footer">
+        {moreOnAssignmentsPage ? (
           <ShowcaseLink className="btn btn-secondary" to="/student-os/assignments">
             See all {count} assignments
           </ShowcaseLink>
-        </p>
-      ) : (
-        <p>
+        ) : (
           <ShowcaseLink to="/student-os/assignments">See all assignments</ShowcaseLink>
-        </p>
-      )}
+        )}
+      </p>
     </article>
   );
 }

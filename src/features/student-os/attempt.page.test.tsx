@@ -28,7 +28,8 @@ describe("Student assignment detail", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: "Leaf parts worksheet" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/exact version assigned/i)).toBeInTheDocument();
+    expect(screen.getByText(/copy your teacher assigned/i)).toBeInTheDocument();
+    expect(screen.queryByText("grade-5-science")).not.toBeInTheDocument();
     expect(screen.getByText("Name one part of a leaf.")).toBeInTheDocument();
     expect(
       calls.every(
@@ -62,11 +63,11 @@ describe("Student assignment detail", () => {
 
     renderApp(`/student-os/assignments/${ASSIGNMENT_ID}`);
     await screen.findByRole("heading", { level: 1, name: "Leaf parts worksheet" });
-    await userEvent.click(screen.getByRole("button", { name: /Start this work/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^Start$/i }));
     expect(
       await screen.findByText(/Could not reach the server/i),
     ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Start this work/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^Start$/i }));
     await waitFor(() => {
       expect(calls.filter((call) => call.method === "POST")).toHaveLength(2);
     });
@@ -103,7 +104,7 @@ describe("Student assignment detail", () => {
     expect(
       await screen.findByText(/This assignment is not available/i),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Start this work/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Start$/i })).not.toBeInTheDocument();
   });
 });
 
@@ -228,7 +229,9 @@ describe("Student attempt experience", () => {
       screen.getByRole("dialog", { name: /Submit this work/i }),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Yes, submit/i }));
-    expect(await screen.findByText(/This work is submitted/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/does not show a grade or score/i),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Save answers/i })).not.toBeInTheDocument();
   });
 
@@ -259,7 +262,7 @@ describe("Student attempt experience", () => {
     renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
     expect(await screen.findByText("False")).toBeInTheDocument();
     expect(
-      screen.getByText(/submitted work remains/i),
+      screen.getByText(/submission is still here to read/i),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Save answers/i })).not.toBeInTheDocument();
   });
