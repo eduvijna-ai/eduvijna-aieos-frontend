@@ -852,8 +852,10 @@ test.describe("[AIEOS360-S02-I04-E2E] Principal OS real-stack journey", () => {
     ).toBeVisible();
     await expect(page.getByText("Authorized classes: 2")).toBeVisible();
     const dataBasis = page.locator("details.pos-data-basis");
+    const derivedOnRequest = dataBasis.getByText(/Derived on request/);
+    await expect(derivedOnRequest).toBeHidden();
     await dataBasis.locator("summary").click();
-    await expect(dataBasis.getByText(/Derived on request/)).toBeVisible();
+    await expect(derivedOnRequest).toBeVisible();
     await expect(dataBasis.getByText(/Current facts as of this request/)).toBeVisible();
     await expect(
       dataBasis.getByText("Derived from current authorized AIEOS source domains."),
