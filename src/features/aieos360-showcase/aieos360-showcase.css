@@ -39,6 +39,30 @@
   line-height: 1.5;
 }
 
+.aieos360-showcase__mode-truth-grid {
+  display: grid;
+  gap: 0.75rem 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  margin: 0 0 1rem;
+}
+
+.aieos360-showcase__mode-truth-grid dt {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+
+.aieos360-showcase__mode-truth-grid dd {
+  margin: 0.25rem 0 0;
+}
+
+.aieos360-showcase__mode-truth-note {
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
 .aieos360-showcase__main {
   max-width: 56rem;
   margin: 0 auto;

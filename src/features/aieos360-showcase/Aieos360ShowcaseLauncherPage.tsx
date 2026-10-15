@@ -9,6 +9,7 @@ import {
   type ShowcaseRole,
 } from "./roleUrls";
 import { withShowcaseAbsoluteUrl } from "./showcaseContext";
+import { ShowcaseModeTruthPanel } from "./ShowcaseModeTruthPanel";
 import "./aieos360-showcase.css";
 
 const ROLE_CARDS: ReadonlyArray<{
@@ -69,6 +70,8 @@ export function Aieos360ShowcaseLauncherPage() {
       </header>
 
       <main className="aieos360-showcase__main">
+        <ShowcaseModeTruthPanel />
+
         <section
           className="aieos360-showcase__section"
           aria-labelledby="aieos360-role-launch-heading"

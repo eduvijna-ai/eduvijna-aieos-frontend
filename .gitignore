@@ -88,6 +88,8 @@ obj/
 *.user
 *.suo
 
+public/aieos360-showcase-runtime.json
+
 # Generated diagrams / local exports
 *.drawio.bkp
 ~$*

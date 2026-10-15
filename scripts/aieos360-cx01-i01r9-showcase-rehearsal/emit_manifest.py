@@ -11,7 +11,7 @@ from pathlib import Path
 ARCHITECTURE_PIN_SHA = "491295c3cf0a151f31686a6a2e1a2176cd92c782"
 PRODUCT_PIN_SHA = "b4b3048fb7a6a1c50ae8619dc490743714f2e3e2"
 INFRASTRUCTURE_PIN_SHA = "a8654e5bc680eac1fa93cf8308d7cad904f4d7b9"
-FRONTEND_BASE_SHA = "80125be6cf172afb5137e845752c5b4505e5a97f"
+FRONTEND_BASE_SHA = "8c8247afda0b9a34e688d2c300d46e83526bb126"
 BACKEND_PIN_SHA = "637583f42b7c475ef83f6f99bca7e65e665a253d"
 OPENAPI_AUTHORITY_SHA = (
     "4042FB2725DA70A02A70EE09563B7698AE2E5DA82927614CAF1B5F7E6AA7C1D0"
@@ -135,7 +135,17 @@ def main() -> int:
             "school_context_provider",
             "DevelopmentCoherentSchoolContextProvider",
         ),
-        "deterministic_mode": True,
+        "showcase_mode": os.environ.get(
+            "AIEOS360_CX01_I06_SHOWCASE_MODE", "DETERMINISTIC"
+        ).strip().upper()
+        or "DETERMINISTIC",
+        "deterministic_mode": (
+            os.environ.get("AIEOS360_CX01_I06_SHOWCASE_MODE", "DETERMINISTIC")
+            .strip()
+            .upper()
+            != "REAL_AI"
+        ),
+        "seeded_worksheet_origin": "synthetic_prerequisite_fixture",
         "dedicated_container": db_report.get("container_name")
         or CX01_SHOWCASE_CONTAINER,
         "tenant_id": fixture.get("tenant_id"),

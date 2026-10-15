@@ -2,6 +2,9 @@
 
 Uses DevelopmentCoherentSchoolContextProvider canonical defaults only and
 contains no harness-local School Context maps or provider overrides.
+
+I06: DETERMINISTIC (default) keeps the governed Fake gateway. REAL_AI composes
+the existing Backend Model Gateway from operator-provided provider env.
 """
 
 from __future__ import annotations
@@ -11,12 +14,60 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
+SHOWCASE_MODE_DETERMINISTIC = "DETERMINISTIC"
+SHOWCASE_MODE_REAL_AI = "REAL_AI"
+
 
 def _backend_root() -> Path:
     root = os.environ.get("AIEOS_BACKEND_ROOT")
     if not root:
         raise SystemExit("AIEOS_BACKEND_ROOT is required")
     return Path(root).resolve()
+
+
+def _resolve_showcase_mode() -> str:
+    raw = os.environ.get("AIEOS360_CX01_I06_SHOWCASE_MODE", SHOWCASE_MODE_DETERMINISTIC)
+    mode = str(raw).strip().upper() or SHOWCASE_MODE_DETERMINISTIC
+    if mode not in (SHOWCASE_MODE_DETERMINISTIC, SHOWCASE_MODE_REAL_AI):
+        raise SystemExit(
+            f"invalid AIEOS360_CX01_I06_SHOWCASE_MODE={raw!r}; "
+            f"expected {SHOWCASE_MODE_DETERMINISTIC} or {SHOWCASE_MODE_REAL_AI}"
+        )
+    return mode
+
+
+def _compose_model_gateway(showcase_mode: str):
+    from aieos.domains.teaching.application.assistant_answer_v1 import (
+        TeacherAssistantAnswerV1,
+    )
+    from aieos.platform.ai.composition import compose_configured_model_provider
+    from aieos.platform.ai.fake import FakeStructuredModelGateway
+    from tests.domains.teaching.worksheet_fixtures import valid_worksheet_model
+
+    if showcase_mode == SHOWCASE_MODE_REAL_AI:
+        configured = compose_configured_model_provider(environ=os.environ)
+        if configured.provider_id == "fake":
+            raise SystemExit(
+                "REAL_AI showcase mode cannot compose Development Fake gateway"
+            )
+        return (
+            configured.gateway,
+            configured.provider_id,
+            configured.model_id,
+            configured.projection,
+        )
+
+    def result_factory(request):
+        if request.output_type is TeacherAssistantAnswerV1:
+            return TeacherAssistantAnswerV1.development_fake(request.input_text)
+        return valid_worksheet_model()
+
+    gateway = FakeStructuredModelGateway(
+        result_factory=result_factory,
+        provider_id="fake",
+        model_id="fake-model",
+    )
+    return gateway, "fake", "fake-model", None
 
 
 def main() -> int:
@@ -56,13 +107,9 @@ def main() -> int:
     from aieos.domains.content.infrastructure.persistence.uow import (
         SqlAlchemyContentUnitOfWorkFactory,
     )
-    from aieos.domains.teaching.application.assistant_answer_v1 import (
-        TeacherAssistantAnswerV1,
-    )
     from aieos.domains.teaching.infrastructure.persistence.uow import (
         SqlAlchemyTeachingUnitOfWorkFactory,
     )
-    from aieos.platform.ai.fake import FakeStructuredModelGateway
     from aieos.platform.ai.infrastructure.persistence.uow import (
         SqlAlchemyAIUnitOfWorkFactory,
     )
@@ -73,8 +120,8 @@ def main() -> int:
     from aieos.platform.runtime.student_learning_command import (
         SqlAlchemyStudentLearningCommandUnitOfWorkFactory,
     )
-    from tests.domains.teaching.worksheet_fixtures import valid_worksheet_model
 
+    showcase_mode = _resolve_showcase_mode()
     runtime_url = os.environ.get("AIEOS360_CX01_I01_SHOWCASE_RUNTIME_DATABASE_URL")
     if not runtime_url:
         raise SystemExit("AIEOS360_CX01_I01_SHOWCASE_RUNTIME_DATABASE_URL is required")
@@ -84,17 +131,11 @@ def main() -> int:
         "AIEOS360_CX01_I01_SHOWCASE_TEACHER_BACKEND_HOST", "127.0.0.1"
     )
 
-    def result_factory(request):
-        if request.output_type is TeacherAssistantAnswerV1:
-            return TeacherAssistantAnswerV1.development_fake(request.input_text)
-        return valid_worksheet_model()
+    gateway, ai_provider_id, ai_model_id, provider_runtime = _compose_model_gateway(
+        showcase_mode
+    )
 
     engine = create_engine(runtime_url)
-    gateway = FakeStructuredModelGateway(
-        result_factory=result_factory,
-        provider_id="fake",
-        model_id="fake-model",
-    )
     school_context = DevelopmentCoherentSchoolContextProvider()
 
     # Deliberately omit learner membership, Principal scope, and Parent ports.
@@ -125,8 +166,9 @@ def main() -> int:
         ai_uow_factory=SqlAlchemyAIUnitOfWorkFactory(engine),
         model_gateway=gateway,
         ai_generation_authorization=DevelopmentAIGenerationPermit(),
-        ai_provider_id="fake",
-        ai_model_id="fake-model",
+        ai_provider_id=ai_provider_id,
+        ai_model_id=ai_model_id,
+        provider_runtime=provider_runtime,
         school_context_class_reader=school_context,
         teaching_authorization=DevelopmentTeachingWorkPermit(),
         student_learning_uow_factory=SqlAlchemyStudentLearningCommandUnitOfWorkFactory(

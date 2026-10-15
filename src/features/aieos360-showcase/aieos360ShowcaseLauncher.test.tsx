@@ -22,6 +22,30 @@ describe("AIEOS360 showcase launcher page", () => {
       protocol: "http:",
       hostname: "presenter.local",
     });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo) => {
+      const url = String(input);
+      if (url.includes("/aieos360-showcase-runtime.json")) {
+        return {
+          ok: true,
+          json: async () => ({
+            selected_mode: "DETERMINISTIC",
+            verified_runtime_mode: "DETERMINISTIC",
+            verification_state: "deterministic_fixture_runtime",
+          }),
+        };
+      }
+      if (url.includes("/api/v1/platform/ai/providers")) {
+        return {
+          ok: true,
+          json: async () => ({
+            active_provider_id: "fake",
+            active_model_id: "fake-model",
+            mode: "DEVELOPMENT_FAKE",
+          }),
+        };
+      }
+      return { ok: false, json: async () => ({}) };
+    }));
 
     renderLauncher();
 
@@ -29,6 +53,10 @@ describe("AIEOS360 showcase launcher page", () => {
       screen.getByRole("heading", {
         name: /AIEOS360 Client Showcase — NON_PRODUCTION \/ SYNTHETIC REHEARSAL/i,
       }),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("heading", { name: /Showcase runtime truth/i }),
     ).toBeInTheDocument();
 
     expect(
@@ -64,6 +92,15 @@ describe("AIEOS360 showcase launcher page", () => {
       protocol: "http:",
       hostname: "localhost",
     });
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        selected_mode: "DETERMINISTIC",
+        active_provider_id: "fake",
+        active_model_id: "fake-model",
+        mode: "DEVELOPMENT_FAKE",
+      }),
+    })));
 
     renderLauncher();
 
