@@ -53,15 +53,32 @@ export function useEnrichedAssignmentForCard(
     }
 
     let cancelled = false;
-    void getStudentAssignment(assignmentId)
-      .then(({ data }) => {
-        detailCache.set(assignmentId, { status: "ok", assignment: data });
+    let request =
+      inFlightDetail.get(assignmentId) ??
+      getStudentAssignment(assignmentId)
+        .then(({ data }) => {
+          detailCache.set(assignmentId, { status: "ok", assignment: data });
+          return data;
+        })
+        .catch((error: unknown) => {
+          detailCache.set(assignmentId, { status: "failed" });
+          throw error;
+        })
+        .finally(() => {
+          inFlightDetail.delete(assignmentId);
+        });
+    if (!inFlightDetail.has(assignmentId)) {
+      inFlightDetail.set(assignmentId, request);
+    }
+
+    void request
+      .then((data) => {
         if (!cancelled) {
           setDisplayed(mergeAssignmentDetailResource(listItem, data));
         }
       })
       .catch(() => {
-        detailCache.set(assignmentId, { status: "failed" });
+        /* per-card fallback */
       });
 
     return () => {
