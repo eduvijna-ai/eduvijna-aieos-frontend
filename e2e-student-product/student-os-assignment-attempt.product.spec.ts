@@ -21,7 +21,7 @@ test.describe("[AIEOS360-S01-I04R1:student-product-e2e] Student real-stack journ
     // O. Student Home real HTTP (list/home omit resource; title comes from detail GET)
     await expect(page.getByRole("heading", { name: "Your work" })).toBeVisible();
     await expect(
-      page.getByText(/You have\s+6\s+current assignments/i),
+      page.getByText(/You have\s+6\s+assignments to work on/i),
     ).toBeVisible();
     await expect(
       page.getByRole("link", { name: /See all 6 assignments/i }),
