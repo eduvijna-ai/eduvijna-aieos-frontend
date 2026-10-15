@@ -287,12 +287,6 @@ function ClassActivitySection({
                   label="Assignment activity (raw)"
                   value={formatActivityPresence(item.has_assignment_activity)}
                 />
-                <Fact
-                  label="Evaluation coverage (detail)"
-                  value={formatCoverageAmongSubmitted(
-                    item.evaluation_coverage_among_submitted,
-                  )}
-                />
               </dl>
             </details>
           </li>
