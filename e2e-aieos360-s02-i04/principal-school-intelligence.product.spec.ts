@@ -866,9 +866,10 @@ test.describe("[AIEOS360-S02-I04-E2E] Principal OS real-stack journey", () => {
       ),
     ).toBeVisible();
     await expect(
-      page.getByTestId("class-card-class-5a").getByText(
-        "1 of 1 submitted work evaluated",
-      ),
+      page
+        .getByTestId("class-card-class-5a")
+        .locator(".pos-class-highlights")
+        .getByText("1 of 1 submitted work evaluated"),
     ).toBeVisible();
 
     const cards = page.locator(".pos-class-card");
