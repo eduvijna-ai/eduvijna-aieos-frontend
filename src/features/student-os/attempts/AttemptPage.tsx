@@ -286,8 +286,8 @@ export function AttemptPage() {
         <LearnerWork resource={assignment.resource} compact />
       ) : readOnly ? (
         <p className="muted">
-          Your submitted answers are shown below. The assignment is no longer on
-          your current list, but this submission is still here to read.
+          The assignment is no longer on your current list, but this submission
+          is still here to read.
         </p>
       ) : null}
 

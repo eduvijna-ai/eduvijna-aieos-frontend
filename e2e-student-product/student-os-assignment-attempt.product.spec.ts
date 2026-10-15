@@ -207,7 +207,9 @@ test.describe("[AIEOS360-S01-I04R1:student-product-e2e] Student real-stack journ
     await expect(
       page.getByText(/submission is still here to read/i),
     ).toBeVisible();
-    await expect(page.getByText(/Your submitted answers/i)).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Your submitted answers" }),
+    ).toBeVisible();
     await expect(page.getByText(/^True$/i)).toBeVisible();
 
     assertNoApiMocksInstalled(page);
