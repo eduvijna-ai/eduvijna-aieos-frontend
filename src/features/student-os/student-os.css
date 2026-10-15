@@ -85,6 +85,200 @@
   font-size: 1.05rem;
 }
 
+.sos-page-header {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.sos-lead {
+  font-size: 1.1rem;
+  margin: 0;
+  max-width: 38rem;
+}
+
+.sos-home-hint {
+  margin: 0;
+  max-width: 38rem;
+}
+
+.sos-section-title {
+  font-size: 1.15rem;
+  margin: 0 0 var(--space-3);
+}
+
+.sos-home-footer {
+  margin: 0;
+}
+
+.sos-breadcrumbs {
+  margin: 0;
+}
+
+.sos-card {
+  gap: var(--space-4);
+}
+
+.sos-card-body {
+  flex: 1 1 14rem;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.sos-card-heading {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.sos-card-title {
+  margin: 0;
+  font-size: 1.2rem;
+  line-height: 1.3;
+}
+
+.sos-card-type {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: 0.95rem;
+}
+
+.sos-card-timing {
+  margin: 0;
+  font-weight: 500;
+}
+
+.sos-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.sos-card-actions {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.sos-timing-inline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.sos-timing-inline dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-muted);
+}
+
+.sos-timing-inline dd {
+  margin: 0.25rem 0 0;
+}
+
+.sos-version-note {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised, var(--color-surface));
+  border: 1px solid var(--color-border);
+  max-width: 42rem;
+}
+
+.sos-detail-actions,
+.sos-attempt-actions {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.sos-attempt-hint {
+  margin: 0;
+  max-width: 38rem;
+}
+
+.sos-submitted-banner {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised, var(--color-surface));
+  max-width: 42rem;
+}
+
+.sos-submitted-banner-title {
+  margin: 0 0 var(--space-1);
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.sos-submitted-banner p:last-child {
+  margin: 0;
+}
+
+.sos-questions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sos-question-header {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.sos-question-number {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-muted);
+}
+
+.sos-question-prompt {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.45;
+}
+
+.sos-question-kind {
+  margin: 0;
+}
+
+.sos-short-answer {
+  display: block;
+}
+
+.sos-save-status {
+  font-weight: 500;
+}
+
+.sos-submitted-value {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: 1.05rem;
+}
+
+.sos-question textarea:focus-visible,
+.sos-option input:focus-visible {
+  outline: 2px solid var(--color-focus, currentColor);
+  outline-offset: 2px;
+}
+
+@media (max-width: 48rem) {
+  .sos-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sos-card-actions {
+    align-self: stretch;
+  }
+
+  .sos-card-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 @media (max-width: 48rem) {
   .tos-shell {
     grid-template-columns: 1fr;

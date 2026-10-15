@@ -69,7 +69,7 @@ describe("showcase navigation propagation", () => {
     );
 
     render(<RouterProvider router={router} />);
-    expect(screen.getByRole("link", { name: /Open/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Start:/i })).toHaveAttribute(
       "href",
       "/student-os/assignments/assign-showcase-1?showcase=1",
     );

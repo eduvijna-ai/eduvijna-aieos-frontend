@@ -74,7 +74,7 @@ export function AssignmentsPage() {
         </header>
         <EmptyState
           title="Connect a student session"
-          description="Assignments load from AIEOS. Connect a development session to continue."
+          description="Sign in with a student session to see your assignments."
         />
       </article>
     );

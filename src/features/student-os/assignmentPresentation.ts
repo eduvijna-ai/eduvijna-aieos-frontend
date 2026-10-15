@@ -57,3 +57,32 @@ export function questionKindLabel(questionType: string): string {
   if (questionType === "TRUE_FALSE") return "True or false";
   return "Answer";
 }
+
+/** Primary card/detail CTA from real attempt summary (no invented progress). */
+export function assignmentPrimaryActionLabel(
+  attemptSummary: string,
+): string {
+  if (attemptSummary === ATTEMPT_SUMMARY_IN_PROGRESS) return "Continue";
+  if (attemptSummary === ATTEMPT_SUMMARY_SUBMITTED) return "Review submitted work";
+  return "Start";
+}
+
+export function assignedVersionExplanation(): string {
+  return "You are working from the copy your teacher assigned. If they publish updates later, this assignment stays the same.";
+}
+
+export function assignmentTimingSummary(
+  assignment: StudentAssignmentResponse,
+): string {
+  const due = dueLabel(assignment);
+  const available = availableFromLabel(assignment);
+  if (due !== "No due date") {
+    return due;
+  }
+  if (!assignment.available_from) {
+    return "No due date set";
+  }
+  return available.startsWith("Available from ")
+    ? available
+    : "Check availability below";
+}

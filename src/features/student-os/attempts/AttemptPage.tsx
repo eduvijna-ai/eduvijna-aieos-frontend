@@ -40,25 +40,32 @@ import { useWithShowcase } from "@/features/aieos360-showcase/showcaseContext";
 
 function SubmittedAnswerList({ attempt }: { attempt: AttemptResponse }) {
   if (attempt.responses.length === 0) {
-    return <p className="muted">No saved answers were recorded.</p>;
+    return <p className="muted">No answers were saved with this submission.</p>;
   }
   return (
-    <ol className="stack" aria-label="Submitted answers">
-      {attempt.responses.map((item, index) => (
-        <li key={item.question_id} className="panel">
-          <p>
-            <strong>Answer {index + 1}.</strong>{" "}
-            {item.response_kind === "TRUE_FALSE"
-              ? item.boolean_value
-                ? "True"
-                : "False"
-              : item.response_kind === "MULTIPLE_CHOICE"
-                ? item.choice_value
-                : item.text_value}
-          </p>
-        </li>
-      ))}
-    </ol>
+    <section aria-labelledby="submitted-answers-heading">
+      <h2 id="submitted-answers-heading" className="sos-section-title">
+        Your submitted answers
+      </h2>
+      <ol className="stack sos-submitted-list">
+        {attempt.responses.map((item, index) => (
+          <li key={item.question_id} className="panel sos-submitted-answer">
+            <p>
+              <span className="sos-question-number">Answer {index + 1}</span>
+              <span className="sos-submitted-value">
+                {item.response_kind === "TRUE_FALSE"
+                  ? item.boolean_value
+                    ? "True"
+                    : "False"
+                  : item.response_kind === "MULTIPLE_CHOICE"
+                    ? item.choice_value
+                    : item.text_value}
+              </span>
+            </p>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -211,7 +218,7 @@ export function AttemptPage() {
     return (
       <EmptyState
         title="Connect a student session"
-        description="Attempt work loads from AIEOS."
+        description="Sign in with a student session to open this work."
       />
     );
   }
@@ -241,36 +248,46 @@ export function AttemptPage() {
 
   return (
     <article className="stack sos-page">
-      <header>
-        <p className="muted">
+      <header className="sos-page-header">
+        <p className="muted sos-breadcrumbs">
           <Link to={homeHref}>Home</Link> ·{" "}
           <Link to={assignmentHref}>Assignment</Link>
         </p>
         <h1>{title}</h1>
         <ShowcaseBackLink />
-        {typeLabel ? <p className="muted">{typeLabel}</p> : null}
-        <StatusBadge
-          label={attemptProgressLabel(attempt.lifecycle_state)}
-          kind={attempt.lifecycle_state}
-        />
+        {typeLabel ? <p className="sos-card-type">{typeLabel}</p> : null}
+        {!readOnly ? (
+          <StatusBadge
+            label={attemptProgressLabel(attempt.lifecycle_state)}
+            kind={attempt.lifecycle_state}
+          />
+        ) : null}
         {readOnly ? (
-          <p>
-            This work is submitted. You can read it, but you cannot change
-            answers.
-          </p>
+          <div
+            className="sos-submitted-banner panel"
+            role="status"
+            aria-live="polite"
+          >
+            <p className="sos-submitted-banner-title">Submitted</p>
+            <p>
+              Your answers are saved and read-only. Your teacher may review them
+              later — this screen does not show a grade or score.
+            </p>
+          </div>
         ) : (
-          <p className="muted">
-            Save as you go. Submit only when you are finished.
+          <p className="muted sos-attempt-hint">
+            Answer each question, save when you want to keep progress, and submit
+            when you are finished.
           </p>
         )}
       </header>
 
       {assignment?.resource ? (
-        <LearnerWork resource={assignment.resource} />
+        <LearnerWork resource={assignment.resource} compact />
       ) : readOnly ? (
         <p className="muted">
-          Your submitted answers are shown below. The original assignment is no
-          longer in your current list, but this submitted work remains.
+          Your submitted answers are shown below. The assignment is no longer on
+          your current list, but this submission is still here to read.
         </p>
       ) : null}
 
@@ -293,13 +310,13 @@ export function AttemptPage() {
         </p>
       ) : null}
       {statusMessage ? (
-        <p className="status-region" aria-live="polite">
+        <p className="status-region sos-save-status" aria-live="polite">
           {statusMessage}
         </p>
       ) : null}
 
       {!readOnly ? (
-        <div className="sos-actions">
+        <div className="sos-actions sos-attempt-actions">
           <button
             type="button"
             className="btn btn-secondary"

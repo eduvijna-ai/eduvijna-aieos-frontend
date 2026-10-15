@@ -26,12 +26,7 @@ describe("Student Home", () => {
     renderApp("/student-os/home");
 
     expect(
-      await screen.findByText((_, node) =>
-        Boolean(
-          node?.tagName === "P" &&
-            /You have 12 current assignments/.test(node.textContent ?? ""),
-        ),
-      ),
+      await screen.findByText(/You have 12 assignments to work on/i),
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Leaf parts worksheet" })).toBeInTheDocument();
     expect(
@@ -46,12 +41,7 @@ describe("Student Home", () => {
     renderApp("/student-os/home");
     expect(await screen.findByText(/No assignments yet/i)).toBeInTheDocument();
     expect(
-      await screen.findByText((_, node) =>
-        Boolean(
-          node?.tagName === "P" &&
-            /You have 0 current assignments/.test(node.textContent ?? ""),
-        ),
-      ),
+      await screen.findByText(/no assignments to work on right now/i),
     ).toBeInTheDocument();
   });
 
