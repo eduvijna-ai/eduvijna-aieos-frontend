@@ -13,6 +13,7 @@ import {
   statusPath,
   tmpDir,
 } from "./paths.mjs";
+import { readSelectedShowcaseMode } from "../aieos360-cx01-i06-showcase-ai-mode/mode.mjs";
 
 mkdirSync(tmpDir, { recursive: true });
 
@@ -65,6 +66,7 @@ runPython("shared_db_proof.py", {
   AIEOS360_CX01_I01_SHOWCASE_RUNTIME_DATABASE_URL: dbReport.runtime_database_url,
 });
 
+const showcaseMode = readSelectedShowcaseMode();
 const status = {
   phase: "reset_complete",
   classification: "NON_PRODUCTION",
@@ -72,7 +74,9 @@ const status = {
   fixture_path: fixturePath,
   db_report_path: dbReportPath,
   shared_database: true,
-  deterministic_mode: true,
+  showcase_mode: showcaseMode,
+  deterministic_mode: showcaseMode === "DETERMINISTIC",
+  seeded_worksheet_origin: "synthetic_prerequisite_fixture",
   updated_at: new Date().toISOString(),
 };
 writeFileSync(statusPath, JSON.stringify(status, null, 2) + "\n", "utf8");

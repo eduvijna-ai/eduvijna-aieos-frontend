@@ -11,7 +11,7 @@ const repoRoot = path.resolve(
 const CX01_ARCHITECTURE = "491295c3cf0a151f31686a6a2e1a2176cd92c782";
 const CX01_PRODUCT = "b4b3048fb7a6a1c50ae8619dc490743714f2e3e2";
 const CX01_INFRASTRUCTURE = "a8654e5bc680eac1fa93cf8308d7cad904f4d7b9";
-const CX01_FRONTEND_BASE = "80125be6cf172afb5137e845752c5b4505e5a97f";
+const CX01_FRONTEND_BASE = "8c8247afda0b9a34e688d2c300d46e83526bb126";
 const CX01_BACKEND = "637583f42b7c475ef83f6f99bca7e65e665a253d";
 const CX01_OPENAPI =
   "4042FB2725DA70A02A70EE09563B7698AE2E5DA82927614CAF1B5F7E6AA7C1D0";
@@ -91,6 +91,15 @@ describe("AIEOS360-CX01-I01R9 showcase rehearsal pin and package consistency", (
     expect(ci).toContain(`AIEOS_BACKEND_PIN_SHA: ${CX01_BACKEND}`);
     expect(ci).toContain("pnpm test:cx01-i01r9-showcase-proof");
     expect(ci).not.toContain("foreground_start_sigint_proof");
+  });
+
+  it("adds I06 showcase mode governance package and selftest", () => {
+    const pkg = read("package.json");
+    expect(pkg).toContain("showcase:aieos360:configure-mode");
+    expect(pkg).toContain("aieos360-cx01-i06-showcase-ai-mode");
+    const i06 = read("scripts/aieos360-cx01-i06-showcase-ai-mode/constants.mjs");
+    expect(i06).toContain("DETERMINISTIC");
+    expect(i06).toContain("REAL_AI");
   });
 
   it("keeps integration proofs opt-in only", () => {

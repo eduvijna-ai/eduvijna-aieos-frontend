@@ -10,7 +10,7 @@ export const INFRASTRUCTURE_PIN_SHA =
   "a8654e5bc680eac1fa93cf8308d7cad904f4d7b9";
 
 export const FRONTEND_BASE_SHA =
-  "80125be6cf172afb5137e845752c5b4505e5a97f";
+  "8c8247afda0b9a34e688d2c300d46e83526bb126";
 
 export const BACKEND_PIN_SHA =
   "637583f42b7c475ef83f6f99bca7e65e665a253d";

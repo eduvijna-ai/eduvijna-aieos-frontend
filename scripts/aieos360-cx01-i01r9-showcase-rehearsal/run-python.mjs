@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveBackendRoot } from "./constants.mjs";
+import { scrubAllProviderSurface } from "../aieos360-cx01-i06-showcase-ai-mode/env_scrub.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -10,19 +11,20 @@ export function runPython(scriptName, extraEnv = {}) {
   const scriptPath = join(__dirname, scriptName);
   const { VIRTUAL_ENV: _dropVirtualEnv, ...baseEnv } = process.env;
   void _dropVirtualEnv;
+  const harnessEnv = scrubAllProviderSurface({
+    ...baseEnv,
+    AIEOS_BACKEND_ROOT: backendRoot,
+    PYTHONPATH: [join(backendRoot, "src"), backendRoot, __dirname].join(
+      process.platform === "win32" ? ";" : ":",
+    ),
+    ...extraEnv,
+  });
   const result = spawnSync(
     process.env.AIEOS360_CX01_I01_SHOWCASE_UV || "uv",
     ["run", "python", scriptPath],
     {
       cwd: backendRoot,
-      env: {
-        ...baseEnv,
-        AIEOS_BACKEND_ROOT: backendRoot,
-        PYTHONPATH: [join(backendRoot, "src"), backendRoot, __dirname].join(
-          process.platform === "win32" ? ";" : ":",
-        ),
-        ...extraEnv,
-      },
+      env: harnessEnv,
       encoding: "utf8",
       stdio: "inherit",
       shell: process.platform === "win32",
