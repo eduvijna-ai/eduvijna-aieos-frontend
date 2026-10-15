@@ -117,7 +117,7 @@ describe("Principal OS School Intelligence page", () => {
     ).toBeInTheDocument();
     connectDevSession();
     expect(
-      await screen.findByText(`Current facts as of ${GENERATED_AT}`),
+      await screen.findByText(`School activity as of ${GENERATED_AT}`),
     ).toBeInTheDocument();
     expect(
       calls.filter((call) => call.url === SCHOOL_INTELLIGENCE_PATH),
@@ -128,12 +128,12 @@ describe("Principal OS School Intelligence page", () => {
   it("renders returned summary and class cards in server order", async () => {
     const data = sampleSchoolIntelligence();
     stubSchoolIntelligence(data);
-    renderApp("/principal-os");
+    const { container } = renderApp("/principal-os");
 
     expect(
-      await screen.findByText(`Current facts as of ${GENERATED_AT}`),
+      await screen.findByText(`School activity as of ${GENERATED_AT}`),
     ).toBeInTheDocument();
-    expect(screen.getByText(/In-scope classes: 2/)).toBeInTheDocument();
+    expect(screen.getByText(/Authorized classes: 2/)).toBeInTheDocument();
     expect(
       screen.getByText(/aieos\.learner_assessment\.deterministic/),
     ).toBeInTheDocument();
@@ -146,37 +146,19 @@ describe("Principal OS School Intelligence page", () => {
     ).toBeInTheDocument();
 
     const summary = screen
-      .getByRole("heading", { name: "School summary" })
+      .getByRole("heading", { name: "School at a glance" })
       .closest("section");
     expect(summary).not.toBeNull();
     const summaryScope = within(summary as HTMLElement);
     expect(
-      summaryScope.getByRole("heading", { name: "Teaching assignments" }).closest("li"),
-    ).toHaveTextContent("5");
-    expect(
-      summaryScope.getByRole("heading", { name: "Active assignments" }).closest("li"),
-    ).toHaveTextContent("3");
-    expect(
-      summaryScope.getByRole("heading", { name: "Closed assignments" }).closest("li"),
-    ).toHaveTextContent("1");
-    expect(
-      summaryScope.getByRole("heading", { name: "Cancelled assignments" }).closest("li"),
-    ).toHaveTextContent("1");
-    expect(
       summaryScope.getByRole("heading", { name: "Learner submissions" }).closest("li"),
     ).toHaveTextContent("10");
     expect(
-      summaryScope
-        .getByRole("heading", { name: "Current-policy evaluations" })
-        .closest("li"),
-    ).toHaveTextContent("8");
-    expect(
-      summaryScope.getByText(
-        "Current-policy evaluations: 8 of 10 submitted evidence records",
-      ),
+      summaryScope.getByText("8 of 10 submitted work evaluated"),
     ).toBeInTheDocument();
-    expect(summaryScope.getByText(/Submitted: 10/)).toBeInTheDocument();
-    expect(summaryScope.getByText(/Current-policy evaluated: 8/)).toBeInTheDocument();
+    expect(
+      summaryScope.getByRole("heading", { name: "Teaching assignments" }),
+    ).toBeInTheDocument();
 
     const classHeadings = screen.getAllByRole("heading", {
       level: 3,
@@ -186,8 +168,8 @@ describe("Principal OS School Intelligence page", () => {
       "Grade 6A",
       "Grade 6B",
     ]);
-    expect(screen.getByText("class-6a")).toBeInTheDocument();
-    expect(screen.getByText("class-6b")).toBeInTheDocument();
+    expect(container.textContent).not.toContain("class-6a");
+    expect(container.textContent).not.toContain("class-6b");
     expect(screen.getByTestId("class-card-class-6a")).toHaveTextContent("Grade 6A");
     expect(screen.getByTestId("class-card-class-6b")).toHaveTextContent("Grade 6B");
     const order = [...screen.getAllByTestId(/class-card-/)].map((node) =>
@@ -195,7 +177,7 @@ describe("Principal OS School Intelligence page", () => {
     );
     expect(order).toEqual(["class-card-class-6a", "class-card-class-6b"]);
     expect(screen.getByTestId("class-card-class-6a")).toHaveTextContent(
-      "Current-policy evaluations: 5 of 7 submitted evidence records",
+      "5 of 7 submitted work evaluated",
     );
   });
 
@@ -207,7 +189,7 @@ describe("Principal OS School Intelligence page", () => {
 
     stubSchoolIntelligence(data);
     const { container } = renderApp("/principal-os");
-    await screen.findByText(`Current facts as of ${GENERATED_AT}`);
+    await screen.findByText(`School activity as of ${GENERATED_AT}`);
     expect(screen.getByText(/Derived on request/)).toBeInTheDocument();
     expect(
       screen.getByText(/Current facts as of this request/),
@@ -231,7 +213,7 @@ describe("Principal OS School Intelligence page", () => {
   it("does not calculate a percentage or rate from coverage counts", async () => {
     stubSchoolIntelligence();
     const { container } = renderApp("/principal-os");
-    await screen.findByText(/8 of 10 submitted evidence records/);
+    await screen.findByText(/8 of 10 submitted work evaluated/);
     expect(container.textContent).not.toContain("%");
     expect(container.textContent?.toLowerCase()).not.toContain("evaluation rate");
     expect(container.textContent?.toLowerCase()).not.toContain("submission rate");
@@ -263,7 +245,7 @@ describe("Principal OS School Intelligence page", () => {
       screen.getByText(/Your session is not currently accepted/i),
     ).toBeInTheDocument();
     expect(screen.queryByText("Grade 6A")).not.toBeInTheDocument();
-    expect(screen.queryByText(/In-scope classes: 0/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Authorized classes: 0/)).not.toBeInTheDocument();
   });
 
   it("treats 403 as missing School Intelligence access with no fallback data", async () => {
@@ -281,7 +263,7 @@ describe("Principal OS School Intelligence page", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Grade 6A")).not.toBeInTheDocument();
     expect(screen.queryByText("Today's Mission")).not.toBeInTheDocument();
-    expect(screen.queryByText(/In-scope classes/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Authorized classes/)).not.toBeInTheDocument();
   });
 
   it("treats 503 as unavailable and does not synthesize zeros", async () => {
@@ -305,7 +287,7 @@ describe("Principal OS School Intelligence page", () => {
         "No classes are currently in your authorized School Intelligence scope.",
       ),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText(/In-scope classes: 0/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Authorized classes: 0/)).not.toBeInTheDocument();
     expect(screen.queryByText("Teaching assignments")).not.toBeInTheDocument();
   });
 
@@ -333,13 +315,13 @@ describe("Principal OS School Intelligence page", () => {
       await screen.findByText("School Intelligence is temporarily unavailable."),
     ).toBeInTheDocument();
     expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
-    expect(screen.queryByText(/In-scope classes: 0/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Authorized classes: 0/)).not.toBeInTheDocument();
   });
 
   it("Refresh and retry only repeat the School Intelligence GET", async () => {
     const calls = stubSchoolIntelligence();
     renderApp("/principal-os");
-    await screen.findByText(`Current facts as of ${GENERATED_AT}`);
+    await screen.findByText(`School activity as of ${GENERATED_AT}`);
     await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() => {
       expect(
@@ -357,7 +339,7 @@ describe("Principal OS School Intelligence page", () => {
     const localSet = vi.spyOn(Storage.prototype, "setItem");
     stubSchoolIntelligence();
     renderApp("/principal-os");
-    await screen.findByText(`Current facts as of ${GENERATED_AT}`);
+    await screen.findByText(`School activity as of ${GENERATED_AT}`);
     expect(localSet).not.toHaveBeenCalled();
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);

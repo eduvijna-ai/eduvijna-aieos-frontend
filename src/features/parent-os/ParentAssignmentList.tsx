@@ -9,8 +9,10 @@ import {
 
 export function ParentAssignmentList({
   assignments,
+  compact = false,
 }: {
   assignments: ParentAssignmentStatusResponse[];
+  compact?: boolean;
 }) {
   if (assignments.length === 0) {
     return (
@@ -18,45 +20,43 @@ export function ParentAssignmentList({
     );
   }
 
+  const visible = compact ? assignments.slice(0, 3) : assignments;
+
   return (
     <ul className="parent-os-assignment-list">
-      {assignments.map((assignment) => (
-        <li
-          key={assignment.assignment_id}
-          className="panel parent-os-assignment-card"
-        >
-          <h3>{assignment.title}</h3>
-          <dl className="parent-os-facts">
-            <div>
-              <dt>Type</dt>
-              <dd>{contentTypeLabel(assignment.content_type)}</dd>
-            </div>
-            <div>
-              <dt>Status</dt>
-              <dd className="parent-os-status">
-                {formatAttemptStatus(assignment.attempt_status)}
-              </dd>
-            </div>
-            <div>
-              <dt>Available from</dt>
-              <dd>{formatAvailableFrom(assignment.available_from)}</dd>
-            </div>
-            <div>
-              <dt>Due</dt>
-              <dd>{formatDueAt(assignment.due_at)}</dd>
-            </div>
-            <div>
-              <dt>Submitted at</dt>
-              <dd>
-                {formatSubmittedFact(
-                  assignment.attempt_status,
-                  assignment.submitted_at,
-                )}
-              </dd>
-            </div>
-          </dl>
+      {visible.map((assignment) => {
+        const submitted = formatSubmittedFact(
+          assignment.attempt_status,
+          assignment.submitted_at,
+        );
+        return (
+          <li
+            key={assignment.assignment_id}
+            className="panel parent-os-assignment-card"
+          >
+            <header className="parent-os-assignment-header">
+              <h3>{assignment.title}</h3>
+              <p className="parent-os-assignment-primary">
+                <span>{contentTypeLabel(assignment.content_type)}</span>
+                <span className="parent-os-status" aria-label="Activity status">
+                  {formatAttemptStatus(assignment.attempt_status)}
+                </span>
+                <span>{formatDueAt(assignment.due_at)}</span>
+              </p>
+            </header>
+            <p className="muted parent-os-assignment-secondary">
+              {formatAvailableFrom(assignment.available_from)}
+              {submitted ? ` · ${submitted}` : null}
+            </p>
+          </li>
+        );
+      })}
+      {compact && assignments.length > visible.length ? (
+        <li className="muted parent-os-assignment-more">
+          {assignments.length - visible.length} more assignment
+          {assignments.length - visible.length === 1 ? "" : "s"} on the detail view.
         </li>
-      ))}
+      ) : null}
     </ul>
   );
 }

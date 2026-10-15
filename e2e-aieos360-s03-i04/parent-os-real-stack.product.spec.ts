@@ -387,16 +387,18 @@ test.describe("[AIEOS360-S03-I04-E2E] Parent OS real-stack journey", () => {
     expect(JSON.stringify(homeBody)).not.toContain(f.student_b_principal_id);
 
     await expect(
-      page.getByRole("heading", { name: "Parent home" }),
+      page.getByRole("heading", { name: "Family home" }),
     ).toBeVisible();
-    await expect(page.getByText("Current facts as of this request")).toBeVisible();
+    await expect(
+      page.getByText(/Updates reflect authorized assignments as of this visit/),
+    ).toBeVisible();
     await expect(
       page.getByTestId("parent-child-card-0").getByRole("heading", {
         name: "Child 1",
       }),
     ).toBeVisible();
     await expect(page.getByRole("heading", { name: f.worksheet_title })).toBeVisible();
-    await expect(page.getByText("worksheet", { exact: true })).toBeVisible();
+    await expect(page.getByText("Worksheet", { exact: true })).toBeVisible();
     await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
     await expect(page.getByText("No due date")).toBeVisible();
     await expect(page.locator(".parent-os-basis")).toContainText(/today at /i);
@@ -453,7 +455,7 @@ test.describe("[AIEOS360-S03-I04-E2E] Parent OS real-stack journey", () => {
     assertForbiddenTokensAbsent(JSON.stringify(childBody));
 
     await expect(
-      page.getByRole("heading", { name: "Child facts" }),
+      page.getByRole("heading", { name: "Child activity" }),
     ).toBeVisible();
     await expect(page.getByRole("heading", { name: f.worksheet_title })).toBeVisible();
     await expect(page.getByText("Submitted", { exact: true })).toBeVisible();

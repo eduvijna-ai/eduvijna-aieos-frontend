@@ -14,6 +14,7 @@ import {
   principalMessageForApiError,
 } from "../principalMessages";
 import {
+  classActivityHighlights,
   formatActivityPresence,
   formatCoverageAmongSubmitted,
   formatCurrentFactsAsOf,
@@ -21,6 +22,7 @@ import {
   formatTimeBasisCopy,
   GENERIC_SOURCE_PROVENANCE,
   isAuthorizedScopeEmpty,
+  schoolSummaryHighlights,
 } from "./schoolIntelligencePresentation";
 import {
   ShowcaseBackLink,
@@ -114,9 +116,13 @@ export function SchoolIntelligencePage() {
       <header className="pos-page-header">
         <div>
           <h1>School Intelligence</h1>
+          <p className="pos-lead">
+            Leadership view of school-wide learning activity in your authorized
+            class scope.
+          </p>
           <p className="pos-scope">{formatCurrentFactsAsOf(data.generated_at)}</p>
           <p className="muted">
-            In-scope classes: {data.summary.in_scope_class_count}
+            Authorized classes: {data.summary.in_scope_class_count}
           </p>
           <ShowcaseBackLink />
         </div>
@@ -154,77 +160,49 @@ function SchoolSummarySection({
 }: {
   summary: PrincipalSchoolIntelligenceSummaryResponse;
 }) {
+  const highlights = schoolSummaryHighlights(summary);
+
   return (
     <section className="stack" aria-labelledby="school-summary-heading">
-      <h2 id="school-summary-heading">School summary</h2>
-      <ul className="pos-summary-grid">
-        <SummaryStat
-          label="In-scope classes"
-          value={summary.in_scope_class_count}
-        />
-        <SummaryStat
-          label="Classes with assignment activity"
-          value={summary.classes_with_assignment_activity_count}
-        />
-        <SummaryStat
-          label="Teaching assignments"
-          value={summary.teaching_assignment_count}
-        />
-        <SummaryStat
-          label="Active assignments"
-          value={summary.assignment_lifecycle.active}
-        />
-        <SummaryStat
-          label="Closed assignments"
-          value={summary.assignment_lifecycle.closed}
-        />
-        <SummaryStat
-          label="Cancelled assignments"
-          value={summary.assignment_lifecycle.cancelled}
-        />
-        <SummaryStat
-          label="Learner submissions"
-          value={summary.learner_submission_count}
-        />
-        <SummaryStat
-          label="Current-policy evaluations"
-          value={summary.current_policy_evaluation_count}
-        />
-        <SummaryStat
-          label="Submitted but not current-policy evaluated"
-          value={summary.submitted_but_not_current_policy_evaluated_count}
-        />
-        <li className="panel pos-stat">
-          <h3>Evaluation coverage among submitted</h3>
-          <p className="pos-stat-value">
-            {formatCoverageAmongSubmitted(
-              summary.evaluation_coverage_among_submitted,
-            )}
-          </p>
-          <p className="muted">
-            Submitted: {summary.evaluation_coverage_among_submitted.submitted_count}.
-            Current-policy evaluated:{" "}
-            {summary.evaluation_coverage_among_submitted.current_policy_evaluated_count}.
-            The denominator is submitted evidence only.
-          </p>
-        </li>
-        <SummaryStat
-          label="Classes with recorded classroom assessment"
-          value={summary.classes_with_recorded_classroom_assessment_count}
-        />
-        <SummaryStat
-          label="Assignments with recorded classroom assessment"
-          value={summary.assignments_with_recorded_classroom_assessment_count}
-        />
-        <SummaryStat
-          label="Completed teaching executions"
-          value={summary.completed_teaching_execution_count}
-        />
-        <SummaryStat
-          label="Remediation activity"
-          value={summary.remediation_activity_count}
-        />
+      <h2 id="school-summary-heading">School at a glance</h2>
+      <ul className="pos-summary-grid pos-summary-grid--primary">
+        {highlights.map((item) => (
+          <li key={item.label} className="panel pos-stat pos-stat--highlight">
+            <h3>{item.label}</h3>
+            <p className="pos-stat-value">{item.value}</p>
+            {item.detail ? <p className="muted pos-stat-detail">{item.detail}</p> : null}
+          </li>
+        ))}
       </ul>
+
+      <details className="pos-secondary-details">
+        <summary>Assignment lifecycle and supporting counts</summary>
+        <ul className="pos-summary-grid pos-summary-grid--secondary">
+          <SummaryStat label="Teaching assignments" value={summary.teaching_assignment_count} />
+          <SummaryStat label="Active assignments" value={summary.assignment_lifecycle.active} />
+          <SummaryStat label="Closed assignments" value={summary.assignment_lifecycle.closed} />
+          <SummaryStat
+            label="Cancelled assignments"
+            value={summary.assignment_lifecycle.cancelled}
+          />
+          <SummaryStat
+            label="Evaluations under current policy"
+            value={summary.current_policy_evaluation_count}
+          />
+          <SummaryStat
+            label="Submitted, awaiting evaluation"
+            value={summary.submitted_but_not_current_policy_evaluated_count}
+          />
+          <SummaryStat
+            label="Assignments with recorded classroom assessment"
+            value={summary.assignments_with_recorded_classroom_assessment_count}
+          />
+          <SummaryStat
+            label="Completed teaching executions"
+            value={summary.completed_teaching_execution_count}
+          />
+        </ul>
+      </details>
     </section>
   );
 }
@@ -245,7 +223,7 @@ function ClassActivitySection({
 }) {
   return (
     <section className="stack" aria-labelledby="class-activity-heading">
-      <h2 id="class-activity-heading">Authorized class activity</h2>
+      <h2 id="class-activity-heading">Class activity</h2>
       <ul className="pos-class-list">
         {classes.map((item) => (
           <li
@@ -253,77 +231,70 @@ function ClassActivitySection({
             className="panel pos-class-card"
             data-testid={`class-card-${item.class_ref}`}
           >
-            <h3>{item.display_label}</h3>
-            <p className="muted pos-class-ref">{item.class_ref}</p>
-            <dl className="pos-facts">
-              <Fact
-                label="Assignment activity"
-                value={formatActivityPresence(item.has_assignment_activity)}
-              />
-              <Fact
-                label="Teaching assignments"
-                value={item.teaching_assignment_count}
-              />
-              <Fact
-                label="Active assignments"
-                value={item.assignment_lifecycle.active}
-              />
-              <Fact
-                label="Closed assignments"
-                value={item.assignment_lifecycle.closed}
-              />
-              <Fact
-                label="Cancelled assignments"
-                value={item.assignment_lifecycle.cancelled}
-              />
-              <Fact
-                label="Learner submissions"
-                value={item.learner_submission_count}
-              />
-              <Fact
-                label="Current-policy evaluations"
-                value={item.current_policy_evaluation_count}
-              />
-              <Fact
-                label="Submitted but not current-policy evaluated"
-                value={item.submitted_but_not_current_policy_evaluated_count}
-              />
-              <Fact
-                label="Evaluation coverage among submitted"
-                value={formatCoverageAmongSubmitted(
-                  item.evaluation_coverage_among_submitted,
-                )}
-              />
-              <Fact
-                label="Submitted evidence records"
-                value={item.evaluation_coverage_among_submitted.submitted_count}
-              />
-              <Fact
-                label="Current-policy evaluated records"
-                value={
-                  item.evaluation_coverage_among_submitted
-                    .current_policy_evaluated_count
-                }
-              />
-              <Fact
-                label="Recorded classroom assessment"
-                value={formatActivityPresence(
-                  item.has_recorded_classroom_assessment,
-                )}
-              />
-              <Fact
-                label="Assignments with recorded classroom assessment"
-                value={item.assignments_with_recorded_classroom_assessment_count}
-              />
-              <Fact
-                label="Completed teaching executions"
-                value={item.completed_teaching_execution_count}
-              />
-              <Fact
-                label="Remediation activity"
-                value={item.remediation_activity_count}
-              />
-            </dl>
+            <h3 className="pos-class-title">{item.display_label}</h3>
+            <ul className="pos-class-highlights">
+              {classActivityHighlights(item).map((fact) => (
+                <li key={fact.label}>
+                  <span className="pos-class-highlight-label">{fact.label}</span>
+                  <span className="pos-class-highlight-value">{fact.value}</span>
+                </li>
+              ))}
+            </ul>
+
+            <details className="pos-secondary-details pos-class-details">
+              <summary>More class detail</summary>
+              <dl className="pos-facts">
+                <Fact
+                  label="Teaching assignments"
+                  value={item.teaching_assignment_count}
+                />
+                <Fact
+                  label="Closed assignments"
+                  value={item.assignment_lifecycle.closed}
+                />
+                <Fact
+                  label="Cancelled assignments"
+                  value={item.assignment_lifecycle.cancelled}
+                />
+                <Fact
+                  label="Evaluations under current policy"
+                  value={item.current_policy_evaluation_count}
+                />
+                <Fact
+                  label="Submitted, awaiting evaluation"
+                  value={item.submitted_but_not_current_policy_evaluated_count}
+                />
+                <Fact
+                  label="Submitted work records"
+                  value={item.evaluation_coverage_among_submitted.submitted_count}
+                />
+                <Fact
+                  label="Evaluated submitted records"
+                  value={
+                    item.evaluation_coverage_among_submitted
+                      .current_policy_evaluated_count
+                  }
+                />
+                <Fact
+                  label="Assignments with recorded classroom assessment"
+                  value={item.assignments_with_recorded_classroom_assessment_count}
+                />
+                <Fact
+                  label="Completed teaching executions"
+                  value={item.completed_teaching_execution_count}
+                />
+                <Fact
+                  label="Assignment activity (raw)"
+                  value={formatActivityPresence(item.has_assignment_activity)}
+                />
+                <Fact
+                  label="Evaluation coverage (detail)"
+                  value={formatCoverageAmongSubmitted(
+                    item.evaluation_coverage_among_submitted,
+                  )}
+                />
+              </dl>
+            </details>
           </li>
         ))}
       </ul>
@@ -346,20 +317,19 @@ function DataBasisSection({
   data: PrincipalSchoolIntelligenceResponse;
 }) {
   return (
-    <section
-      className="panel pos-data-basis"
-      aria-labelledby="data-basis-heading"
-    >
-      <h2 id="data-basis-heading">Data basis</h2>
-      <p className="muted">
-        Projection: {formatProjectionCopy(data.projection_mode)}. Time basis:{" "}
-        {formatTimeBasisCopy(data.time_window.mode)}.
-      </p>
-      <p className="muted">
-        Evaluation policy {data.evaluation_policy.policy_id}, version{" "}
-        {data.evaluation_policy.policy_version}.
-      </p>
-      <p className="muted">{GENERIC_SOURCE_PROVENANCE}</p>
-    </section>
+    <details className="panel pos-data-basis">
+      <summary id="data-basis-heading">Technical data basis</summary>
+      <div className="pos-data-basis-body">
+        <p className="muted">
+          Projection: {formatProjectionCopy(data.projection_mode)}. Time basis:{" "}
+          {formatTimeBasisCopy(data.time_window.mode)}.
+        </p>
+        <p className="muted">
+          Evaluation policy {data.evaluation_policy.policy_id}, version{" "}
+          {data.evaluation_policy.policy_version}.
+        </p>
+        <p className="muted">{GENERIC_SOURCE_PROVENANCE}</p>
+      </div>
+    </details>
   );
 }

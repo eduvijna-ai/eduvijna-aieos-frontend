@@ -848,9 +848,9 @@ test.describe("[AIEOS360-S02-I04-E2E] Principal OS real-stack journey", () => {
       page.getByRole("heading", { name: "School Intelligence" }),
     ).toBeVisible();
     await expect(
-      page.getByText(`Current facts as of ${state.generatedAt}`),
+      page.getByText(`School activity as of ${state.generatedAt}`),
     ).toBeVisible();
-    await expect(page.getByText("In-scope classes: 2")).toBeVisible();
+    await expect(page.getByText("Authorized classes: 2")).toBeVisible();
     await expect(page.getByText(/Derived on request/)).toBeVisible();
     await expect(
       page.getByText(/Current facts as of this request/),
@@ -859,13 +859,13 @@ test.describe("[AIEOS360-S02-I04-E2E] Principal OS real-stack journey", () => {
       page.getByText("Derived from current authorized AIEOS source domains."),
     ).toBeVisible();
     await expect(
-      page.getByLabel("School summary").getByText(
-        "Current-policy evaluations: 1 of 1 submitted evidence records",
+      page.getByLabel("School at a glance").getByText(
+        "1 of 1 submitted work evaluated",
       ),
     ).toBeVisible();
     await expect(
       page.getByTestId("class-card-class-5a").getByText(
-        "Current-policy evaluations: 1 of 1 submitted evidence records",
+        "1 of 1 submitted work evaluated",
       ),
     ).toBeVisible();
 

@@ -38,7 +38,7 @@ describe("Parent OS child detail page", () => {
     const calls = stubChild();
     renderApp(`/parent-os/children/${SECOND_LEARNER}`);
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Child facts" }),
+      await screen.findByRole("heading", { level: 1, name: "Child activity" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Reading homework")).toBeInTheDocument();
     expect(screen.getByText("Submitted")).toBeInTheDocument();

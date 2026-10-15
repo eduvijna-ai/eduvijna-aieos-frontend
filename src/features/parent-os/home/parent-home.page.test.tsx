@@ -62,7 +62,7 @@ describe("Parent OS home page", () => {
       "/parent-os",
     );
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Parent home" }),
+      await screen.findByRole("heading", { level: 1, name: "Family home" }),
     ).toBeInTheDocument();
   });
 
@@ -81,7 +81,7 @@ describe("Parent OS home page", () => {
     stubParentHome();
     renderApp("/parent-os");
     expect(
-      await screen.findByText("Current facts as of this request"),
+      await screen.findByText(/Updates reflect authorized assignments as of this visit/),
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Child 1" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Child 2" })).toBeInTheDocument();
@@ -96,11 +96,24 @@ describe("Parent OS home page", () => {
     expect(screen.getByText("Submitted")).toBeInTheDocument();
     expect(screen.getByText("No due date")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "View current facts for Child 1" }),
+      screen.getByRole("link", { name: "View all assignments for Child 1" }),
     ).toHaveAttribute("href", `/parent-os/children/${FIRST_LEARNER}`);
+    expect(renderedText()).not.toContain(FIRST_LEARNER.toLowerCase());
     for (const token of FORBIDDEN_RENDERED) {
       expect(renderedText()).not.toContain(token);
     }
+  });
+
+  it("preserves showcase=1 when navigating to child detail", async () => {
+    stubParentHome();
+    renderApp("/parent-os?showcase=1");
+    const link = await screen.findByRole("link", {
+      name: "View all assignments for Child 1",
+    });
+    expect(link).toHaveAttribute(
+      "href",
+      `/parent-os/children/${FIRST_LEARNER}?showcase=1`,
+    );
   });
 
   it("renders a calm empty state for zero authorized children", async () => {

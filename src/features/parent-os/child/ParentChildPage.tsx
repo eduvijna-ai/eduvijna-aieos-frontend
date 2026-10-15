@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 import {
   getParentOsChild,
@@ -17,9 +17,15 @@ import {
 import {
   assignmentsOf,
   childrenOf,
+  formatAssignmentStatusSummary,
   formatCurrentFactsAsOf,
   formatTimeBasisCopy,
+  summarizeAssignmentStatuses,
 } from "../parentPresentation";
+import {
+  ShowcaseBackLink,
+  ShowcaseLink,
+} from "@/features/aieos360-showcase/ShowcaseContinuity";
 import "../parent-os.css";
 
 export function ParentChildPage() {
@@ -66,7 +72,7 @@ export function ParentChildPage() {
     return (
       <article className="stack parent-os-page">
         <header>
-          <h1>Child facts</h1>
+          <h1>Child activity</h1>
         </header>
         <EmptyState
           title="Connect a development session"
@@ -77,7 +83,7 @@ export function ParentChildPage() {
   }
 
   if (status === "loading") {
-    return <LoadingState label="Loading Parent facts…" />;
+    return <LoadingState label="Loading assignments…" />;
   }
 
   if (status === "error") {
@@ -85,14 +91,14 @@ export function ParentChildPage() {
       return (
         <article className="stack parent-os-page">
           <header>
-            <h1>Child facts</h1>
+            <h1>Child activity</h1>
           </header>
           <EmptyState
             title="This child is not available."
             action={
-              <Link className="btn btn-secondary" to="/parent-os">
-                Back to Parent home
-              </Link>
+              <ShowcaseLink className="btn btn-secondary" to="/parent-os">
+                Back to family home
+              </ShowcaseLink>
             }
           />
         </article>
@@ -122,19 +128,23 @@ export function ParentChildPage() {
   }
 
   const child = childrenOf(data)[0];
+  const assignments = child ? assignmentsOf(child) : [];
+  const summary = summarizeAssignmentStatuses(assignments);
 
   return (
     <article className="stack parent-os-page">
       <header className="parent-os-page-header">
         <div>
-          <h1>Child facts</h1>
+          <h1>Child activity</h1>
+          <ShowcaseBackLink />
+          <p className="parent-os-lead">{formatAssignmentStatusSummary(summary)}</p>
           <p className="parent-os-basis">{formatCurrentFactsAsOf(data.generated_at)}</p>
           <p className="muted">{formatTimeBasisCopy()}</p>
         </div>
         <div className="parent-os-actions">
-          <Link className="btn btn-secondary" to="/parent-os">
-            Back to Parent home
-          </Link>
+          <ShowcaseLink className="btn btn-secondary" to="/parent-os">
+            Back to family home
+          </ShowcaseLink>
           <button type="button" className="btn btn-secondary" onClick={() => void load()}>
             Refresh
           </button>
@@ -143,7 +153,7 @@ export function ParentChildPage() {
       {child ? (
         <section className="stack" aria-labelledby="parent-child-heading">
           <h2 id="parent-child-heading">Current assignments</h2>
-          <ParentAssignmentList assignments={assignmentsOf(child)} />
+          <ParentAssignmentList assignments={assignments} />
         </section>
       ) : (
         <EmptyState
