@@ -191,7 +191,7 @@ test.describe("[AIEOS360-S03-I04-E2E] Parent OS real-stack journey", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: f.worksheet_title }),
     ).toBeVisible();
-    await expect(page.getByText(/Assigned version/i)).toBeVisible();
+    await expect(page.getByText(/copy your teacher assigned/i)).toBeVisible();
 
     const detailResponse = await page.request.get(
       `/api/v1/student-os/assignments/${state.assignmentId}`,
@@ -205,7 +205,7 @@ test.describe("[AIEOS360-S03-I04-E2E] Parent OS real-stack journey", () => {
     expect(detail.content_version_id).toBe(f.version_id);
     expect(detail.resource.title).toBe(f.worksheet_title);
 
-    await page.getByRole("button", { name: /Start this work/i }).click();
+    await page.getByRole("button", { name: /^Start$/i }).click();
     await expect(page).toHaveURL(/\/student-os\/attempts\//);
     state.attemptId = page.url().split("/").pop()!;
     expect(state.attemptId).toBeTruthy();

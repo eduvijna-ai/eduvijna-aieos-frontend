@@ -87,8 +87,7 @@ test.describe("[AIEOS360-S01-I04R1:student-product-e2e] Student real-stack journ
     await expect(
       page.getByRole("heading", { level: 1, name: fixture.worksheet_title }),
     ).toBeVisible();
-    await expect(page.getByText(/Assigned version/i)).toBeVisible();
-    await expect(page.getByText(/exact version assigned/i)).toBeVisible();
+    await expect(page.getByText(/copy your teacher assigned/i)).toBeVisible();
 
     const detailResponse = await page.request.get(
       `/api/v1/student-os/assignments/${fixture.assignment_id}`,
@@ -108,7 +107,7 @@ test.describe("[AIEOS360-S01-I04R1:student-product-e2e] Student real-stack journ
     );
 
     // R. START
-    await page.getByRole("button", { name: /Start this work/i }).click();
+    await page.getByRole("button", { name: /^Start$/i }).click();
     await expect(page).toHaveURL(/\/student-os\/attempts\//);
     await expect(page.getByText(/In progress/i)).toBeVisible();
 
@@ -159,7 +158,7 @@ test.describe("[AIEOS360-S01-I04R1:student-product-e2e] Student real-stack journ
     ).toBeVisible();
     await page.getByRole("button", { name: /Yes, submit/i }).click();
     await expect(page.getByText(/Work submitted/i)).toBeVisible();
-    await expect(page.getByText(/This work is submitted/i)).toBeVisible();
+    await expect(page.getByText(/read-only/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /Save answers/i })).toHaveCount(
       0,
     );
@@ -167,7 +166,7 @@ test.describe("[AIEOS360-S01-I04R1:student-product-e2e] Student real-stack journ
     // W. Submitted reload is read-only
     await page.reload();
     await connectStudentDevSession(page);
-    await expect(page.getByText(/This work is submitted/i)).toBeVisible();
+    await expect(page.getByText(/read-only/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /Save answers/i })).toHaveCount(
       0,
     );
@@ -204,11 +203,12 @@ test.describe("[AIEOS360-S01-I04R1:student-product-e2e] Student real-stack journ
 
     await page.reload();
     await connectStudentDevSession(page);
-    await expect(page.getByText(/This work is submitted/i)).toBeVisible();
+    await expect(page.getByText(/read-only/i)).toBeVisible();
     await expect(
-      page.getByText(/submitted answers are shown below/i),
+      page.getByText(/submission is still here to read/i),
     ).toBeVisible();
-    await expect(page.getByLabel("Submitted answers")).toContainText(/True/i);
+    await expect(page.getByText(/Your submitted answers/i)).toBeVisible();
+    await expect(page.getByText(/^True$/i)).toBeVisible();
 
     assertNoApiMocksInstalled(page);
   });
