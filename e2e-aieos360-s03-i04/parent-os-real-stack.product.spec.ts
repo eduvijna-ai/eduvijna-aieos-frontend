@@ -427,7 +427,7 @@ test.describe("[AIEOS360-S03-I04-E2E] Parent OS real-stack journey", () => {
       );
     });
     await page
-      .getByRole("link", { name: /View current facts for Child 1/i })
+      .getByRole("link", { name: /View all assignments for Child 1/i })
       .click();
     const childResponse = await childResponsePromise;
     expect(childResponse.request().method()).toBe("GET");

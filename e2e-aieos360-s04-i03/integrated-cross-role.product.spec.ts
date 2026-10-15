@@ -584,7 +584,7 @@ test.describe("[AIEOS360-S04-I03-E2E] integrated cross-role journey", () => {
         response.status() === 200,
     );
     await page
-      .getByRole("link", { name: /View current facts for Child 1/i })
+      .getByRole("link", { name: /View all assignments for Child 1/i })
       .click();
     const childResponse = await childPromise;
     expect(parentChildUrl(childResponse.url())?.pathname).toBe(childPath);
