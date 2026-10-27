@@ -36,13 +36,31 @@ def _resolve_showcase_mode() -> str:
     return mode
 
 
-def _compose_model_gateway(showcase_mode: str):
+def _deterministic_fake_result_factory(request):
+    from aieos.domains.education.preparation_kit_v1 import PreparationKitV1
+    from aieos.domains.education.worksheet_v1 import WorksheetV1
     from aieos.domains.teaching.application.assistant_answer_v1 import (
         TeacherAssistantAnswerV1,
     )
+    from aieos.platform.ai.gateway import ModelGenerationFailed
+    from tests.domains.teaching.helpers_dev04_i06 import pass_preparation_kit
+    from tests.domains.teaching.worksheet_fixtures import valid_worksheet_model
+
+    output_type = request.output_type
+    if output_type is TeacherAssistantAnswerV1:
+        return TeacherAssistantAnswerV1.development_fake(request.input_text)
+    if output_type is PreparationKitV1:
+        return pass_preparation_kit()
+    if output_type is WorksheetV1:
+        return valid_worksheet_model()
+    raise ModelGenerationFailed(
+        f"showcase fake gateway has no fixture for {getattr(output_type, '__name__', output_type)}"
+    )
+
+
+def _compose_model_gateway(showcase_mode: str):
     from aieos.platform.ai.composition import compose_configured_model_provider
     from aieos.platform.ai.fake import FakeStructuredModelGateway
-    from tests.domains.teaching.worksheet_fixtures import valid_worksheet_model
 
     if showcase_mode == SHOWCASE_MODE_REAL_AI:
         configured = compose_configured_model_provider(environ=os.environ)
@@ -57,13 +75,8 @@ def _compose_model_gateway(showcase_mode: str):
             configured.projection,
         )
 
-    def result_factory(request):
-        if request.output_type is TeacherAssistantAnswerV1:
-            return TeacherAssistantAnswerV1.development_fake(request.input_text)
-        return valid_worksheet_model()
-
     gateway = FakeStructuredModelGateway(
-        result_factory=result_factory,
+        result_factory=_deterministic_fake_result_factory,
         provider_id="fake",
         model_id="fake-model",
     )
