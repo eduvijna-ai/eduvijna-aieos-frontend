@@ -23,11 +23,20 @@ Substrate: reuses **I01R9** managed lifecycle (`docs/AIEOS360-CX01-I01R9-SHOWCAS
 - **Preflight:** `docs/AIEOS360-CX01-I07-PRESENTER-PREFLIGHT.md`.
 - **Coverage matrix:** `docs/AIEOS360-CX01-I07-COVERAGE-MATRIX.md`.
 
+### Demonstration modes (both honest)
+
+| Mode | Audience | Prepare / content lineage | Assign / learner proof |
+|---|---|---|---|
+| **A — Automated guard (CI / `pnpm showcase:aieos360:rehearse`)** | Engineering acceptance | Same run: Teacher **Prepare → kit → Review → Approve** using deterministic **Fake** gateway (`pass_preparation_kit`, worksheet questions `ws-1`…`ws-6`). I01R9 seed still supplies tenant, roles, and school context only. | Publish that **same-run** `ContentVersion` → assign **Grade 5A** → Student answers generated items → evaluate → improve → Principal/Parent negatives. |
+| **B — Human presenter walkthrough** | Client rehearsal | Operator may open the I01R9 **seeded synthetic approved-but-unpublished worksheet** to explain prerequisites without running Prepare live. Label it synthetic; do not imply paid provider generation. | Publish/assign that seeded artifact **or** follow Mode A beats if the room allows the longer Prepare flow. Keep pre-connected DEV tabs per preflight. |
+
+**REAL_AI live generation: PENDING** in both modes — default **DETERMINISTIC**; Fake output is not paid provider execution.
+
 ### Story flow (`AIEOS360-CX-SCENARIO-01`)
 
 1. **Launcher** — `/showcase/aieos360?showcase=1` on Teacher frontend (default port 5291).
-2. **Teacher Prepare (truth)** — Open seeded worksheet artifact. Explain synthetic **approved-but-unpublished** prerequisite (I01R9 seed). Distinguish from fresh AI prepare-kit demos (product E2E).
-3. **Publish + Assign** — Publish version → assign to **Grade 5A** (`class-5a`).
+2. **Teacher Prepare** — Mode **A**: live Prepare → kit → Review → Approve (Fake). Mode **B**: optional narrative on seeded worksheet artifact only.
+3. **Publish + Assign** — Publish the version you are demonstrating → assign to **Grade 5A** (`class-5a`).
 4. **Student A** — Home → assignment → Start → Save → Submit.
 5. **Teacher evaluation** — Assessment intelligence → explicit evaluate submitted work.
 6. **Teacher improve** — Record HUMAN **Mixed** class assessment → Improve → remediation TeachingWork (same DB lineage).

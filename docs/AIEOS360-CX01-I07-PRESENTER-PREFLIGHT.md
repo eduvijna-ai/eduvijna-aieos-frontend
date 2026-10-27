@@ -17,6 +17,7 @@ Complete **before** the live client walkthrough. Do not paste bearer tokens duri
 5. Open each role in a **dedicated tab** from the launcher; expand **DEV session** in that tab and connect using tenant + bearer from the **local non-exported fixture** `tmp/aieos360-cx01-i01-showcase-fixture.json` (operator machine only — never display to clients). The emitted `tmp/aieos360-cx01-i01-showcase-manifest.json` is **sanitized** and does not contain bearer tokens.
 6. **Keep those connected tabs** for the walkthrough; opening a new tab does not inherit session state.
 7. Confirm **DETERMINISTIC** mode on launcher truth panel (`REAL_AI LIVE GENERATION PENDING`).
+8. Choose demonstration mode from the runbook: **Mode A** (live Prepare → kit, matches automated guard) or **Mode B** (seeded worksheet narrative only). Do not mix content versions mid-story.
 
 ## Limitation (honest)
 

@@ -783,6 +783,7 @@ jobs:
     env:
       AIEOS_BACKEND_ROOT: ${{ github.workspace }}/backend
       AIEOS_BACKEND_PIN_SHA: 637583f42b7c475ef83f6f99bca7e65e665a253d
+      AIEOS360_CX01_I01_SHOWCASE_CI_EXTERNAL_PG: "1"
       AIEOS360_CX01_I07_REHEARSE_CI: "1"
       AIEOS_TEST_BOOTSTRAP_DATABASE_URL: postgresql+psycopg://aieos_bootstrap:aieos_test@127.0.0.1:5432/aieos
       AIEOS_TEST_DATABASE_URL: postgresql+psycopg://aieos_migrator:aieos_test@127.0.0.1:5432/aieos

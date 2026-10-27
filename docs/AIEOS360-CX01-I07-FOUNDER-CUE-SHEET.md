@@ -13,7 +13,7 @@
 
 | # | Role | Say / show | Evidence |
 |---|---|---|---|
-| 1 | Teacher | “We prepared and approved content; publishing is a deliberate act.” | Publish control; synthetic seeded worksheet labelled in runbook |
+| 1 | Teacher | “We prepared and approved content; publishing is a deliberate act.” | Mode A: in-run Fake preparation kit; Mode B: seeded synthetic worksheet (runbook). **REAL_AI live generation PENDING.** |
 | 2 | Teacher | “Grade 5A receives the assignment.” | Assign to **Grade 5A** / `class-5a` |
 | 3 | Student | “Learner starts, saves, submits.” | START → SAVE → SUBMIT |
 | 4 | Teacher | “Evaluation is explicit policy, not automatic mastery.” | Assessment intelligence → evaluate submitted work |

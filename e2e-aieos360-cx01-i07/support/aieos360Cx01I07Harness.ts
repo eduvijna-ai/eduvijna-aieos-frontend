@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { buildI07PythonBootstrapEnv } from "../../scripts/aieos360-cx01-i07-e2e/child_env.mjs";
 import { fileURLToPath } from "node:url";
 import type { Browser, Page, Request } from "@playwright/test";
 import { expect } from "@playwright/test";
@@ -13,6 +14,18 @@ export const I01R9_FIXTURE_FRONTEND_BASE_SHA =
   "8c8247afda0b9a34e688d2c300d46e83526bb126";
 export const I01R9_SCENARIO_ID = "aieos360-cx01-i01-showcase-rehearsal";
 export const APPROVED_CLIENT_SCENARIO_ID = "AIEOS360-CX-SCENARIO-01";
+
+/** Frozen backend `pass_preparation_kit()` worksheet question ids (deterministic Fake). */
+export const PASS_KIT_WORKSHEET_PROOF = {
+  correctMcId: "ws-1",
+  correctMcChoice: "1/2",
+  openShortAnswerId: "ws-2",
+  incorrectTrueFalseId: "ws-3",
+  incorrectTrueFalseChoice: "False",
+  unansweredMcId: "ws-4",
+  objectiveDemonstratedId: "obj-1",
+  objectiveInsufficientId: "obj-2",
+} as const;
 export const BACKEND_PIN_SHA =
   "637583f42b7c475ef83f6f99bca7e65e665a253d";
 export const OPENAPI_AUTHORITY_SHA =
@@ -356,15 +369,12 @@ export function runPersistenceAssert(
   for (const [key, value] of Object.entries(args)) {
     if (value != null) cliArgs.push(`--${key}`, String(value));
   }
-  const { VIRTUAL_ENV: _dropVirtualEnv, ...baseEnv } = process.env;
-  void _dropVirtualEnv;
   const result = spawnSync(
     process.env.AIEOS360_CX01_I07_E2E_UV || "uv",
     ["run", "python", ...cliArgs],
     {
       cwd: backendRoot,
-      env: {
-        ...baseEnv,
+      env: buildI07PythonBootstrapEnv(process.env, {
         AIEOS_BACKEND_ROOT: backendRoot,
         AIEOS360_S04_I03_E2E_DB_REPORT: dbReportPath,
         AIEOS360_S04_I03_E2E_RUNTIME_DATABASE_URL:
@@ -381,7 +391,7 @@ export function runPersistenceAssert(
         PYTHONPATH: [join(backendRoot, "src"), backendRoot].join(
           process.platform === "win32" ? ";" : ":",
         ),
-      },
+      }),
       encoding: "utf8",
       shell: process.platform === "win32",
     },

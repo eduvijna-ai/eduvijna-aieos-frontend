@@ -29,7 +29,8 @@ describe("AIEOS360-CX01-I07 integrated rehearsal package", () => {
       "utf8",
     );
     expect(matrix).toContain("AIEOS360-CX-SCENARIO-01");
-    expect(matrix).toContain("PROVEN LIVE ON SAME I07 SUBSTRATE");
+    expect(matrix).toContain("AUTOMATED GUARD (pending green exact-head CI)");
+    expect(matrix).not.toContain("PROVEN LIVE ON SAME I07 SUBSTRATE");
     const runbook = readFileSync(
       path.join(repoRoot, "docs/AIEOS360-CX01-I07-INTEGRATED-SHOWCASE-REHEARSAL.md"),
       "utf8",
@@ -37,6 +38,7 @@ describe("AIEOS360-CX01-I07 integrated rehearsal package", () => {
     expect(runbook).toContain(SHOWCASE_LAUNCHER_PATH);
     expect(runbook).not.toContain("/aieos360/showcase");
     expect(runbook).toContain("REAL_AI live generation: PENDING");
+    expect(runbook).toContain("Demonstration modes");
     const preflight = readFileSync(
       path.join(repoRoot, "docs/AIEOS360-CX01-I07-PRESENTER-PREFLIGHT.md"),
       "utf8",
@@ -55,6 +57,44 @@ describe("AIEOS360-CX01-I07 integrated rehearsal package", () => {
     expect(ci).toContain("tmp/cx01-i07-proof-exports/");
     expect(ci).not.toContain("aieos360-cx01-i01-showcase-fixture.json");
     expect(ci).not.toContain("aieos360-cx01-i07-e2e-persistence.json");
+    const i07Job = ci.slice(ci.indexOf("aieos360-cx01-i07-e2e:"));
+    expect(i07Job).toContain('AIEOS360_CX01_I01_SHOWCASE_CI_EXTERNAL_PG: "1"');
+  });
+
+  it("rehearse runner stops managed stack only after owned start", () => {
+    const rehearse = readFileSync(
+      path.join(
+        repoRoot,
+        "scripts/aieos360-cx01-i07-integrated-rehearsal/rehearse.mjs",
+      ),
+      "utf8",
+    );
+    expect(rehearse).toContain("let ownedLifecycle = false");
+    expect(rehearse).toContain("ownedLifecycle = true");
+    expect(rehearse).toContain("if (ownedLifecycle)");
+    expect(rehearse).toContain("assertManagedStackReady");
+  });
+
+  it("showcase Teacher fake gateway supports PreparationKitV1 (proof)", () => {
+    const backendRoot = path.join(repoRoot, "backend");
+    const result = spawnSync(
+      "uv",
+      [
+        "run",
+        "python",
+        path.join(
+          repoRoot,
+          "scripts/aieos360-cx01-i01r9-showcase-rehearsal/fake_gateway_preparation_kit.proof.py",
+        ),
+      ],
+      {
+        cwd: backendRoot,
+        env: { ...process.env, AIEOS_BACKEND_ROOT: backendRoot },
+        encoding: "utf8",
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("pass");
   });
 
   it("child env builders scrub provider secrets (selftest)", () => {

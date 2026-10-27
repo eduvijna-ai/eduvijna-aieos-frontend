@@ -35,6 +35,39 @@ function writeReport(payload) {
   writeFileSync(reportPath, JSON.stringify(payload, null, 2) + "\n", "utf8");
 }
 
+const EXPECTED_MANAGED_ROLE_COUNT = 8;
+
+function assertManagedStackReady() {
+  const result = spawnSync("pnpm", ["showcase:aieos360:status"], {
+    cwd: repoRoot,
+    env: buildI07PythonBootstrapEnv(process.env, {
+      AIEOS360_CX01_I01_SHOWCASE_STATUS_SKIP_LIVE: "1",
+    }),
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `CX01-I07 rehearse: managed status failed after start: ${result.stderr || result.stdout}`,
+    );
+  }
+  const report = JSON.parse(result.stdout || "{}");
+  if (report.operator_status?.phase !== "running") {
+    throw new Error(
+      `CX01-I07 rehearse: expected operator phase running, got ${report.operator_status?.phase}`,
+    );
+  }
+  if (report.live_process_count !== EXPECTED_MANAGED_ROLE_COUNT) {
+    throw new Error(
+      `CX01-I07 rehearse: expected ${EXPECTED_MANAGED_ROLE_COUNT} live managed roles, got ${report.live_process_count}`,
+    );
+  }
+  if ((report.missing_live_roles ?? []).length > 0) {
+    throw new Error(
+      `CX01-I07 rehearse: missing live roles: ${report.missing_live_roles.join(", ")}`,
+    );
+  }
+}
+
 const started = Date.now();
 const steps = [];
 const ciOnly = process.env.AIEOS360_CX01_I07_REHEARSE_CI === "1";
@@ -50,6 +83,7 @@ if (ciOnly) {
 failClosedNonLinuxExit("showcase:aieos360:rehearse");
 
 let exitCode = 1;
+let ownedLifecycle = false;
 
 try {
   if (!process.env.AIEOS_BACKEND_ROOT) {
@@ -78,6 +112,10 @@ try {
   if (exitCode !== 0) {
     throw new Error("showcase start failed");
   }
+  ownedLifecycle = true;
+
+  assertManagedStackReady();
+  steps.push({ step: "managed_status_gate", status: "pass" });
 
   exitCode = run("pnpm", ["test:e2e:aieos360-cx01-i07"], {
     AIEOS360_CX01_I07_REHEARSE_MANAGED_STACK: "1",
@@ -99,10 +137,12 @@ try {
   console.error(error);
   exitCode = 1;
 } finally {
-  const stopCode = run("pnpm", ["showcase:aieos360:stop"]);
-  steps.push({ step: "showcase_stop", status: stopCode === 0 ? "pass" : "fail" });
-  if (exitCode === 0 && stopCode !== 0) {
-    exitCode = stopCode;
+  if (ownedLifecycle) {
+    const stopCode = run("pnpm", ["showcase:aieos360:stop"]);
+    steps.push({ step: "showcase_stop", status: stopCode === 0 ? "pass" : "fail" });
+    if (exitCode === 0 && stopCode !== 0) {
+      exitCode = stopCode;
+    }
   }
 }
 

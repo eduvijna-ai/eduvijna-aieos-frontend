@@ -9,8 +9,8 @@ import {
   SCHOOL_INTELLIGENCE_PATH,
   STUDENT_FRONTEND_URL,
   TEACHER_FRONTEND_URL,
-  artifactPath,
   artifactPathForIds,
+  PASS_KIT_WORKSHEET_PROOF,
   assertNoApiMocksInstalled,
   assertParentTransportOnly,
   assertPrincipalTransportOnly,
@@ -113,6 +113,10 @@ function assertPrincipalPrivacy(haystack: string) {
   expect(haystack.toLowerCase()).not.toContain("student a");
   expect(haystack.toLowerCase()).not.toContain("student b");
   expect(haystack.toLowerCase()).not.toContain("teacher leaderboard");
+}
+
+function studentQuestionLocator(page: import("@playwright/test").Page, qid: string) {
+  return page.locator(".sos-question").filter({ hasText: new RegExp(qid, "i") });
 }
 
 function assertParentPrivacy(haystack: string) {
@@ -342,30 +346,15 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
     state.attemptId = page.url().split("/").pop() ?? null;
     expect(state.attemptId).toBeTruthy();
 
-    await page
-      .locator(".sos-question")
-      .filter({ hasText: /Q-CORRECT/i })
-      .getByRole("radio", { name: "1/2" })
+    const kit = PASS_KIT_WORKSHEET_PROOF;
+    await studentQuestionLocator(page, kit.correctMcId)
+      .getByRole("radio", { name: kit.correctMcChoice })
       .check();
-    await page
-      .locator(".sos-question")
-      .filter({ hasText: /Q-INCORRECT/i })
-      .getByRole("radio", { name: "True" })
-      .check();
-    await page
-      .locator(".sos-question")
-      .filter({ hasText: /Q-OPEN/i })
+    await studentQuestionLocator(page, kit.openShortAnswerId)
       .locator("textarea")
       .fill(OPEN_RESPONSE_TEXT);
-    await page
-      .locator(".sos-question")
-      .filter({ hasText: /Q-FILLER-A/i })
-      .getByRole("radio", { name: "1/4" })
-      .check();
-    await page
-      .locator(".sos-question")
-      .filter({ hasText: /Q-FILLER-B/i })
-      .getByRole("radio", { name: "True" })
+    await studentQuestionLocator(page, kit.incorrectTrueFalseId)
+      .getByRole("radio", { name: kit.incorrectTrueFalseChoice })
       .check();
 
     await page.getByRole("button", { name: /Save answers/i }).click();
@@ -386,18 +375,18 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
     };
     expect(saved.lifecycle_state).toBe("IN_PROGRESS");
     expect(
-      saved.responses.find((item) => item.question_id === f.q_correct_id)
+      saved.responses.find((item) => item.question_id === kit.correctMcId)
         ?.choice_value,
-    ).toBe("1/2");
+    ).toBe(kit.correctMcChoice);
     expect(
-      saved.responses.find((item) => item.question_id === f.q_incorrect_id)
+      saved.responses.find((item) => item.question_id === kit.incorrectTrueFalseId)
         ?.boolean_value,
-    ).toBe(true);
+    ).toBe(false);
     expect(
-      saved.responses.find((item) => item.question_id === f.q_unanswered_id),
+      saved.responses.find((item) => item.question_id === kit.unansweredMcId),
     ).toBeFalsy();
     expect(
-      saved.responses.find((item) => item.question_id === f.q_open_id)
+      saved.responses.find((item) => item.question_id === kit.openShortAnswerId)
         ?.text_value,
     ).toBe(OPEN_RESPONSE_TEXT);
 
@@ -519,19 +508,19 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
     expect(evaluation.evaluation_policy_version).toBe(
       f.evaluation_policy_version,
     );
+    const kit = PASS_KIT_WORKSHEET_PROOF;
     const itemOutcomes = evaluation.item_outcomes as Record<string, string>;
-    expect(itemOutcomes[f.q_correct_id]).toBe("CORRECT");
-    expect(itemOutcomes[f.q_incorrect_id]).toBe("INCORRECT");
-    expect(itemOutcomes[f.q_unanswered_id]).toBe("UNANSWERED");
-    expect(itemOutcomes[f.q_open_id]).toBe("OPEN_RESPONSE_UNEVALUATED");
+    expect(itemOutcomes[kit.correctMcId]).toBe("CORRECT");
+    expect(itemOutcomes[kit.incorrectTrueFalseId]).toBe("INCORRECT");
+    expect(itemOutcomes[kit.unansweredMcId]).toBe("UNANSWERED");
+    expect(itemOutcomes[kit.openShortAnswerId]).toBe(
+      "OPEN_RESPONSE_UNEVALUATED",
+    );
     const objectives = evaluation.objective_results as Record<string, string>;
-    expect(objectives[f.obj_demonstrated_id]).toBe(
-      "DEMONSTRATED_ON_SUBMITTED_ITEMS",
+    expect(objectives[kit.objectiveDemonstratedId]).toBe(
+      "MIXED_ON_SUBMITTED_ITEMS",
     );
-    expect(objectives[f.obj_not_yet_id]).toBe(
-      "NOT_YET_DEMONSTRATED_ON_SUBMITTED_ITEMS",
-    );
-    expect(objectives[f.obj_insufficient_id]).toBe("INSUFFICIENT_EVIDENCE");
+    expect(objectives[kit.objectiveInsufficientId]).toBe("INSUFFICIENT_EVIDENCE");
     await expect(
       page.getByRole("button", { name: /Record class assessment/i }),
     ).toBeVisible();
