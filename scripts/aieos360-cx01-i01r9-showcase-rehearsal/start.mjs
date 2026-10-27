@@ -155,6 +155,8 @@ const governedConfiguredPorts = [
 
 assertNotAlreadyRunning();
 
+clearRuntimeSurface("managed_start_preflight");
+
 const showcaseModeResolution = resolveShowcaseModeForStart();
 const showcaseMode = showcaseModeResolution.mode;
 persistModeConfig(buildModeConfigRecord(showcaseModeResolution));

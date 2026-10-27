@@ -35,12 +35,7 @@ export async function fetchTeacherProviderAggregator(backendBaseUrl, timeoutMs =
  * Summarize operator/runtime facts. Provider Aggregator is composition metadata only;
  * real_provider_generation_verified stays false unless separate generation provenance exists.
  */
-export function summarizeProviderTruth(
-  selectedMode,
-  aggregator,
-  options = {},
-) {
-  const generationProven = Boolean(options.generationProvenanceVerified);
+export function summarizeProviderTruth(selectedMode, aggregator) {
   const activeProvider = aggregator?.active_provider_id ?? null;
   const activeModel = aggregator?.active_model_id ?? null;
   const runtimeMode = aggregator?.mode ?? null;
@@ -69,9 +64,8 @@ export function summarizeProviderTruth(
     active_model_id: activeModel,
     aggregator_mode: runtimeMode,
     real_provider_runtime_verified: runtimeObserved,
-    real_provider_generation_verified: generationProven,
-    live_generation_verification:
-      generationProven ? "proven" : "pending_operator_proof",
+    real_provider_generation_verified: false,
+    live_generation_verification: "pending_operator_proof",
     verification_state: verificationState,
   };
 }

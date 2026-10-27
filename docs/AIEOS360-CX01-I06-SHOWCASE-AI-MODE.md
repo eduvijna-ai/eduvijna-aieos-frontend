@@ -25,6 +25,8 @@ Provider API secrets are scrubbed from Student/Principal/Parent backends, all Vi
 
 Managed `start`/`status` query the Teacher backend Provider Aggregator on loopback with the governed synthetic `X-AIEOS-Tenant-ID` header only (operator-side, NON_PRODUCTION). The launcher reads the sanitized operator-verified runtime surface (`public/aieos360-showcase-runtime.json`, gitignored) written at successful managed start; it is cleared/marked inactive on stop, reset, and start failure.
 
-Provider Aggregator composition (`mode=REAL`, provider/model ids) is **not** live generation proof. `real_provider_generation_verified` remains false until separate operator generation provenance exists.
+Provider Aggregator composition (`mode=REAL`, provider/model ids) is **not** live generation proof. `real_provider_generation_verified` is always false in I06 harness code paths; `live_generation_verification` stays `pending_operator_proof` until a separate governed generation/ContentVersion evidence flow exists.
+
+Managed `start`/`reset`/`stop` invalidate the owned runtime surface before fallible preflight work (after registry safety gates). The CX01-I01R9 integration proof lane executes `provider_aggregator_tenant_contract_proof.py` on every backend-ready CI run.
 
 The seeded I01R9 worksheet remains a **synthetic prerequisite** and is never relabeled as real-AI output.

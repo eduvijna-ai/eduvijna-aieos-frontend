@@ -26,6 +26,10 @@ const scriptDir = path.join(
   repoRoot,
   "scripts/aieos360-cx01-i01r9-showcase-rehearsal",
 );
+const i06ScriptDir = path.join(
+  repoRoot,
+  "scripts/aieos360-cx01-i06-showcase-ai-mode",
+);
 
 function runUvPython(script: string) {
   const backendRoot = process.env.AIEOS_BACKEND_ROOT;
@@ -60,6 +64,45 @@ function runNodeProof(script: string, extraEnv: Record<string, string> = {}) {
 }
 
 describe("AIEOS360-CX01-I01R9 showcase rehearsal proofs", () => {
+  it.runIf(backendReady)(
+    "I06 provider aggregator tenant header contract (Backend TestClient, synthetic Groq composition only)",
+    () => {
+      const backendRoot = process.env.AIEOS_BACKEND_ROOT;
+      if (!backendRoot) {
+        throw new Error("AIEOS_BACKEND_ROOT is required");
+      }
+      const contractProof = spawnSync(
+        process.env.AIEOS360_CX01_I01_SHOWCASE_UV || "uv",
+        [
+          "run",
+          "python",
+          path.join(i06ScriptDir, "provider_aggregator_tenant_contract_proof.py"),
+        ],
+        {
+          cwd: backendRoot,
+          env: {
+            ...process.env,
+            AIEOS_BACKEND_ROOT: backendRoot,
+            AIEOS_GROQ_API_KEY: "",
+            AIEOS_OPENAI_API_KEY: "",
+            PYTHONPATH: [
+              path.join(backendRoot, "src"),
+              backendRoot,
+              i06ScriptDir,
+            ].join(path.delimiter),
+          },
+          encoding: "utf8",
+        },
+      );
+      if (contractProof.status !== 0) {
+        console.error(contractProof.stdout);
+        console.error(contractProof.stderr);
+      }
+      expect(contractProof.stdout).toContain("provider_aggregator_tenant_contract");
+      expect(contractProof.status).toBe(0);
+    },
+  );
+
   it("shared stop-wide deadline selftest", () => {
     const result = runNodeProof("process_group_stop.selftest.mjs");
     if (result.status !== 0) {

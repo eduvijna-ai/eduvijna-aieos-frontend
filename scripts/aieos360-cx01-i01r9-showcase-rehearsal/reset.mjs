@@ -43,6 +43,8 @@ if (!resetGate.ok) {
   process.exit(1);
 }
 
+clearRuntimeSurface("reset_preflight");
+
 const commonEnv = {
   AIEOS360_CX01_I01_SHOWCASE_DB_REPORT: dbReportPath,
   AIEOS360_CX01_I01_SHOWCASE_FIXTURE_PATH: fixturePath,

@@ -38,6 +38,9 @@ describe("AIEOS360-CX01-I06 showcase AI mode governance", () => {
     const selftest = runNode(`${I06_SCRIPT_PKG}/i06_mode.selftest.mjs`);
     expect(selftest.status).toBe(0);
 
+    const lifecycle = runNode(`${I06_SCRIPT_PKG}/runtime_surface_lifecycle.selftest.mjs`);
+    expect(lifecycle.status).toBe(0);
+
     const start = read(`${I01_SCRIPT_PKG}/start.mjs`);
     expect(start).toContain("resolveShowcaseModeForStart");
     expect(start).toContain("scrubAllProviderSurface");
@@ -115,8 +118,25 @@ const truth = summarizeProviderTruth('REAL_AI', {
   mode: 'REAL',
 });
 if (truth.real_provider_generation_verified) process.exit(2);
+if (truth.live_generation_verification !== 'pending_operator_proof') process.exit(5);
 if (!truth.real_provider_runtime_verified) process.exit(3);
 if (truth.verification_state !== 'real_provider_runtime_observed') process.exit(4);`,
+      ],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+  });
+
+  it("rejects forged generation provenance options on summarizeProviderTruth", () => {
+    const result = spawnSync(
+      "node",
+      [
+        "--input-type=module",
+        "-e",
+        `import { summarizeProviderTruth } from './${I06_SCRIPT_PKG}/provider_truth.mjs';
+const truth = summarizeProviderTruth('REAL_AI', { mode: 'REAL', active_provider_id: 'groq' });
+if (truth.real_provider_generation_verified) process.exit(2);
+if (truth.live_generation_verification !== 'pending_operator_proof') process.exit(3);`,
       ],
       { cwd: repoRoot, encoding: "utf8" },
     );

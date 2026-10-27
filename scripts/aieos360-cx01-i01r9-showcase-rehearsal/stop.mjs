@@ -15,6 +15,7 @@ import { clearRuntimeSurface } from "../aieos360-cx01-i06-showcase-ai-mode/runti
 
 failClosedNonLinuxExit("showcase:aieos360:stop");
 runPinGuard();
+clearRuntimeSurface("managed_stop_preflight");
 
 function safeTcpPorts(values) {
   const ports = [];
@@ -31,6 +32,7 @@ function portsFromRegistryChildren(children) {
 }
 
 function writeStopFailed(payload) {
+  clearRuntimeSurface("managed_stop_failed");
   writeOperatorStatus({
     classification: "NON_PRODUCTION",
     stopped_at: new Date().toISOString(),
