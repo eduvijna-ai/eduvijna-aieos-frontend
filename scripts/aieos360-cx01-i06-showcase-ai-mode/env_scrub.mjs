@@ -4,6 +4,7 @@ import {
   PROVIDER_CONFIG_ENV_KEYS,
   PROVIDER_SECRET_ENV_KEYS,
 } from "./constants.mjs";
+import { buildCanonicalRealAiOperatorEnv } from "./mode.mjs";
 
 export function scrubProviderSecrets(env) {
   const out = { ...env };
@@ -33,15 +34,16 @@ export function buildTeacherBackendEnv(baseEnv, showcaseMode, operatorEnv = proc
     scrubbed.AIEOS360_CX01_I06_SHOWCASE_RUNTIME_TRUTH = MODE_DETERMINISTIC;
     return scrubbed;
   }
+  const canonicalOperator = buildCanonicalRealAiOperatorEnv(operatorEnv);
   const teacherEnv = { ...scrubbed };
   for (const key of PROVIDER_CONFIG_ENV_KEYS) {
-    const value = operatorEnv[key];
+    const value = canonicalOperator[key];
     if (value !== undefined && value !== "") {
       teacherEnv[key] = value;
     }
   }
   for (const key of PROVIDER_SECRET_ENV_KEYS) {
-    const value = operatorEnv[key];
+    const value = canonicalOperator[key];
     if (value !== undefined && value !== "") {
       teacherEnv[key] = value;
     }

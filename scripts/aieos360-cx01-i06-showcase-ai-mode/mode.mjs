@@ -34,13 +34,21 @@ export function assertValidShowcaseMode(mode) {
   }
 }
 
-export function validateRealAiOperatorConfig(env = process.env) {
-  const provider = String(env.AIEOS_AI_PROVIDER || "")
+export function normalizeAiProviderId(raw) {
+  const provider = String(raw ?? "")
     .trim()
     .toLowerCase();
-  if (!REAL_AI_PROVIDERS.has(provider)) {
+  if (!provider) {
+    return null;
+  }
+  return provider;
+}
+
+export function validateRealAiOperatorConfig(env = process.env) {
+  const provider = normalizeAiProviderId(env.AIEOS_AI_PROVIDER);
+  if (!provider || !REAL_AI_PROVIDERS.has(provider)) {
     throw new Error(
-      "AIEOS360-CX01-I06 BLOCKED — REAL_AI requires AIEOS_AI_PROVIDER=groq or openai",
+      "AIEOS360-CX01-I06 BLOCKED — REAL_AI requires AIEOS_AI_PROVIDER=groq or openai (canonical lowercase)",
     );
   }
   const requiredKey =
@@ -53,8 +61,18 @@ export function validateRealAiOperatorConfig(env = process.env) {
   }
   return {
     provider,
+    canonical_provider_env: provider,
     required_key: requiredKey,
     key_present: true,
+  };
+}
+
+/** Operator env normalized for Backend composition (case-sensitive provider IDs). */
+export function buildCanonicalRealAiOperatorEnv(env = process.env) {
+  const validated = validateRealAiOperatorConfig(env);
+  return {
+    ...env,
+    AIEOS_AI_PROVIDER: validated.provider,
   };
 }
 

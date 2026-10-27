@@ -23,4 +23,8 @@ Provider API secrets are scrubbed from Student/Principal/Parent backends, all Vi
 
 ## Runtime truth
 
-Managed `start`/`status` and the launcher read Provider Aggregator facts from the Teacher backend (`GET /api/v1/platform/ai/providers`). The seeded I01R9 worksheet remains a **synthetic prerequisite** and is never relabeled as real-AI output.
+Managed `start`/`status` query the Teacher backend Provider Aggregator on loopback with the governed synthetic `X-AIEOS-Tenant-ID` header only (operator-side, NON_PRODUCTION). The launcher reads the sanitized operator-verified runtime surface (`public/aieos360-showcase-runtime.json`, gitignored) written at successful managed start; it is cleared/marked inactive on stop, reset, and start failure.
+
+Provider Aggregator composition (`mode=REAL`, provider/model ids) is **not** live generation proof. `real_provider_generation_verified` remains false until separate operator generation provenance exists.
+
+The seeded I01R9 worksheet remains a **synthetic prerequisite** and is never relabeled as real-AI output.

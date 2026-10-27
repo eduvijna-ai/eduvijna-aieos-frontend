@@ -28,19 +28,13 @@ describe("AIEOS360 showcase launcher page", () => {
         return {
           ok: true,
           json: async () => ({
+            runtime_surface_valid: true,
             selected_mode: "DETERMINISTIC",
             verified_runtime_mode: "DETERMINISTIC",
-            verification_state: "deterministic_fixture_runtime",
-          }),
-        };
-      }
-      if (url.includes("/api/v1/platform/ai/providers")) {
-        return {
-          ok: true,
-          json: async () => ({
             active_provider_id: "fake",
             active_model_id: "fake-model",
-            mode: "DEVELOPMENT_FAKE",
+            verification_state: "deterministic_fixture_runtime",
+            real_provider_generation_verified: false,
           }),
         };
       }
@@ -95,10 +89,11 @@ describe("AIEOS360 showcase launcher page", () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: true,
       json: async () => ({
+        runtime_surface_valid: true,
         selected_mode: "DETERMINISTIC",
         active_provider_id: "fake",
         active_model_id: "fake-model",
-        mode: "DEVELOPMENT_FAKE",
+        verification_state: "deterministic_fixture_runtime",
       }),
     })));
 

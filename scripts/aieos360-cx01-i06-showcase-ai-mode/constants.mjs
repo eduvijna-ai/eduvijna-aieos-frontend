@@ -56,3 +56,9 @@ export const OPENAPI_AUTHORITY_SHA =
   "4042FB2725DA70A02A70EE09563B7698AE2E5DA82927614CAF1B5F7E6AA7C1D0";
 
 export const EXPECTED_MIGRATION_HEAD = "a360s010004";
+
+/** Canonical governed synthetic tenant for loopback Provider Aggregator reads. */
+export const GOVERNED_SYNTHETIC_TENANT_ID =
+  "71b5fb49-2bdb-56c3-ab7c-3b33e92a89f0";
+
+export const TENANT_ID_HEADER = "X-AIEOS-Tenant-ID";

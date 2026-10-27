@@ -26,10 +26,13 @@ function remoteMainSha(repo) {
   return sha;
 }
 
-export function verifyGovernedFiveRepoRefs() {
+export function compareGovernedSourceRefs(actualRefsByName) {
   const evidence = {};
   for (const [name, { repo, sha }] of Object.entries(GOVERNED_SOURCE_REFS)) {
-    const actual = remoteMainSha(repo);
+    const actual = actualRefsByName[name];
+    if (!actual) {
+      throw new Error(`Missing actual ref for governed source ${name}`);
+    }
     evidence[name] = { expected: sha, actual, repo };
     if (actual !== sha) {
       const mismatch = { name, expected: sha, actual, repo };
@@ -39,6 +42,15 @@ export function verifyGovernedFiveRepoRefs() {
     }
   }
   return evidence;
+}
+
+/** One-time implementation authorization gate (network). Not for evergreen unit tests. */
+export function verifyGovernedFiveRepoRefs() {
+  const actualRefsByName = {};
+  for (const [name, { repo }] of Object.entries(GOVERNED_SOURCE_REFS)) {
+    actualRefsByName[name] = remoteMainSha(repo);
+  }
+  return compareGovernedSourceRefs(actualRefsByName);
 }
 
 export function verifyOpenApiSnapshotSha() {

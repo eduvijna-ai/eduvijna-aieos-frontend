@@ -14,6 +14,7 @@ import {
   tmpDir,
 } from "./paths.mjs";
 import { readSelectedShowcaseMode } from "../aieos360-cx01-i06-showcase-ai-mode/mode.mjs";
+import { clearRuntimeSurface } from "../aieos360-cx01-i06-showcase-ai-mode/runtime_surface.mjs";
 
 mkdirSync(tmpDir, { recursive: true });
 
@@ -65,6 +66,8 @@ runPython("shared_db_proof.py", {
   ...commonEnv,
   AIEOS360_CX01_I01_SHOWCASE_RUNTIME_DATABASE_URL: dbReport.runtime_database_url,
 });
+
+clearRuntimeSurface("reset_complete");
 
 const showcaseMode = readSelectedShowcaseMode();
 const status = {

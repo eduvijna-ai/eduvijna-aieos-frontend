@@ -17,6 +17,10 @@ import {
   resolveShowcaseModeForStart,
   validateRealAiOperatorConfig,
 } from "./mode.mjs";
+import {
+  buildTeacherProviderAggregatorRequestHeaders,
+  summarizeProviderTruth,
+} from "./provider_truth.mjs";
 
 function expectThrows(fn, pattern) {
   let thrown = null;
@@ -70,5 +74,18 @@ expectThrows(
 );
 
 assert.equal(readSelectedShowcaseMode({}), MODE_DETERMINISTIC);
+
+const compositionOnly = summarizeProviderTruth(MODE_REAL_AI, {
+  active_provider_id: "groq",
+  active_model_id: "openai/gpt-oss-120b",
+  mode: "REAL",
+});
+assert.equal(compositionOnly.real_provider_generation_verified, false);
+assert.equal(compositionOnly.real_provider_runtime_verified, true);
+
+assert.equal(
+  buildTeacherProviderAggregatorRequestHeaders()["X-AIEOS-Tenant-ID"],
+  "71b5fb49-2bdb-56c3-ab7c-3b33e92a89f0",
+);
 
 console.log(JSON.stringify({ selftest: "i06_mode", ok: true }));

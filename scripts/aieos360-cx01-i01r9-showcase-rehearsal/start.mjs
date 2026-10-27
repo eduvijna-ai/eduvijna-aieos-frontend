@@ -58,7 +58,10 @@ import {
   fetchTeacherProviderAggregator,
   summarizeProviderTruth,
 } from "../aieos360-cx01-i06-showcase-ai-mode/provider_truth.mjs";
-import { writeRuntimeSurface } from "../aieos360-cx01-i06-showcase-ai-mode/runtime_surface.mjs";
+import {
+  clearRuntimeSurface,
+  writeRuntimeSurface,
+} from "../aieos360-cx01-i06-showcase-ai-mode/runtime_surface.mjs";
 
 failClosedNonLinuxExit("showcase:aieos360:start");
 
@@ -313,8 +316,10 @@ try {
     active_provider_id: providerTruth.active_provider_id,
     active_model_id: providerTruth.active_model_id,
     verification_state: providerTruth.verification_state,
+    real_provider_runtime_verified: providerTruth.real_provider_runtime_verified,
     real_provider_generation_verified:
       providerTruth.real_provider_generation_verified,
+    live_generation_verification: providerTruth.live_generation_verification,
     seeded_worksheet_origin: "synthetic_prerequisite_fixture",
     operator_control: "env_before_start",
   });
@@ -349,6 +354,7 @@ try {
     ),
   );
 } catch (error) {
+  clearRuntimeSurface("managed_start_failed");
   const cleanup = await cleanupManagedStack({ removeOwnedLocalContainer: false });
   let portsReleased = false;
   let portReleaseError = null;

@@ -61,6 +61,7 @@ describe("AIEOS360-CX01-I01R9 showcase rehearsal pin and package consistency", (
     expect(start).not.toContain("SIGINT");
 
     const stop = read(`${SCRIPT_PKG}/stop.mjs`);
+    expect(stop).toContain("clearRuntimeSurface");
     expect(stop).toContain("cleanupManagedStack");
     expect(read(`${SCRIPT_PKG}/managed_cleanup.mjs`)).toContain(
       "removeOwnedContainer",

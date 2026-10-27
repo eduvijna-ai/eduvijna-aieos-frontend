@@ -11,6 +11,7 @@ import {
 } from "./managed_cleanup.mjs";
 import { removeOwnedContainer } from "./docker_ownership.mjs";
 import { readProcessRegistry, writeOperatorStatus } from "./process_group.mjs";
+import { clearRuntimeSurface } from "../aieos360-cx01-i06-showcase-ai-mode/runtime_surface.mjs";
 
 failClosedNonLinuxExit("showcase:aieos360:stop");
 runPinGuard();
@@ -156,6 +157,8 @@ if (portsToVerify.length > 0) {
     });
   }
 }
+
+clearRuntimeSurface("managed_stack_stopped");
 
 writeOperatorStatus({
   phase: "stopped",
