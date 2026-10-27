@@ -3,6 +3,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import {
+  assertChildEnvHasNoProviderSecrets,
+  buildI07PythonBootstrapEnv,
+} from "../scripts/aieos360-cx01-i07-e2e/child_env.mjs";
 import { SHOWCASE_LAUNCHER_PATH } from "./features/aieos360-showcase/showcaseContext";
 
 const repoRoot = path.resolve(
@@ -63,7 +67,7 @@ describe("AIEOS360-CX01-I07 integrated rehearsal package", () => {
     expect(i07Job).toContain("CX01-I07 fake gateway PreparationKit contract (mandatory)");
   });
 
-  it("rehearse runner stops managed stack only after owned start", () => {
+  it("rehearse runner always emits final report and scopes cleanup to owned start", () => {
     const rehearse = readFileSync(
       path.join(
         repoRoot,
@@ -71,12 +75,31 @@ describe("AIEOS360-CX01-I07 integrated rehearsal package", () => {
       ),
       "utf8",
     );
-    expect(rehearse).toContain("let ownedLifecycle = false");
-    expect(rehearse).toContain("ownedLifecycle = true");
-    expect(rehearse).toContain("if (ownedLifecycle)");
-    expect(rehearse).toContain("assertManagedStackReady");
+    expect(rehearse).toContain("buildRehearsalReport");
+    expect(rehearse).toContain("resolveCleanupPlan");
     expect(rehearse).toContain("ownedStartAttempted");
+    expect(rehearse).toContain("assertManagedStackReady");
     expect(rehearse).not.toContain("STATUS_SKIP_LIVE");
+    const catchBlock = rehearse.slice(
+      rehearse.indexOf("} catch"),
+      rehearse.indexOf("} finally"),
+    );
+    expect(catchBlock).not.toContain("writeReport(");
+  });
+
+  it("optional local fake proof subprocess env scrubs provider secrets", () => {
+    const scrubbed = buildI07PythonBootstrapEnv(
+      {
+        ...process.env,
+        OPENAI_API_KEY: "synthetic-sentinel-must-not-leak",
+        AIEOS_GROQ_API_KEY: "synthetic-sentinel-must-not-leak",
+      },
+      { AIEOS_BACKEND_ROOT: "/tmp/nonexistent-backend-for-scrub-test" },
+    );
+    assertChildEnvHasNoProviderSecrets(
+      scrubbed,
+      "optional-local-fake-gateway-proof",
+    );
   });
 
   const backendRoot = path.join(repoRoot, "backend");
@@ -101,7 +124,9 @@ describe("AIEOS360-CX01-I07 integrated rehearsal package", () => {
         ],
         {
           cwd: backendRoot,
-          env: { ...process.env, AIEOS_BACKEND_ROOT: backendRoot },
+          env: buildI07PythonBootstrapEnv(process.env, {
+            AIEOS_BACKEND_ROOT: backendRoot,
+          }),
           encoding: "utf8",
         },
       );

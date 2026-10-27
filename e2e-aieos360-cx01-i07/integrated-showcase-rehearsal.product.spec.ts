@@ -185,9 +185,9 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
     await page.getByRole("link", { name: /Review Worksheet/i }).click();
     await expect(page).toHaveURL(/\/teacher-os\/review\//);
     await page.getByRole("button", { name: /^Approve$/i }).click();
-    await expect(
-      page.getByText(/Approved\. Returning to preparation/i),
-    ).toBeVisible();
+    await expect(page).toHaveURL(
+      new RegExp(`/teacher-os/work/${state.activeWorkId}(?:[?#]|$)`),
+    );
 
     const workId = state.activeWorkId!;
     const artifacts = await page.request.get(

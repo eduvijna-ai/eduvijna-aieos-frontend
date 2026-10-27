@@ -19,6 +19,11 @@ import {
   assertManagedStatusReport,
   parseStatusStdout,
 } from "./managed_status_gate.mjs";
+import {
+  buildRehearsalReport,
+  finalizeExitCode,
+  resolveCleanupPlan,
+} from "./rehearse_report.mjs";
 
 const statusScript = join(
   repoRoot,
@@ -82,6 +87,7 @@ if (ciOnly) {
 failClosedNonLinuxExit("showcase:aieos360:rehearse");
 
 let exitCode = 1;
+let failureReason = null;
 let ownedLifecycle = false;
 let ownedStartAttempted = false;
 
@@ -126,43 +132,46 @@ try {
     step: "integrated_e2e_guard_managed_stack",
     status: exitCode === 0 ? "pass" : "fail",
   });
+  if (exitCode !== 0) {
+    failureReason = "integrated_e2e_guard_managed_stack exited nonzero";
+  }
 } catch (error) {
-  writeReport({
-    package: "AIEOS360-CX01-I07",
-    outcome: "fail",
-    error: String(error),
-    duration_ms: Date.now() - started,
-    steps,
-    composition: "local_managed_i01r9_stack",
-  });
+  failureReason = failureReason ?? String(error);
   console.error(error);
   exitCode = 1;
 } finally {
-  if (ownedStartAttempted && !ownedLifecycle) {
-    cleanupOwnedStackAfterPartialStart();
+  const cleanupPlan = resolveCleanupPlan({
+    ownedLifecycle,
+    ownedStartAttempted,
+  });
+  if (cleanupPlan.runPartialCleanup) {
+    const partialStopCode = cleanupOwnedStackAfterPartialStart();
+    exitCode = finalizeExitCode(exitCode, partialStopCode);
+    if (partialStopCode !== 0) {
+      failureReason =
+        failureReason ?? "showcase_stop_after_partial_start failed";
+    }
   }
-  if (ownedLifecycle) {
+  if (cleanupPlan.runOwnedStop) {
     const stopCode = run("pnpm", ["showcase:aieos360:stop"]);
     steps.push({ step: "showcase_stop", status: stopCode === 0 ? "pass" : "fail" });
-    if (exitCode === 0 && stopCode !== 0) {
-      exitCode = stopCode;
+    exitCode = finalizeExitCode(exitCode, stopCode);
+    if (stopCode !== 0) {
+      failureReason = failureReason ?? "showcase_stop failed";
     }
   }
 }
 
-if (exitCode === 0) {
-  writeReport({
-    package: "AIEOS360-CX01-I07",
-    scenario_id: "AIEOS360-CX-SCENARIO-01",
-    substrate: "aieos360-cx01-i01-showcase-rehearsal",
-    outcome: "pass",
-    duration_ms: Date.now() - started,
+const outcome = exitCode === 0 ? "pass" : "fail";
+writeReport(
+  buildRehearsalReport({
+    outcome,
     steps,
-    composition: "local_managed_i01r9_stack",
-    classification: "NON_PRODUCTION",
-    real_ai_live_generation: "PENDING",
-  });
-  console.log(`CX01-I07 rehearsal report: ${reportPath}`);
-}
+    startedAt: started,
+    failureReason,
+    exitCode,
+  }),
+);
+console.log(`CX01-I07 rehearsal report: ${reportPath} (${outcome})`);
 
 process.exit(exitCode);
