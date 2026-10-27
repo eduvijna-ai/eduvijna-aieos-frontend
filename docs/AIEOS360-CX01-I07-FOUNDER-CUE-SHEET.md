@@ -6,7 +6,7 @@
 
 1. Operator runs local preflight (`docs/AIEOS360-CX01-I07-PRESENTER-PREFLIGHT.md`) — **not** during the client story.
 2. `pnpm showcase:aieos360:reset` → `pnpm showcase:aieos360:start` → confirm `pnpm showcase:aieos360:status` is `running`.
-3. Open launcher: `http://127.0.0.1:5291/aieos360/showcase?showcase=1` (Teacher port; adjust if overridden).
+3. Open launcher: `http://127.0.0.1:5291/showcase/aieos360?showcase=1` (Teacher port; adjust if overridden). Use pre-connected role tabs from preflight.
 4. Default mode **DETERMINISTIC**. **REAL_AI live generation remains PENDING** — do not imply live provider output.
 
 ## Story beats (in order)

@@ -25,7 +25,7 @@ Substrate: reuses **I01R9** managed lifecycle (`docs/AIEOS360-CX01-I01R9-SHOWCAS
 
 ### Story flow (`AIEOS360-CX-SCENARIO-01`)
 
-1. **Launcher** — `/aieos360/showcase?showcase=1` on Teacher frontend (default port 5291).
+1. **Launcher** — `/showcase/aieos360?showcase=1` on Teacher frontend (default port 5291).
 2. **Teacher Prepare (truth)** — Open seeded worksheet artifact. Explain synthetic **approved-but-unpublished** prerequisite (I01R9 seed). Distinguish from fresh AI prepare-kit demos (product E2E).
 3. **Publish + Assign** — Publish version → assign to **Grade 5A** (`class-5a`).
 4. **Student A** — Home → assignment → Start → Save → Submit.
@@ -40,12 +40,13 @@ Substrate: reuses **I01R9** managed lifecycle (`docs/AIEOS360-CX01-I01R9-SHOWCAS
 
 ```bash
 export AIEOS_BACKEND_ROOT=/path/to/eduvijna-aieos-backend
-pnpm showcase:aieos360:rehearse
-# or directly:
+pnpm showcase:aieos360:rehearse   # local Linux: I01R9 reset/start → guard → stop
+# CI isolated composition (external PostgreSQL, ports 5295–5298 / 8024–8027):
 pnpm test:e2e:aieos360-cx01-i07
 ```
 
-- Uses I01R9 `bootstrap_database.py` + `seed_precondition.py` and I01R9 serve apps.
+- Local `rehearse` reuses the **managed I01R9 stack** (5291–5294 / 8020–8023) without reseeding.
+- CI job uses a **separate composition** (same I01R9 seed/serve code, isolated ports/DB).
 - **Zero** Playwright `/api` mocks.
 - Sanitized report: `tmp/aieos360-cx01-i07-rehearsal-report.json` (no bearer tokens).
 

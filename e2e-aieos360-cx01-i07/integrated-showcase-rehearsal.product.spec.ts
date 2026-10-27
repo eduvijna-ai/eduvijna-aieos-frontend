@@ -10,6 +10,7 @@ import {
   STUDENT_FRONTEND_URL,
   TEACHER_FRONTEND_URL,
   artifactPath,
+  artifactPathForIds,
   assertNoApiMocksInstalled,
   assertParentTransportOnly,
   assertPrincipalTransportOnly,
@@ -64,6 +65,10 @@ const state: {
   assessmentRevision: number | null;
   remediationWorkId: string | null;
   preReadSnapshot: PersistenceSnapshot | null;
+  activeWorkId: string | null;
+  activeContentId: string | null;
+  activeVersionId: string | null;
+  activeWorksheetTitle: string | null;
 } = {
   assignmentId: null,
   attemptId: null,
@@ -72,6 +77,10 @@ const state: {
   assessmentRevision: null,
   remediationWorkId: null,
   preReadSnapshot: null,
+  activeWorkId: null,
+  activeContentId: null,
+  activeVersionId: null,
+  activeWorksheetTitle: null,
 };
 
 let fixture: ReturnType<typeof loadAieos360Cx01I07Fixture>;
@@ -111,8 +120,12 @@ function assertParentPrivacy(haystack: string) {
   expect(haystack).not.toContain(OPEN_RESPONSE_TEXT);
   expect(haystack).not.toContain(fixture.teacher_principal_id);
   expect(haystack).not.toContain(fixture.parent_principal_id);
-  expect(haystack).not.toContain(fixture.content_id);
-  expect(haystack).not.toContain(fixture.version_id);
+  if (state.activeContentId) {
+    expect(haystack).not.toContain(state.activeContentId);
+  }
+  if (state.activeVersionId) {
+    expect(haystack).not.toContain(state.activeVersionId);
+  }
   if (state.attemptId) expect(haystack).not.toContain(state.attemptId);
   if (state.submissionId) expect(haystack).not.toContain(state.submissionId);
 }
@@ -136,30 +149,73 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
     });
   });
 
-  test("Phase A — synthetic approved-but-unpublished worksheet prerequisite", async ({
+  test("Phase A — Teacher Prepare → kit → Review → Approve (deterministic, same run)", async ({
     browser,
   }) => {
+    test.setTimeout(180_000);
     const page = await openTeacherPage(browser);
     assertNoApiMocksInstalled(page);
-    const f = fixture;
 
-    await page.goto(`${TEACHER_FRONTEND_URL}${artifactPath(f)}`);
+    await page.goto(`${TEACHER_FRONTEND_URL}/teacher-os/prepare?showcase=1`);
     await connectTeacherDevSession(page);
 
+    await page
+      .getByLabel(/Outcome for this lesson/i)
+      .fill("Compare unit fractions using the same whole.");
+    await page.getByRole("button", { name: /Continue to context/i }).click();
+    await page.getByLabel(/^Class \(optional\)/i).fill("Grade 5A");
+    await page.getByLabel(/^Subject \(optional\)/i).fill("Mathematics");
+    await page.getByLabel(/^Topic \(optional\)/i).fill("Fraction comparison");
+    await page.getByLabel(/^Target date/i).fill(calendarDateOnlyLocal(2));
+    await page.getByRole("button", { name: /Review and confirm/i }).click();
+    await page.getByRole("button", { name: /Create preparation/i }).click();
+    await expect(page).toHaveURL(/\/teacher-os\/work\//);
+    state.activeWorkId = page.url().split("/work/")[1]?.split(/[?#]/)[0] ?? null;
+    expect(state.activeWorkId).toBeTruthy();
+
+    await page.getByRole("button", { name: /Create preparation kit/i }).click();
+    await expect(
+      page.getByText(/Preparation kit created|already exists for this lesson/i),
+    ).toBeVisible({ timeout: 120_000 });
+    await page.getByRole("link", { name: /Review Worksheet/i }).click();
+    await expect(page).toHaveURL(/\/teacher-os\/review\//);
+    await page.getByRole("button", { name: /^Approve$/i }).click();
+    await expect(
+      page.getByText(/Approved\. Returning to preparation/i),
+    ).toBeVisible();
+
+    const workId = state.activeWorkId!;
+    const artifacts = await page.request.get(
+      `/api/v1/teaching/works/${workId}/artifacts`,
+      { headers: teacherApiHeaders() },
+    );
+    expect(artifacts.ok()).toBeTruthy();
+    const items = (await artifacts.json()) as {
+      items: Array<{
+        content_id: string;
+        version_id: string;
+        kind: string;
+        title: string;
+      }>;
+    };
+    const worksheet = items.items.find((item) => item.kind === "worksheet");
+    expect(worksheet).toBeTruthy();
+    state.activeContentId = worksheet!.content_id;
+    state.activeVersionId = worksheet!.version_id;
+    state.activeWorksheetTitle = worksheet!.title;
+
     const contentResponse = await page.request.get(
-      `/api/v1/contents/${f.content_id}`,
+      `/api/v1/contents/${state.activeContentId}`,
       { headers: teacherApiHeaders() },
     );
     expect(contentResponse.ok()).toBeTruthy();
     const contentBody = (await contentResponse.json()) as {
       published_version_id: string | null;
-      latest_version_id: string;
       stewardship_state: string;
     };
-    expect(contentBody.latest_version_id).toBe(f.version_id);
-    expect(contentBody.published_version_id).not.toBe(f.version_id);
     expect(contentBody.stewardship_state).toBe("APPROVED");
-    await expect(page.getByRole("button", { name: "Publish" })).toBeVisible();
+    expect(contentBody.published_version_id).not.toBe(state.activeVersionId);
+    expect(state.activeContentId).not.toBe(fixture.content_id);
     await page.context().close();
   });
 
@@ -168,20 +224,27 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
   }) => {
     const page = await openTeacherPage(browser);
     assertNoApiMocksInstalled(page);
-    const f = fixture;
+    expect(state.activeWorkId).toBeTruthy();
+    expect(state.activeContentId).toBeTruthy();
+    expect(state.activeVersionId).toBeTruthy();
 
-    await page.goto(`${TEACHER_FRONTEND_URL}${artifactPath(f)}`);
+    const artifact = artifactPathForIds({
+      work_id: state.activeWorkId!,
+      content_id: state.activeContentId!,
+      version_id: state.activeVersionId!,
+    });
+    await page.goto(`${TEACHER_FRONTEND_URL}${artifact}`);
     await connectTeacherDevSession(page);
 
     const contentBefore = await page.request.get(
-      `/api/v1/contents/${f.content_id}`,
+      `/api/v1/contents/${state.activeContentId}`,
       { headers: teacherApiHeaders() },
     );
     expect(contentBefore.ok()).toBeTruthy();
     const contentBody = (await contentBefore.json()) as {
       published_version_id: string | null;
     };
-    if (contentBody.published_version_id !== f.version_id) {
+    if (contentBody.published_version_id !== state.activeVersionId) {
       await page.getByRole("button", { name: "Publish" }).click();
       await expect(
         page.getByText(/Published\. This version is now the published pointer/i),
@@ -229,11 +292,11 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
     expect(durable.assignment_id).toBe(state.assignmentId);
     expect(durable.audience_type).toBe("class");
     expect(durable.class_ref).toBe("class-5a");
-    expect(durable.content_id).toBe(f.content_id);
-    expect(durable.content_version_id).toBe(f.version_id);
+    expect(durable.content_id).toBe(state.activeContentId);
+    expect(durable.content_version_id).toBe(state.activeVersionId);
     expect(durable.lifecycle_state).toBe("ACTIVE");
     expect(durable.teacher_principal_id).toBe(DEV_TEACHER_PRINCIPAL_ID);
-    expect(durable.source_work_id).toBe(f.work_id);
+    expect(durable.source_work_id).toBe(state.activeWorkId);
 
     await page.context().close();
   });
@@ -255,7 +318,10 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
     await expect(assignmentLink).toBeVisible();
     await assignmentLink.click();
     await expect(
-      page.getByRole("heading", { level: 1, name: f.worksheet_title }),
+      page.getByRole("heading", {
+        level: 1,
+        name: state.activeWorksheetTitle!,
+      }),
     ).toBeVisible();
     await expect(page.getByText(/copy your teacher assigned/i)).toBeVisible();
 
@@ -268,8 +334,8 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
       content_version_id: string;
       resource: { title: string };
     };
-    expect(detail.content_version_id).toBe(f.version_id);
-    expect(detail.resource.title).toBe(f.worksheet_title);
+    expect(detail.content_version_id).toBe(state.activeVersionId);
+    expect(detail.resource.title).toBe(state.activeWorksheetTitle);
 
     await page.getByRole("button", { name: /^Start$/i }).click();
     await expect(page).toHaveURL(/\/student-os\/attempts\//);
@@ -446,8 +512,8 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
       "submission-id": state.submissionId!,
       "attempt-id": state.attemptId!,
       "learner-principal-id": f.student_principal_id,
-      "content-id": f.content_id,
-      "content-version-id": f.version_id,
+      "content-id": state.activeContentId!,
+      "content-version-id": state.activeVersionId!,
     });
     expect(evaluation.evaluation_policy_id).toBe(f.evaluation_policy_id);
     expect(evaluation.evaluation_policy_version).toBe(
@@ -573,8 +639,8 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
       "aggregate-revision": state.assessmentRevision!,
       "class-result-level": "MIXED",
       "class-ref": "class-5a",
-      "content-id": f.content_id,
-      "content-version-id": f.version_id,
+      "content-id": state.activeContentId!,
+      "content-version-id": state.activeVersionId!,
       "assignment-id": state.assignmentId!,
       "teacher-principal-id": f.teacher_principal_id,
     });
@@ -726,7 +792,7 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
     const assignment = asRecord(assignments[0]);
     expect(assignment.assignment_id).toBe(state.assignmentId);
     expect(assignment.attempt_status).toBe("SUBMITTED");
-    expect(assignment.title).toBe(fixture.worksheet_title);
+    expect(assignment.title).toBe(state.activeWorksheetTitle);
     assertParentPrivacy(JSON.stringify(homeBody));
     expect(JSON.stringify(homeBody)).not.toContain(
       fixture.student_b_principal_id,
@@ -736,7 +802,7 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
       page.getByRole("heading", { name: "Family home" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: fixture.worksheet_title }),
+      page.getByRole("heading", { name: state.activeWorksheetTitle! }),
     ).toBeVisible();
     await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
     const homeVisible = await page.locator("body").innerText();

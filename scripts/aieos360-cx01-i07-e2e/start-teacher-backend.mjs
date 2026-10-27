@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import {
   dbReportPath,
   fixturePath,
+  isManagedStackRehearse,
   resolveRuntimeDatabaseUrl,
   runI01Python,
   spawnServeApp,
@@ -10,7 +11,11 @@ import {
 
 verifyBackendPin();
 
-if (process.env.AIEOS360_CX01_I07_E2E_SKIP_BOOTSTRAP !== "1") {
+const skipBootstrap =
+  process.env.AIEOS360_CX01_I07_E2E_SKIP_BOOTSTRAP === "1" ||
+  isManagedStackRehearse();
+
+if (!skipBootstrap) {
   runI01Python("bootstrap_database.py");
   const dbReport = JSON.parse(readFileSync(dbReportPath, "utf8"));
   runI01Python("seed_precondition.py", {

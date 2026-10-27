@@ -4,7 +4,7 @@
 
 | Step | Screen / path | Backend operation (frozen) | I07 integrated guard | Historical separate proof |
 |---|---|---|---|---|
-| 1 Prepare → Review → Approve → Publish | Teacher artifact review | Content stewardship / publish | **PARTIAL** — Phase A proves synthetic APPROVED-unpublished seed; publish in same run (Phase B). Fresh multi-artifact AI generation **not** claimed. | TOS / Teacher product E2E |
+| 1 Prepare → Review → Approve → Publish | `/teacher-os/prepare` → work kit → review → publish | Generate / approve / publish | **PROVEN LIVE ON SAME I07 SUBSTRATE** — Phase A in-run deterministic prepare kit + approve; Phase B publish (Fake gateway, not paid provider). | TOS / Teacher product E2E (historical separate) |
 | 2 Assign class-5a | Teacher assign UI | `POST /teaching/assignments` | **PROVEN LIVE ON SAME I07 SUBSTRATE** | S04-I03 (separate seed) |
 | 3 Teach / class assess (optional) | — | — | **DEFERRED** (optional beat) | — |
 | 4 Student Start/Save/Submit | Student OS assignment | Learning attempts / submissions | **PROVEN LIVE ON SAME I07 SUBSTRATE** | S04-I03 |

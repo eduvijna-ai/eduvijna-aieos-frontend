@@ -871,18 +871,18 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: CX01-I07 integrated showcase rehearsal guard
+      - name: CX01-I07 integrated showcase rehearsal guard (isolated CI composition)
         run: pnpm test:e2e:aieos360-cx01-i07
 
-      - name: Upload CX01-I07 Playwright report
+      - name: Sanitize CX01-I07 failure evidence
+        if: failure()
+        run: node scripts/aieos360-cx01-i07-e2e/export_sanitized_ci_evidence.mjs
+
+      - name: Upload CX01-I07 sanitized evidence
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-aieos360-cx01-i07-report
+          name: aieos360-cx01-i07-sanitized-evidence
           path: |
-            playwright-aieos360-cx01-i07-report/
-            test-results/
-            tmp/aieos360-cx01-i01-showcase-fixture.json
-            tmp/aieos360-cx01-i07-e2e-persistence.json
-            tmp/aieos360-cx01-i07-rehearsal-report.json
+            tmp/cx01-i07-proof-exports/
           retention-days: 7

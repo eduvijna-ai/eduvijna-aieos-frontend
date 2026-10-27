@@ -165,7 +165,19 @@ export function loadAieos360Cx01I07Fixture(): Aieos360Cx01I07Fixture {
 }
 
 export function artifactPath(fixture: Aieos360Cx01I07Fixture): string {
-  return `/teacher-os/work/${fixture.work_id}/artifacts/${fixture.content_id}/versions/${fixture.version_id}`;
+  return artifactPathForIds({
+    work_id: fixture.work_id,
+    content_id: fixture.content_id,
+    version_id: fixture.version_id,
+  });
+}
+
+export function artifactPathForIds(parts: {
+  work_id: string;
+  content_id: string;
+  version_id: string;
+}): string {
+  return `/teacher-os/work/${parts.work_id}/artifacts/${parts.content_id}/versions/${parts.version_id}`;
 }
 
 function apiHeaders(
