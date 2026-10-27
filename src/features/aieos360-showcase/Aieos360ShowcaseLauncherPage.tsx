@@ -74,6 +74,20 @@ export function Aieos360ShowcaseLauncherPage() {
 
         <section
           className="aieos360-showcase__section"
+          aria-labelledby="aieos360-presenter-preflight-heading"
+        >
+          <h2 id="aieos360-presenter-preflight-heading">Presenter preflight</h2>
+          <p>
+            Connect each role tab using the local DEV session connector{" "}
+            <strong>before</strong> the live story. Operator steps live in{" "}
+            <code>docs/AIEOS360-CX01-I07-PRESENTER-PREFLIGHT.md</code> (repo
+            only — not shown to clients). Never paste session credentials on
+            screen or into URLs.
+          </p>
+        </section>
+
+        <section
+          className="aieos360-showcase__section"
           aria-labelledby="aieos360-role-launch-heading"
         >
           <h2 id="aieos360-role-launch-heading">Role launch</h2>
