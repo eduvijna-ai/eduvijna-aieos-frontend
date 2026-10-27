@@ -15,6 +15,15 @@ import { runPinGuard } from "../aieos360-cx01-i01r9-showcase-rehearsal/pin_guard
 import { assertManagedStartRegistryGate } from "../aieos360-cx01-i01r9-showcase-rehearsal/process_group.mjs";
 import { repoRoot } from "../aieos360-cx01-i01r9-showcase-rehearsal/paths.mjs";
 import { buildI07PythonBootstrapEnv } from "../aieos360-cx01-i07-e2e/child_env.mjs";
+import {
+  assertManagedStatusReport,
+  parseStatusStdout,
+} from "./managed_status_gate.mjs";
+
+const statusScript = join(
+  repoRoot,
+  "scripts/aieos360-cx01-i01r9-showcase-rehearsal/status.mjs",
+);
 
 const tmpDir = join(repoRoot, "tmp");
 mkdirSync(tmpDir, { recursive: true });
@@ -35,14 +44,10 @@ function writeReport(payload) {
   writeFileSync(reportPath, JSON.stringify(payload, null, 2) + "\n", "utf8");
 }
 
-const EXPECTED_MANAGED_ROLE_COUNT = 8;
-
 function assertManagedStackReady() {
-  const result = spawnSync("pnpm", ["showcase:aieos360:status"], {
+  const result = spawnSync(process.execPath, [statusScript], {
     cwd: repoRoot,
-    env: buildI07PythonBootstrapEnv(process.env, {
-      AIEOS360_CX01_I01_SHOWCASE_STATUS_SKIP_LIVE: "1",
-    }),
+    env: buildI07PythonBootstrapEnv(process.env),
     encoding: "utf8",
   });
   if (result.status !== 0) {
@@ -50,22 +55,16 @@ function assertManagedStackReady() {
       `CX01-I07 rehearse: managed status failed after start: ${result.stderr || result.stdout}`,
     );
   }
-  const report = JSON.parse(result.stdout || "{}");
-  if (report.operator_status?.phase !== "running") {
-    throw new Error(
-      `CX01-I07 rehearse: expected operator phase running, got ${report.operator_status?.phase}`,
-    );
-  }
-  if (report.live_process_count !== EXPECTED_MANAGED_ROLE_COUNT) {
-    throw new Error(
-      `CX01-I07 rehearse: expected ${EXPECTED_MANAGED_ROLE_COUNT} live managed roles, got ${report.live_process_count}`,
-    );
-  }
-  if ((report.missing_live_roles ?? []).length > 0) {
-    throw new Error(
-      `CX01-I07 rehearse: missing live roles: ${report.missing_live_roles.join(", ")}`,
-    );
-  }
+  assertManagedStatusReport(parseStatusStdout(result.stdout));
+}
+
+function cleanupOwnedStackAfterPartialStart() {
+  const stopCode = run("pnpm", ["showcase:aieos360:stop"]);
+  steps.push({
+    step: "showcase_stop_after_partial_start",
+    status: stopCode === 0 ? "pass" : "fail",
+  });
+  return stopCode;
 }
 
 const started = Date.now();
@@ -84,6 +83,7 @@ failClosedNonLinuxExit("showcase:aieos360:rehearse");
 
 let exitCode = 1;
 let ownedLifecycle = false;
+let ownedStartAttempted = false;
 
 try {
   if (!process.env.AIEOS_BACKEND_ROOT) {
@@ -107,6 +107,7 @@ try {
     throw new Error("showcase reset failed");
   }
 
+  ownedStartAttempted = true;
   exitCode = run("pnpm", ["showcase:aieos360:start"]);
   steps.push({ step: "showcase_start", status: exitCode === 0 ? "pass" : "fail" });
   if (exitCode !== 0) {
@@ -137,6 +138,9 @@ try {
   console.error(error);
   exitCode = 1;
 } finally {
+  if (ownedStartAttempted && !ownedLifecycle) {
+    cleanupOwnedStackAfterPartialStart();
+  }
   if (ownedLifecycle) {
     const stopCode = run("pnpm", ["showcase:aieos360:stop"]);
     steps.push({ step: "showcase_stop", status: stopCode === 0 ? "pass" : "fail" });

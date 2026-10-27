@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -59,6 +59,8 @@ describe("AIEOS360-CX01-I07 integrated rehearsal package", () => {
     expect(ci).not.toContain("aieos360-cx01-i07-e2e-persistence.json");
     const i07Job = ci.slice(ci.indexOf("aieos360-cx01-i07-e2e:"));
     expect(i07Job).toContain('AIEOS360_CX01_I01_SHOWCASE_CI_EXTERNAL_PG: "1"');
+    expect(i07Job).toContain("fake_gateway_preparation_kit.proof.py");
+    expect(i07Job).toContain("CX01-I07 fake gateway PreparationKit contract (mandatory)");
   });
 
   it("rehearse runner stops managed stack only after owned start", () => {
@@ -73,29 +75,40 @@ describe("AIEOS360-CX01-I07 integrated rehearsal package", () => {
     expect(rehearse).toContain("ownedLifecycle = true");
     expect(rehearse).toContain("if (ownedLifecycle)");
     expect(rehearse).toContain("assertManagedStackReady");
+    expect(rehearse).toContain("ownedStartAttempted");
+    expect(rehearse).not.toContain("STATUS_SKIP_LIVE");
   });
 
-  it("showcase Teacher fake gateway supports PreparationKitV1 (proof)", () => {
-    const backendRoot = path.join(repoRoot, "backend");
-    const result = spawnSync(
-      "uv",
-      [
-        "run",
-        "python",
-        path.join(
-          repoRoot,
-          "scripts/aieos360-cx01-i01r9-showcase-rehearsal/fake_gateway_preparation_kit.proof.py",
-        ),
-      ],
-      {
-        cwd: backendRoot,
-        env: { ...process.env, AIEOS_BACKEND_ROOT: backendRoot },
-        encoding: "utf8",
-      },
-    );
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("pass");
-  });
+  const backendRoot = path.join(repoRoot, "backend");
+  const backendReady =
+    existsSync(path.join(backendRoot, "src")) &&
+    existsSync(path.join(backendRoot, "pyproject.toml"));
+  const uvAvailable =
+    spawnSync("uv", ["--version"], { encoding: "utf8" }).status === 0;
+
+  it.runIf(backendReady && uvAvailable)(
+    "optional local fake gateway PreparationKit proof (developer)",
+    () => {
+      const result = spawnSync(
+        "uv",
+        [
+          "run",
+          "python",
+          path.join(
+            repoRoot,
+            "scripts/aieos360-cx01-i01r9-showcase-rehearsal/fake_gateway_preparation_kit.proof.py",
+          ),
+        ],
+        {
+          cwd: backendRoot,
+          env: { ...process.env, AIEOS_BACKEND_ROOT: backendRoot },
+          encoding: "utf8",
+        },
+      );
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("fake_gateway_preparation_kit.proof: pass");
+    },
+  );
 
   it("child env builders scrub provider secrets (selftest)", () => {
     const result = spawnSync(
@@ -104,6 +117,21 @@ describe("AIEOS360-CX01-I07 integrated rehearsal package", () => {
         path.join(
           repoRoot,
           "scripts/aieos360-cx01-i07-e2e/child_env.selftest.mjs",
+        ),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("pass");
+  });
+
+  it("rehearse lifecycle selftest (status gate + ownership)", () => {
+    const result = spawnSync(
+      "node",
+      [
+        path.join(
+          repoRoot,
+          "scripts/aieos360-cx01-i07-integrated-rehearsal/rehearse_lifecycle.selftest.mjs",
         ),
       ],
       { encoding: "utf8" },

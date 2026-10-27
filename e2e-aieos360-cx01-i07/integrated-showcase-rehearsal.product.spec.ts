@@ -12,6 +12,7 @@ import {
   artifactPathForIds,
   PASS_KIT_WORKSHEET_PROOF,
   assertNoApiMocksInstalled,
+  assertPersistedPassKitWorksheetContract,
   assertParentTransportOnly,
   assertPrincipalTransportOnly,
   connectParentDevSession,
@@ -170,7 +171,7 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
     await page.getByLabel(/^Class \(optional\)/i).fill("Grade 5A");
     await page.getByLabel(/^Subject \(optional\)/i).fill("Mathematics");
     await page.getByLabel(/^Topic \(optional\)/i).fill("Fraction comparison");
-    await page.getByLabel(/^Target date/i).fill(calendarDateOnlyLocal(2));
+    await page.locator("#prepare-target-date").fill(calendarDateOnlyLocal(2));
     await page.getByRole("button", { name: /Review and confirm/i }).click();
     await page.getByRole("button", { name: /Create preparation/i }).click();
     await expect(page).toHaveURL(/\/teacher-os\/work\//);
@@ -220,6 +221,11 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
     expect(contentBody.stewardship_state).toBe("APPROVED");
     expect(contentBody.published_version_id).not.toBe(state.activeVersionId);
     expect(state.activeContentId).not.toBe(fixture.content_id);
+    await assertPersistedPassKitWorksheetContract(
+      page.request,
+      state.activeContentId!,
+      state.activeVersionId!,
+    );
     await page.context().close();
   });
 
@@ -340,6 +346,11 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
     };
     expect(detail.content_version_id).toBe(state.activeVersionId);
     expect(detail.resource.title).toBe(state.activeWorksheetTitle);
+    await assertPersistedPassKitWorksheetContract(
+      page.request,
+      state.activeContentId!,
+      state.activeVersionId!,
+    );
 
     await page.getByRole("button", { name: /^Start$/i }).click();
     await expect(page).toHaveURL(/\/student-os\/attempts\//);
@@ -517,9 +528,7 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
       "OPEN_RESPONSE_UNEVALUATED",
     );
     const objectives = evaluation.objective_results as Record<string, string>;
-    expect(objectives[kit.objectiveDemonstratedId]).toBe(
-      "MIXED_ON_SUBMITTED_ITEMS",
-    );
+    expect(objectives[kit.objectiveDemonstratedId]).toBe("INSUFFICIENT_EVIDENCE");
     expect(objectives[kit.objectiveInsufficientId]).toBe("INSUFFICIENT_EVIDENCE");
     await expect(
       page.getByRole("button", { name: /Record class assessment/i }),

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { buildI07PythonBootstrapEnv } from "../../scripts/aieos360-cx01-i07-e2e/child_env.mjs";
 import { fileURLToPath } from "node:url";
-import type { Browser, Page, Request } from "@playwright/test";
+import type { APIRequestContext, Browser, Page, Request } from "@playwright/test";
 import { expect } from "@playwright/test";
 
 export const ARCHITECTURE_PIN_SHA =
@@ -313,6 +313,58 @@ export function openPrincipalPage(browser: Browser): Promise<Page> {
 
 export function openParentPage(browser: Browser): Promise<Page> {
   return openPage(browser, PARENT_FRONTEND_URL);
+}
+
+type WorksheetQuestionPayload = {
+  id: string;
+  question_type: string;
+  objective_ids?: string[];
+  options?: string[];
+};
+
+export async function assertPersistedPassKitWorksheetContract(
+  request: APIRequestContext,
+  contentId: string,
+  versionId: string,
+) {
+  const versionResponse = await request.get(
+    `/api/v1/contents/${contentId}/versions/${versionId}`,
+    { headers: teacherApiHeaders() },
+  );
+  expect(versionResponse.ok()).toBeTruthy();
+  const versionBody = (await versionResponse.json()) as {
+    version_id: string;
+    content_id: string;
+    payload: { questions?: WorksheetQuestionPayload[] };
+  };
+  expect(versionBody.content_id).toBe(contentId);
+  expect(versionBody.version_id).toBe(versionId);
+  const questions = versionBody.payload?.questions ?? [];
+  expect(questions.length).toBeGreaterThanOrEqual(6);
+  const byId = new Map(questions.map((q) => [q.id, q]));
+  const kit = PASS_KIT_WORKSHEET_PROOF;
+  const expectedIds = [
+    "ws-1",
+    "ws-2",
+    "ws-3",
+    "ws-4",
+    "ws-5",
+    "ws-6",
+  ] as const;
+  for (const id of expectedIds) {
+    expect(byId.has(id)).toBe(true);
+  }
+  expect(byId.get(kit.correctMcId)?.question_type).toBe("multiple_choice");
+  expect(byId.get(kit.correctMcId)?.options).toContain(kit.correctMcChoice);
+  expect(byId.get(kit.openShortAnswerId)?.question_type).toBe("short_answer");
+  expect(byId.get(kit.incorrectTrueFalseId)?.question_type).toBe("true_false");
+  expect(byId.get(kit.unansweredMcId)?.question_type).toBe("multiple_choice");
+  expect(byId.get(kit.correctMcId)?.objective_ids).toContain(
+    kit.objectiveDemonstratedId,
+  );
+  expect(byId.get(kit.openShortAnswerId)?.objective_ids).toContain(
+    kit.objectiveInsufficientId,
+  );
 }
 
 export function calendarDateOnlyLocal(offsetDays: number): string {

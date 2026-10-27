@@ -872,6 +872,15 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: CX01-I07 fake gateway PreparationKit contract (mandatory)
+        working-directory: backend
+        env:
+          AIEOS_BACKEND_ROOT: ${{ github.workspace }}/backend
+        run: |
+          set -euo pipefail
+          uv run python ../scripts/aieos360-cx01-i01r9-showcase-rehearsal/fake_gateway_preparation_kit.proof.py | tee /tmp/cx01-i07-fake-gateway-proof.log
+          grep -q 'fake_gateway_preparation_kit.proof: pass' /tmp/cx01-i07-fake-gateway-proof.log
+
       - name: CX01-I07 integrated showcase rehearsal guard (isolated CI composition)
         run: pnpm test:e2e:aieos360-cx01-i07
 
