@@ -67,7 +67,7 @@ describe("AIEOS360-CX01-I07 integrated rehearsal package", () => {
     expect(i07Job).toContain("CX01-I07 fake gateway PreparationKit contract (mandatory)");
   });
 
-  it("rehearse runner always emits final report and scopes cleanup to owned start", () => {
+  it("rehearse runner always emits final report via orchestration", () => {
     const rehearse = readFileSync(
       path.join(
         repoRoot,
@@ -76,15 +76,65 @@ describe("AIEOS360-CX01-I07 integrated rehearsal package", () => {
       "utf8",
     );
     expect(rehearse).toContain("buildRehearsalReport");
-    expect(rehearse).toContain("resolveCleanupPlan");
-    expect(rehearse).toContain("ownedStartAttempted");
+    expect(rehearse).toContain("runRehearsalOrchestration");
     expect(rehearse).toContain("assertManagedStackReady");
+    expect(rehearse).toContain("verifyOwnedRegistryClear");
     expect(rehearse).not.toContain("STATUS_SKIP_LIVE");
-    const catchBlock = rehearse.slice(
-      rehearse.indexOf("} catch"),
-      rehearse.indexOf("} finally"),
+    const orchestration = readFileSync(
+      path.join(
+        repoRoot,
+        "scripts/aieos360-cx01-i07-integrated-rehearsal/rehearse_orchestration.mjs",
+      ),
+      "utf8",
     );
-    expect(catchBlock).not.toContain("writeReport(");
+    expect(orchestration).toContain("resolveCleanupPlan");
+    expect(orchestration).toContain("ownedStartAttempted");
+    expect(orchestration).not.toMatch(/catch[\s\S]*writeReport\(/);
+  });
+
+  it("work artifacts contract uses artifact_kind DTO (selftest)", () => {
+    const result = spawnSync(
+      "node",
+      [
+        path.join(
+          repoRoot,
+          "scripts/aieos360-cx01-i07-integrated-rehearsal/work_artifacts_contract.selftest.mjs",
+        ),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("pass");
+  });
+
+  it("rehearse orchestration bounded scenarios (selftest)", () => {
+    const result = spawnSync(
+      "node",
+      [
+        path.join(
+          repoRoot,
+          "scripts/aieos360-cx01-i07-integrated-rehearsal/rehearse_orchestration.selftest.mjs",
+        ),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("pass");
+  });
+
+  it("rehearsal report sanitizer strips credential markers (selftest)", () => {
+    const result = spawnSync(
+      "node",
+      [
+        path.join(
+          repoRoot,
+          "scripts/aieos360-cx01-i07-integrated-rehearsal/rehearse_report_sanitize.selftest.mjs",
+        ),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("pass");
   });
 
   it("optional local fake proof subprocess env scrubs provider secrets", () => {

@@ -2,15 +2,16 @@
  * Parse and validate I01R9 managed showcase status JSON (live health required).
  */
 import { EXPECTED_MANAGED_PROCESS_COUNT } from "./rehearse_report.mjs";
-
-export const CANONICAL_HTTP_ROLES = [
-  "teacher",
-  "student",
-  "principal",
-  "parent",
-];
+import {
+  CANONICAL_HTTP_ROLES,
+  EXPECTED_MANAGED_PROCESS_ROLES,
+  portFromHttpUrl,
+  REGISTRY_ROLE_TO_HTTP_ROLE,
+} from "./managed_registry_roles.mjs";
 
 const EXPECTED_HTTP_HEALTH_CHECKS = CANONICAL_HTTP_ROLES.length * 2;
+
+export { CANONICAL_HTTP_ROLES };
 
 export function parseStatusStdout(stdout) {
   const text = String(stdout || "").trim();
@@ -54,6 +55,42 @@ function assertCanonicalHealthChecks(checks) {
   }
 }
 
+function assertLiveProcessesAndPorts(report) {
+  const roleUrls = report.operator_status?.role_urls;
+  if (!roleUrls) {
+    throw new Error("CX01-I07 status: operator_status.role_urls missing");
+  }
+  const processes = report.live_processes ?? [];
+  if (processes.length !== EXPECTED_MANAGED_PROCESS_COUNT) {
+    throw new Error(
+      `CX01-I07 status: expected ${EXPECTED_MANAGED_PROCESS_COUNT} live_processes entries, got ${processes.length}`,
+    );
+  }
+  const byRegistryRole = new Map(processes.map((entry) => [entry.role, entry]));
+  for (const registryRole of EXPECTED_MANAGED_PROCESS_ROLES) {
+    const entry = byRegistryRole.get(registryRole);
+    if (!entry) {
+      throw new Error(`CX01-I07 status: missing live process ${registryRole}`);
+    }
+    if (!entry.pid || Number(entry.pid) <= 0) {
+      throw new Error(`CX01-I07 status: invalid pid for ${registryRole}`);
+    }
+    const httpRole = REGISTRY_ROLE_TO_HTTP_ROLE[registryRole];
+    const urls = roleUrls[httpRole];
+    if (!urls) {
+      throw new Error(`CX01-I07 status: missing role_urls for ${httpRole}`);
+    }
+    const expectedPort = registryRole.endsWith("_frontend")
+      ? portFromHttpUrl(urls.frontend)
+      : portFromHttpUrl(urls.backend);
+    if (Number(entry.port) !== expectedPort) {
+      throw new Error(
+        `CX01-I07 status: port mismatch for ${registryRole} (expected ${expectedPort}, got ${entry.port})`,
+      );
+    }
+  }
+}
+
 export function assertManagedStatusReport(report) {
   if (report.operator_status?.phase !== "running") {
     throw new Error(
@@ -79,5 +116,6 @@ export function assertManagedStatusReport(report) {
     throw new Error("CX01-I07 status: readiness_ok is not true");
   }
   assertCanonicalHealthChecks(report.health_checks ?? []);
+  assertLiveProcessesAndPorts(report);
   return report;
 }

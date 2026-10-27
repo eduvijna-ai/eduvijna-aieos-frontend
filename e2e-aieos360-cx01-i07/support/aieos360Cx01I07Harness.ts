@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { buildI07PythonBootstrapEnv } from "../../scripts/aieos360-cx01-i07-e2e/child_env.mjs";
+import { assertFreshPreparationKitArtifacts } from "../../scripts/aieos360-cx01-i07-integrated-rehearsal/work_artifacts_contract.mjs";
+import type { TeachingWorkArtifactsResponse } from "../../src/services/api/generated/teachingTypes";
 import { fileURLToPath } from "node:url";
 import type { APIRequestContext, Browser, Page, Request } from "@playwright/test";
 import { expect } from "@playwright/test";
@@ -321,6 +323,17 @@ type WorksheetQuestionPayload = {
   objective_ids?: string[];
   options?: string[];
 };
+
+export function resolveFreshPreparationKitWorksheet(
+  payload: TeachingWorkArtifactsResponse,
+  workId: string,
+  excludeContentId: string,
+) {
+  return assertFreshPreparationKitArtifacts(payload, {
+    workId,
+    excludeContentId,
+  });
+}
 
 export async function assertPersistedPassKitWorksheetContract(
   request: APIRequestContext,

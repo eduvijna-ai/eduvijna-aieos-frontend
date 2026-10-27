@@ -13,6 +13,7 @@ import {
   PASS_KIT_WORKSHEET_PROOF,
   assertNoApiMocksInstalled,
   assertPersistedPassKitWorksheetContract,
+  resolveFreshPreparationKitWorksheet,
   assertParentTransportOnly,
   assertPrincipalTransportOnly,
   connectParentDevSession,
@@ -195,15 +196,12 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
       { headers: teacherApiHeaders() },
     );
     expect(artifacts.ok()).toBeTruthy();
-    const items = (await artifacts.json()) as {
-      items: Array<{
-        content_id: string;
-        version_id: string;
-        kind: string;
-        title: string;
-      }>;
-    };
-    const worksheet = items.items.find((item) => item.kind === "worksheet");
+    const items = await artifacts.json();
+    const worksheet = resolveFreshPreparationKitWorksheet(
+      items,
+      workId,
+      fixture.content_id,
+    );
     expect(worksheet).toBeTruthy();
     state.activeContentId = worksheet!.content_id;
     state.activeVersionId = worksheet!.version_id;
