@@ -7,6 +7,11 @@ import {
   statusPath,
 } from "./paths.mjs";
 import { runPinGuard } from "./pin_guard.mjs";
+import { readSelectedShowcaseMode } from "../aieos360-cx01-i06-showcase-ai-mode/mode.mjs";
+import {
+  fetchTeacherProviderAggregator,
+  summarizeProviderTruth,
+} from "../aieos360-cx01-i06-showcase-ai-mode/provider_truth.mjs";
 import {
   readProcessRegistry,
   verifyRegistryEntry,
@@ -26,17 +31,24 @@ const EXPECTED_MANAGED_ROLES = [
 
 runPinGuard();
 
+const operatorStatus = existsSync(statusPath)
+  ? JSON.parse(readFileSync(statusPath, "utf8"))
+  : null;
+const selectedMode =
+  operatorStatus?.showcase_mode ?? readSelectedShowcaseMode();
+
 const report = {
   classification: "NON_PRODUCTION",
-  deterministic_mode: true,
+  showcase_mode: selectedMode,
+  deterministic_mode: selectedMode === "DETERMINISTIC",
   manifest_path: manifestPath,
   fixture_path: fixturePath,
   db_report_path: dbReportPath,
   status_path: statusPath,
 };
 
-if (existsSync(statusPath)) {
-  report.operator_status = JSON.parse(readFileSync(statusPath, "utf8"));
+if (operatorStatus) {
+  report.operator_status = operatorStatus;
 }
 if (existsSync(manifestPath)) {
   report.manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -111,6 +123,25 @@ if (operatorPhase === "running") {
     }
     report.health_checks = checks;
     report.readiness_ok = true;
+
+    if (!skipLive && roleUrls?.teacher?.backend) {
+      try {
+        const aggregator = await fetchTeacherProviderAggregator(
+          roleUrls.teacher.backend,
+          healthTimeoutMs,
+        );
+        report.showcase_mode_truth = summarizeProviderTruth(
+          selectedMode,
+          aggregator,
+        );
+      } catch (error) {
+        report.showcase_mode_truth = {
+          selected_mode: selectedMode,
+          verification_state: "provider_aggregator_unavailable",
+          error: String(error),
+        };
+      }
+    }
   }
 }
 

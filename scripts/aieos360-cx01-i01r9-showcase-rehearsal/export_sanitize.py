@@ -27,6 +27,12 @@ SENSITIVE_KEYS = frozenset(
         "principal_bearer_token",
         "parent_bearer_token",
         "password",
+        "aieos_groq_api_key",
+        "aieos_openai_api_key",
+        "openai_api_key",
+        "groq_api_key",
+        "azure_openai_api_key",
+        "anthropic_api_key",
     }
 )
 

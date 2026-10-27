@@ -11,9 +11,11 @@ import {
 } from "./managed_cleanup.mjs";
 import { removeOwnedContainer } from "./docker_ownership.mjs";
 import { readProcessRegistry, writeOperatorStatus } from "./process_group.mjs";
+import { clearRuntimeSurface } from "../aieos360-cx01-i06-showcase-ai-mode/runtime_surface.mjs";
 
 failClosedNonLinuxExit("showcase:aieos360:stop");
 runPinGuard();
+clearRuntimeSurface("managed_stop_preflight");
 
 function safeTcpPorts(values) {
   const ports = [];
@@ -30,6 +32,7 @@ function portsFromRegistryChildren(children) {
 }
 
 function writeStopFailed(payload) {
+  clearRuntimeSurface("managed_stop_failed");
   writeOperatorStatus({
     classification: "NON_PRODUCTION",
     stopped_at: new Date().toISOString(),
@@ -156,6 +159,8 @@ if (portsToVerify.length > 0) {
     });
   }
 }
+
+clearRuntimeSurface("managed_stack_stopped");
 
 writeOperatorStatus({
   phase: "stopped",

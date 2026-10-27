@@ -44,6 +44,24 @@ import {
   writeOperatorStatus,
   writeProcessRegistry,
 } from "./process_group.mjs";
+import { MODE_DETERMINISTIC } from "../aieos360-cx01-i06-showcase-ai-mode/constants.mjs";
+import {
+  buildTeacherBackendEnv,
+  scrubAllProviderSurface,
+} from "../aieos360-cx01-i06-showcase-ai-mode/env_scrub.mjs";
+import {
+  buildModeConfigRecord,
+  persistModeConfig,
+  resolveShowcaseModeForStart,
+} from "../aieos360-cx01-i06-showcase-ai-mode/mode.mjs";
+import {
+  fetchTeacherProviderAggregator,
+  summarizeProviderTruth,
+} from "../aieos360-cx01-i06-showcase-ai-mode/provider_truth.mjs";
+import {
+  clearRuntimeSurface,
+  writeRuntimeSurface,
+} from "../aieos360-cx01-i06-showcase-ai-mode/runtime_surface.mjs";
 
 failClosedNonLinuxExit("showcase:aieos360:start");
 
@@ -137,12 +155,18 @@ const governedConfiguredPorts = [
 
 assertNotAlreadyRunning();
 
+clearRuntimeSurface("managed_start_preflight");
+
+const showcaseModeResolution = resolveShowcaseModeForStart();
+const showcaseMode = showcaseModeResolution.mode;
+persistModeConfig(buildModeConfigRecord(showcaseModeResolution));
+
 await assertPortsAvailable(governedConfiguredPorts);
 
 if (!skipReset) {
   const result = spawnSync("node", [join(scriptDir, "reset.mjs")], {
     stdio: "inherit",
-    env: process.env,
+    env: scrubAllProviderSurface(process.env),
   });
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
@@ -156,7 +180,7 @@ const backendRoot = resolveBackendRoot();
 const uv = process.env.AIEOS360_CX01_I01_SHOWCASE_UV || "uv";
 const pythonPath = [join(backendRoot, "src"), backendRoot, scriptDir].join(":");
 
-const commonBackendEnv = {
+const commonBackendEnv = scrubAllProviderSurface({
   ...process.env,
   AIEOS_BACKEND_ROOT: backendRoot,
   AIEOS360_CX01_I01_SHOWCASE_SKIP_BOOTSTRAP: "1",
@@ -165,7 +189,7 @@ const commonBackendEnv = {
   AIEOS360_CX01_I01_SHOWCASE_DB_REPORT: dbReportPath,
   AIEOS360_CX01_I01_SHOWCASE_FIXTURE_PATH: fixturePath,
   PYTHONPATH: pythonPath,
-};
+});
 
 function spawnBackend(role, serveScript, portEnvKey, port) {
   return spawnDetachedProcessGroup({
@@ -192,10 +216,11 @@ function spawnVite(role, port, backendPort) {
       "--strictPort",
     ],
     cwd: repoRoot,
-    env: {
+    env: scrubAllProviderSurface({
       ...process.env,
       VITE_DEV_API_PROXY_TARGET: `http://127.0.0.1:${backendPort}`,
-    },
+      AIEOS360_CX01_I06_SHOWCASE_MODE: showcaseMode,
+    }),
     role: `${role}_frontend`,
     script: `vite:${port}`,
     port,
@@ -203,12 +228,23 @@ function spawnVite(role, port, backendPort) {
 }
 
 try {
-  spawnBackend(
-    "teacher",
-    "serve_teacher_app.py",
-    "AIEOS360_CX01_I01_SHOWCASE_TEACHER_BACKEND_PORT",
-    teacherBe,
+  const teacherBackendEnv = buildTeacherBackendEnv(
+    commonBackendEnv,
+    showcaseMode,
+    process.env,
   );
+  spawnDetachedProcessGroup({
+    command: uv,
+    args: ["run", "python", join(scriptDir, "serve_teacher_app.py")],
+    cwd: backendRoot,
+    env: {
+      ...teacherBackendEnv,
+      AIEOS360_CX01_I01_SHOWCASE_TEACHER_BACKEND_PORT: String(teacherBe),
+    },
+    role: "teacher-backend",
+    script: "serve_teacher_app.py",
+    port: teacherBe,
+  });
   spawnBackend(
     "student",
     "serve_student_app.py",
@@ -249,12 +285,56 @@ try {
     await waitForHttpOk(target.frontend, readinessTimeoutMs);
   }
 
+  let providerTruth = {
+    selected_mode: showcaseMode,
+    verified_runtime_mode: showcaseMode,
+    active_provider_id: showcaseMode === MODE_DETERMINISTIC ? "fake" : null,
+    active_model_id: showcaseMode === MODE_DETERMINISTIC ? "fake-model" : null,
+    aggregator_mode: showcaseMode === MODE_DETERMINISTIC ? "DEVELOPMENT_FAKE" : null,
+    real_provider_generation_verified: false,
+    verification_state:
+      showcaseMode === MODE_DETERMINISTIC
+        ? "deterministic_fixture_runtime"
+        : "real_ai_selected_not_verified",
+  };
+  let providerAggregator = null;
+  try {
+    providerAggregator = await fetchTeacherProviderAggregator(
+      roleUrls.teacher.backend,
+      readinessTimeoutMs,
+    );
+    providerTruth = summarizeProviderTruth(showcaseMode, providerAggregator);
+  } catch (error) {
+    if (showcaseMode !== MODE_DETERMINISTIC) {
+      throw new Error(
+        `REAL_AI provider aggregator verification failed before declaring running: ${error}`,
+      );
+    }
+  }
+
+  writeRuntimeSurface({
+    selected_mode: providerTruth.selected_mode,
+    verified_runtime_mode: providerTruth.verified_runtime_mode,
+    active_provider_id: providerTruth.active_provider_id,
+    active_model_id: providerTruth.active_model_id,
+    verification_state: providerTruth.verification_state,
+    real_provider_runtime_verified: providerTruth.real_provider_runtime_verified,
+    real_provider_generation_verified:
+      providerTruth.real_provider_generation_verified,
+    live_generation_verification: providerTruth.live_generation_verification,
+    seeded_worksheet_origin: "synthetic_prerequisite_fixture",
+    operator_control: "env_before_start",
+  });
+
   writeOperatorStatus({
     phase: "running",
     classification: "NON_PRODUCTION",
     mode: "full_stack",
     start_mode: "managed",
     platform: "linux",
+    showcase_mode: showcaseMode,
+    showcase_mode_truth: providerTruth,
+    deterministic_mode: showcaseMode === MODE_DETERMINISTIC,
     role_urls: roleUrls,
     governed_ports: governedConfiguredPorts,
     status_path: statusPath,
@@ -276,6 +356,7 @@ try {
     ),
   );
 } catch (error) {
+  clearRuntimeSurface("managed_start_failed");
   const cleanup = await cleanupManagedStack({ removeOwnedLocalContainer: false });
   let portsReleased = false;
   let portReleaseError = null;
