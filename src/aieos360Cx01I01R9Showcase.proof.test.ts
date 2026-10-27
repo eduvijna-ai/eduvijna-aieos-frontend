@@ -1,8 +1,14 @@
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+  assertNoProviderSecretsInEnv,
+  buildProofSubprocessEnv,
+} from "../scripts/aieos360-cx01-i06-showcase-ai-mode/proof_subprocess_env.mjs";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -64,6 +70,26 @@ function runNodeProof(script: string, extraEnv: Record<string, string> = {}) {
 }
 
 describe("AIEOS360-CX01-I01R9 showcase rehearsal proofs", () => {
+  it("scrubs all provider-secret aliases from proof subprocess env", () => {
+    const sentinel = "synthetic-sentinel-must-not-leak";
+    process.env.AIEOS_GROQ_API_KEY = sentinel;
+    process.env.OPENAI_API_KEY = sentinel;
+    process.env.GROQ_API_KEY = sentinel;
+    process.env.AZURE_OPENAI_API_KEY = sentinel;
+    process.env.ANTHROPIC_API_KEY = sentinel;
+    const scrubbed = buildProofSubprocessEnv({ AIEOS_BACKEND_ROOT: "/tmp/fake" });
+    assertNoProviderSecretsInEnv(scrubbed);
+    for (const key of [
+      "AIEOS_GROQ_API_KEY",
+      "OPENAI_API_KEY",
+      "GROQ_API_KEY",
+      "AZURE_OPENAI_API_KEY",
+      "ANTHROPIC_API_KEY",
+    ]) {
+      delete process.env[key];
+    }
+  });
+
   it.runIf(backendReady)(
     "I06 provider aggregator tenant header contract (Backend TestClient, synthetic Groq composition only)",
     () => {
@@ -71,6 +97,15 @@ describe("AIEOS360-CX01-I01R9 showcase rehearsal proofs", () => {
       if (!backendRoot) {
         throw new Error("AIEOS_BACKEND_ROOT is required");
       }
+      const proofEnv = buildProofSubprocessEnv({
+        AIEOS_BACKEND_ROOT: backendRoot,
+        PYTHONPATH: [
+          path.join(backendRoot, "src"),
+          backendRoot,
+          i06ScriptDir,
+        ].join(path.delimiter),
+      });
+      assertNoProviderSecretsInEnv(proofEnv);
       const contractProof = spawnSync(
         process.env.AIEOS360_CX01_I01_SHOWCASE_UV || "uv",
         [
@@ -80,17 +115,7 @@ describe("AIEOS360-CX01-I01R9 showcase rehearsal proofs", () => {
         ],
         {
           cwd: backendRoot,
-          env: {
-            ...process.env,
-            AIEOS_BACKEND_ROOT: backendRoot,
-            AIEOS_GROQ_API_KEY: "",
-            AIEOS_OPENAI_API_KEY: "",
-            PYTHONPATH: [
-              path.join(backendRoot, "src"),
-              backendRoot,
-              i06ScriptDir,
-            ].join(path.delimiter),
-          },
+          env: proofEnv,
           encoding: "utf8",
         },
       );
@@ -100,6 +125,88 @@ describe("AIEOS360-CX01-I01R9 showcase rehearsal proofs", () => {
       }
       expect(contractProof.stdout).toContain("provider_aggregator_tenant_contract");
       expect(contractProof.status).toBe(0);
+    },
+  );
+
+  it.runIf(backendReady && process.platform === "linux")(
+    "I06R3 forced reset failure clears stale runtime surface before exiting (entrypoint)",
+    () => {
+      const surfaceDir = mkdtempSync(path.join(tmpdir(), "cx01-i06-reset-proof-"));
+      const surfacePath = path.join(surfaceDir, "runtime.json");
+      writeFileSync(
+        surfacePath,
+        JSON.stringify(
+          {
+            runtime_surface_valid: true,
+            selected_mode: "REAL_AI",
+            active_provider_id: "groq",
+            verification_state: "real_provider_runtime_observed",
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      const reset = spawnSync(
+        "node",
+        [path.join(scriptDir, "reset.mjs")],
+        {
+          cwd: repoRoot,
+          env: {
+            ...process.env,
+            AIEOS360_CX01_I06_RUNTIME_SURFACE_PATH: surfacePath,
+            AIEOS360_CX01_I01_SHOWCASE_FORCE_RESET_FAIL: "1",
+          },
+          encoding: "utf8",
+        },
+      );
+      expect(reset.status).not.toBe(0);
+
+      const payload = JSON.parse(readFileSync(surfacePath, "utf8"));
+      expect(payload.runtime_surface_valid).toBe(false);
+      expect(payload.verification_state).toBe("reset_preflight");
+    },
+  );
+
+  it.runIf(backendReady && process.platform === "linux")(
+    "I06R3 invalid REAL_AI start preflight clears stale runtime surface before failing",
+    () => {
+      const surfaceDir = mkdtempSync(path.join(tmpdir(), "cx01-i06-start-proof-"));
+      const surfacePath = path.join(surfaceDir, "runtime.json");
+      writeFileSync(
+        surfacePath,
+        JSON.stringify(
+          {
+            runtime_surface_valid: true,
+            selected_mode: "REAL_AI",
+            active_provider_id: "groq",
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      const start = spawnSync(
+        "node",
+        [path.join(scriptDir, "start.mjs")],
+        {
+          cwd: repoRoot,
+          env: buildProofSubprocessEnv({
+            AIEOS360_CX01_I06_RUNTIME_SURFACE_PATH: surfacePath,
+            AIEOS360_CX01_I06_SHOWCASE_MODE: "REAL_AI",
+            AIEOS_AI_PROVIDER: "groq",
+            AIEOS360_CX01_I01_SHOWCASE_SKIP_RESET: "1",
+          }),
+          encoding: "utf8",
+        },
+      );
+      expect(start.status).not.toBe(0);
+
+      const payload = JSON.parse(readFileSync(surfacePath, "utf8"));
+      expect(payload.runtime_surface_valid).toBe(false);
+      expect(payload.verification_state).toBe("managed_start_preflight");
     },
   );
 

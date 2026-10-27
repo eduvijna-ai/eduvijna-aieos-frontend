@@ -38,6 +38,9 @@ describe("AIEOS360-CX01-I06 showcase AI mode governance", () => {
     const selftest = runNode(`${I06_SCRIPT_PKG}/i06_mode.selftest.mjs`);
     expect(selftest.status).toBe(0);
 
+    const proofEnvSelftest = runNode(`${I06_SCRIPT_PKG}/proof_subprocess_env.selftest.mjs`);
+    expect(proofEnvSelftest.status).toBe(0);
+
     const lifecycle = runNode(`${I06_SCRIPT_PKG}/runtime_surface_lifecycle.selftest.mjs`);
     expect(lifecycle.status).toBe(0);
 
@@ -251,6 +254,31 @@ clearRuntimeSurface('reset_complete');`,
     "accepts Provider Aggregator tenant contract on development Backend TestClient",
     () => {
       const backendRoot = process.env.AIEOS_BACKEND_ROOT;
+      process.env.AIEOS_GROQ_API_KEY = "synthetic-sentinel-must-not-leak";
+      process.env.OPENAI_API_KEY = "synthetic-sentinel-must-not-leak";
+      const envBuild = spawnSync(
+        "node",
+        [
+          "--input-type=module",
+          "-e",
+          `import { buildProofSubprocessEnv, assertNoProviderSecretsInEnv } from './${I06_SCRIPT_PKG}/proof_subprocess_env.mjs';
+const env = buildProofSubprocessEnv({
+  AIEOS_BACKEND_ROOT: process.argv[1],
+  PYTHONPATH: process.argv[2],
+});
+assertNoProviderSecretsInEnv(env);
+console.log(JSON.stringify(env));`,
+          backendRoot!,
+          [
+            path.join(backendRoot!, "src"),
+            backendRoot!,
+            path.join(repoRoot, I06_SCRIPT_PKG),
+          ].join(path.delimiter),
+        ],
+        { cwd: repoRoot, encoding: "utf8" },
+      );
+      expect(envBuild.status).toBe(0);
+      const proofEnv = JSON.parse(envBuild.stdout);
       const proof = spawnSync(
         process.env.AIEOS360_CX01_I01_SHOWCASE_UV || "uv",
         [
@@ -260,15 +288,7 @@ clearRuntimeSurface('reset_complete');`,
         ],
         {
           cwd: backendRoot,
-          env: {
-            ...process.env,
-            AIEOS_BACKEND_ROOT: backendRoot,
-            PYTHONPATH: [
-              path.join(backendRoot!, "src"),
-              backendRoot!,
-              path.join(repoRoot, I06_SCRIPT_PKG),
-            ].join(path.delimiter),
-          },
+          env: proofEnv,
           encoding: "utf8",
         },
       );
@@ -277,6 +297,8 @@ clearRuntimeSurface('reset_complete');`,
         console.error(proof.stderr);
       }
       expect(proof.status).toBe(0);
+      delete process.env.AIEOS_GROQ_API_KEY;
+      delete process.env.OPENAI_API_KEY;
     },
   );
 });

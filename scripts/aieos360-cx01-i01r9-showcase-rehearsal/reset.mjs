@@ -18,11 +18,6 @@ import { clearRuntimeSurface } from "../aieos360-cx01-i06-showcase-ai-mode/runti
 
 mkdirSync(tmpDir, { recursive: true });
 
-if (process.env.AIEOS360_CX01_I01_SHOWCASE_FORCE_RESET_FAIL === "1") {
-  console.error("AIEOS360-CX01-I01 injected reset failure (test only)");
-  process.exit(1);
-}
-
 runPinGuard();
 
 const resetGate = assertManagedStartRegistryGate();
@@ -44,6 +39,11 @@ if (!resetGate.ok) {
 }
 
 clearRuntimeSurface("reset_preflight");
+
+if (process.env.AIEOS360_CX01_I01_SHOWCASE_FORCE_RESET_FAIL === "1") {
+  console.error("AIEOS360-CX01-I01 injected reset failure (test only)");
+  process.exit(1);
+}
 
 const commonEnv = {
   AIEOS360_CX01_I01_SHOWCASE_DB_REPORT: dbReportPath,
