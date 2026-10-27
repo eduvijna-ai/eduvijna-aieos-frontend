@@ -39,20 +39,20 @@ export function assertStudentPassKitFromAssignmentDetail(detail, expected) {
   const ws2 = byId.get("ws-2");
   const ws3 = byId.get("ws-3");
   const ws4 = byId.get("ws-4");
-  if (ws1.question_type !== "multiple_choice") {
-    throw new Error("ws-1 must be multiple_choice");
+  if (ws1.question_type !== "MULTIPLE_CHOICE") {
+    throw new Error("ws-1 must be MULTIPLE_CHOICE");
   }
   if (!ws1.options?.includes("1/2")) {
     throw new Error("ws-1 options must include 1/2");
   }
-  if (ws2.question_type !== "short_answer") {
-    throw new Error("ws-2 must be short_answer");
+  if (ws2.question_type !== "SHORT_ANSWER") {
+    throw new Error("ws-2 must be SHORT_ANSWER");
   }
-  if (ws3.question_type !== "true_false") {
-    throw new Error("ws-3 must be true_false");
+  if (ws3.question_type !== "TRUE_FALSE") {
+    throw new Error("ws-3 must be TRUE_FALSE");
   }
-  if (ws4.question_type !== "multiple_choice") {
-    throw new Error("ws-4 must be multiple_choice");
+  if (ws4.question_type !== "MULTIPLE_CHOICE") {
+    throw new Error("ws-4 must be MULTIPLE_CHOICE");
   }
   for (const question of questions) {
     if ("objective_ids" in question && question.objective_ids != null) {

@@ -34,4 +34,10 @@ assert.equal(
   0,
 );
 
+const providerValueLeak = "OPENAI_API_KEY=sk-synthetic-should-not-leak";
+const providerSanitized = sanitizeReportString(providerValueLeak);
+assert.ok(!providerSanitized.includes("sk-synthetic-should-not-leak"));
+assert.ok(!providerSanitized.includes("OPENAI_API_KEY=sk"));
+assert.equal(scanReportTextForLeaks(providerSanitized).length, 0);
+
 console.log("rehearse_report_sanitize.selftest: pass");

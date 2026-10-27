@@ -97,7 +97,7 @@ function baseDeps(overrides = {}) {
     }),
   );
   assert.equal(result.exitCode, 2);
-  assert.match(result.failureReason ?? "", /showcase_stop failed/);
+  assert.match(result.failureReason ?? "", /showcase_stop failed|showcase_stop_threw/);
 }
 
 // 5) partial start failure → partial cleanup + registry verify fail-closed
@@ -131,12 +131,15 @@ function baseDeps(overrides = {}) {
     baseDeps({
       runner,
       runOwnedStop: () => {
-        throw new Error("dev-student-a must not leak");
+        throw new Error("OPENAI_API_KEY=sk-synthetic-should-not-leak");
       },
     }),
   );
   assert.equal(result.exitCode, 1);
-  assert.match(result.failureReason ?? "", /showcase_stop threw/);
+  assert.equal(result.failureReason, "showcase_stop_threw");
+  assert.ok(
+    !JSON.stringify(result.steps).includes("sk-synthetic-should-not-leak"),
+  );
   assert.ok(result.steps.some((step) => step.step === "showcase_stop"));
 }
 

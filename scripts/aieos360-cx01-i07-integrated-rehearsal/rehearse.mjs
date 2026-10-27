@@ -17,7 +17,7 @@ import {
 import { runRehearsalOrchestration } from "./rehearse_orchestration.mjs";
 import { verifyOwnedRegistryClear } from "./rehearse_owned_registry.mjs";
 import { buildRehearsalReport } from "./rehearse_report.mjs";
-import { sanitizeReportString } from "./rehearse_report_sanitize.mjs";
+import { toReportSafeFailureMessage } from "./rehearse_report_sanitize.mjs";
 
 const statusScript = join(
   repoRoot,
@@ -90,7 +90,9 @@ const result = runRehearsalOrchestration({
 });
 
 if (result.failureReason) {
-  console.error(sanitizeReportString(result.failureReason));
+  console.error(
+    toReportSafeFailureMessage(result.failureReason, "rehearsal_failed"),
+  );
 }
 
 const outcome = result.exitCode === 0 ? "pass" : "fail";

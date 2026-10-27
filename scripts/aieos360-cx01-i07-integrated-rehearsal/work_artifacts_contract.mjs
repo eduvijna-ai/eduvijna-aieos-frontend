@@ -81,12 +81,13 @@ export function assertFreshPreparationKitArtifacts(payload, options) {
     contentIds.add(row.content_id);
     versionIds.add(row.version_id);
     const kind = row.artifact_kind;
-    const expectedContentType =
-      kind === "worksheet" ? "worksheet" : `education.${kind}`;
-    if (row.content_type !== expectedContentType) {
+    if (row.content_type !== kind) {
       throw new Error(
-        `artifact_kind ${kind} requires content_type ${expectedContentType}`,
+        `artifact_kind ${kind} requires matching content_type ${kind}`,
       );
+    }
+    if (String(row.content_type).startsWith("education.")) {
+      throw new Error("content_type must be canonical kind, not schema_id");
     }
   }
   const worksheetRows = items.filter((row) => row.artifact_kind === "worksheet");

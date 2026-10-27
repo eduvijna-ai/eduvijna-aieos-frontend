@@ -1,8 +1,11 @@
 import { resolveCleanupPlan, finalizeExitCode } from "./rehearse_report.mjs";
-import { sanitizeReportString } from "./rehearse_report_sanitize.mjs";
+import { toReportSafeFailureMessage } from "./rehearse_report_sanitize.mjs";
 
-function captureFailureReason(current, next) {
-  return current ?? sanitizeReportString(next);
+function captureFailureReason(current, next, fallbackCode) {
+  if (current != null) {
+    return current;
+  }
+  return toReportSafeFailureMessage(next, fallbackCode);
 }
 
 /**
@@ -72,7 +75,11 @@ export function runRehearsalOrchestration(deps) {
       failureReason = "integrated_e2e_guard_managed_stack exited nonzero";
     }
   } catch (error) {
-    failureReason = captureFailureReason(failureReason, String(error));
+    failureReason = captureFailureReason(
+      failureReason,
+      error,
+      "rehearsal_orchestration_failed",
+    );
     exitCode = 1;
   }
 
@@ -90,11 +97,15 @@ export function runRehearsalOrchestration(deps) {
       steps.push({
         step: "showcase_stop_after_partial_start",
         status: "fail",
-        error: sanitizeReportString(String(error)),
+        error: toReportSafeFailureMessage(
+          error,
+          "showcase_stop_after_partial_start_threw",
+        ),
       });
       failureReason = captureFailureReason(
         failureReason,
-        "showcase_stop_after_partial_start threw",
+        error,
+        "showcase_stop_after_partial_start_threw",
       );
     }
     exitCode = finalizeExitCode(exitCode, stopExit);
@@ -119,11 +130,15 @@ export function runRehearsalOrchestration(deps) {
         steps.push({
           step: "verify_registry_clear_after_partial_start",
           status: "fail",
-          error: sanitizeReportString(String(error)),
+          error: toReportSafeFailureMessage(
+            error,
+            "verify_registry_clear_after_partial_start_threw",
+          ),
         });
         failureReason = captureFailureReason(
           failureReason,
-          "verify_registry_clear_after_partial_start threw",
+          error,
+          "verify_registry_clear_after_partial_start_threw",
         );
         exitCode = finalizeExitCode(exitCode, 1);
       }
@@ -137,9 +152,13 @@ export function runRehearsalOrchestration(deps) {
       steps.push({
         step: "showcase_stop",
         status: "fail",
-        error: sanitizeReportString(String(error)),
+        error: toReportSafeFailureMessage(error, "showcase_stop_threw"),
       });
-      failureReason = captureFailureReason(failureReason, "showcase_stop threw");
+      failureReason = captureFailureReason(
+        failureReason,
+        error,
+        "showcase_stop_threw",
+      );
     }
     if (!steps.some((step) => step.step === "showcase_stop")) {
       steps.push({ step: "showcase_stop", status: stopExit === 0 ? "pass" : "fail" });
@@ -165,11 +184,15 @@ export function runRehearsalOrchestration(deps) {
         steps.push({
           step: "verify_registry_clear_after_owned_stop",
           status: "fail",
-          error: sanitizeReportString(String(error)),
+          error: toReportSafeFailureMessage(
+            error,
+            "verify_registry_clear_after_owned_stop_threw",
+          ),
         });
         failureReason = captureFailureReason(
           failureReason,
-          "verify_registry_clear_after_owned_stop threw",
+          error,
+          "verify_registry_clear_after_owned_stop_threw",
         );
         exitCode = finalizeExitCode(exitCode, 1);
       }
