@@ -92,6 +92,21 @@ describe("AIEOS360-CX01-I07 integrated rehearsal package", () => {
     expect(orchestration).not.toMatch(/catch[\s\S]*writeReport\(/);
   });
 
+  it("student assignment pass-kit contract enforces transport separation (selftest)", () => {
+    const result = spawnSync(
+      "node",
+      [
+        path.join(
+          repoRoot,
+          "scripts/aieos360-cx01-i07-integrated-rehearsal/student_assignment_pass_kit_contract.selftest.mjs",
+        ),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("pass");
+  });
+
   it("work artifacts contract uses artifact_kind DTO (selftest)", () => {
     const result = spawnSync(
       "node",

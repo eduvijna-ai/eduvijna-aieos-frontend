@@ -1,4 +1,9 @@
 import { resolveCleanupPlan, finalizeExitCode } from "./rehearse_report.mjs";
+import { sanitizeReportString } from "./rehearse_report_sanitize.mjs";
+
+function captureFailureReason(current, next) {
+  return current ?? sanitizeReportString(next);
+}
 
 /**
  * Injectable rehearsal orchestration (used by rehearse.mjs and bounded selftests).
@@ -67,7 +72,7 @@ export function runRehearsalOrchestration(deps) {
       failureReason = "integrated_e2e_guard_managed_stack exited nonzero";
     }
   } catch (error) {
-    failureReason = failureReason ?? String(error);
+    failureReason = captureFailureReason(failureReason, String(error));
     exitCode = 1;
   }
 
@@ -78,30 +83,96 @@ export function runRehearsalOrchestration(deps) {
   let stopExit = null;
 
   if (cleanupPlan.runPartialCleanup) {
-    stopExit = runPartialCleanup(steps);
+    try {
+      stopExit = runPartialCleanup(steps);
+    } catch (error) {
+      stopExit = 1;
+      steps.push({
+        step: "showcase_stop_after_partial_start",
+        status: "fail",
+        error: sanitizeReportString(String(error)),
+      });
+      failureReason = captureFailureReason(
+        failureReason,
+        "showcase_stop_after_partial_start threw",
+      );
+    }
     exitCode = finalizeExitCode(exitCode, stopExit);
     if (stopExit !== 0) {
       failureReason =
         failureReason ?? "showcase_stop_after_partial_start failed";
     } else if (verifyOwnedRegistryClear) {
-      const residual = verifyOwnedRegistryClear();
-      steps.push({
-        step: "verify_registry_clear_after_partial_start",
-        status: residual.ok ? "pass" : "fail",
-      });
-      if (!residual.ok) {
-        failureReason =
-          failureReason ?? `residual owned processes after partial cleanup: ${residual.liveCount}`;
+      try {
+        const residual = verifyOwnedRegistryClear();
+        steps.push({
+          step: "verify_registry_clear_after_partial_start",
+          status: residual.ok ? "pass" : "fail",
+        });
+        if (!residual.ok) {
+          failureReason = captureFailureReason(
+            failureReason,
+            `residual owned processes after partial cleanup: ${residual.liveCount}`,
+          );
+          exitCode = finalizeExitCode(exitCode, 1);
+        }
+      } catch (error) {
+        steps.push({
+          step: "verify_registry_clear_after_partial_start",
+          status: "fail",
+          error: sanitizeReportString(String(error)),
+        });
+        failureReason = captureFailureReason(
+          failureReason,
+          "verify_registry_clear_after_partial_start threw",
+        );
         exitCode = finalizeExitCode(exitCode, 1);
       }
     }
   }
   if (cleanupPlan.runOwnedStop) {
-    stopExit = runOwnedStop(steps);
-    steps.push({ step: "showcase_stop", status: stopExit === 0 ? "pass" : "fail" });
+    try {
+      stopExit = runOwnedStop(steps);
+    } catch (error) {
+      stopExit = 1;
+      steps.push({
+        step: "showcase_stop",
+        status: "fail",
+        error: sanitizeReportString(String(error)),
+      });
+      failureReason = captureFailureReason(failureReason, "showcase_stop threw");
+    }
+    if (!steps.some((step) => step.step === "showcase_stop")) {
+      steps.push({ step: "showcase_stop", status: stopExit === 0 ? "pass" : "fail" });
+    }
     exitCode = finalizeExitCode(exitCode, stopExit);
     if (stopExit !== 0) {
       failureReason = failureReason ?? "showcase_stop failed";
+    } else if (verifyOwnedRegistryClear) {
+      try {
+        const residual = verifyOwnedRegistryClear();
+        steps.push({
+          step: "verify_registry_clear_after_owned_stop",
+          status: residual.ok ? "pass" : "fail",
+        });
+        if (!residual.ok) {
+          failureReason = captureFailureReason(
+            failureReason,
+            `residual owned processes after owned stop: ${residual.liveCount}`,
+          );
+          exitCode = finalizeExitCode(exitCode, 1);
+        }
+      } catch (error) {
+        steps.push({
+          step: "verify_registry_clear_after_owned_stop",
+          status: "fail",
+          error: sanitizeReportString(String(error)),
+        });
+        failureReason = captureFailureReason(
+          failureReason,
+          "verify_registry_clear_after_owned_stop threw",
+        );
+        exitCode = finalizeExitCode(exitCode, 1);
+      }
     }
   }
 

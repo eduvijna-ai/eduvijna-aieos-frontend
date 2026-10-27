@@ -35,11 +35,22 @@ export function sanitizeReportString(value) {
   return text;
 }
 
-export function scanReportTextForLeaks(text) {
+function findCredentialUrlLeaks(text) {
   const leaks = [];
-  if (URL_WITH_PASSWORD.test(text) && !text.includes(REDACTED)) {
-    leaks.push("credential-bearing database URL");
+  const pattern = /(postgresql(?:\+\w+)?:\/\/)([^:@/]+):([^@/]+)@/gi;
+  let match = pattern.exec(text);
+  while (match) {
+    const passwordSegment = match[3];
+    if (passwordSegment && passwordSegment !== REDACTED) {
+      leaks.push("credential-bearing database URL");
+    }
+    match = pattern.exec(text);
   }
+  return leaks;
+}
+
+export function scanReportTextForLeaks(text) {
+  const leaks = findCredentialUrlLeaks(text);
   for (const marker of BEARER_MARKERS) {
     if (text.includes(marker)) {
       leaks.push(`development bearer marker (${marker})`);

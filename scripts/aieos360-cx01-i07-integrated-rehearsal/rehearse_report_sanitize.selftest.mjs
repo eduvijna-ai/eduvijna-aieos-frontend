@@ -21,4 +21,17 @@ const payload = assertSanitizedRehearsalReportPayload({
 });
 assert.ok(JSON.stringify(payload).includes("[REDACTED]"));
 
+const halfRedacted =
+  "postgresql://user:[REDACTED]@host/a then postgresql://user:still-secret@host/b";
+assert.ok(scanReportTextForLeaks(halfRedacted).length > 0);
+const fullySanitized = sanitizeReportString(halfRedacted);
+assert.equal(scanReportTextForLeaks(fullySanitized).length, 0);
+const multiSecret =
+  "dev-student-a postgresql://user:secret@host/db OPENAI_API_KEY";
+assert.ok(scanReportTextForLeaks(multiSecret).length >= 2);
+assert.equal(
+  scanReportTextForLeaks(sanitizeReportString(multiSecret)).length,
+  0,
+);
+
 console.log("rehearse_report_sanitize.selftest: pass");

@@ -17,6 +17,7 @@ import {
 import { runRehearsalOrchestration } from "./rehearse_orchestration.mjs";
 import { verifyOwnedRegistryClear } from "./rehearse_owned_registry.mjs";
 import { buildRehearsalReport } from "./rehearse_report.mjs";
+import { sanitizeReportString } from "./rehearse_report_sanitize.mjs";
 
 const statusScript = join(
   repoRoot,
@@ -82,14 +83,14 @@ const result = runRehearsalOrchestration({
     });
     return stopCode;
   },
-  runOwnedStop(steps) {
+  runOwnedStop() {
     return runManagedCommand("pnpm", ["showcase:aieos360:stop"]);
   },
   verifyOwnedRegistryClear,
 });
 
 if (result.failureReason) {
-  console.error(result.failureReason);
+  console.error(sanitizeReportString(result.failureReason));
 }
 
 const outcome = result.exitCode === 0 ? "pass" : "fail";

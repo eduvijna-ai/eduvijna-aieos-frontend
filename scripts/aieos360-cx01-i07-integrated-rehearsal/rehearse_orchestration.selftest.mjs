@@ -124,4 +124,37 @@ function baseDeps(overrides = {}) {
   );
 }
 
+// 6) owned stop callback throws → fail-closed + scrubbed step error
+{
+  const runner = makeRunner(() => 0);
+  const result = runRehearsalOrchestration(
+    baseDeps({
+      runner,
+      runOwnedStop: () => {
+        throw new Error("dev-student-a must not leak");
+      },
+    }),
+  );
+  assert.equal(result.exitCode, 1);
+  assert.match(result.failureReason ?? "", /showcase_stop threw/);
+  assert.ok(result.steps.some((step) => step.step === "showcase_stop"));
+}
+
+// 7) residual processes after owned stop → nonzero
+{
+  const runner = makeRunner(() => 0);
+  const result = runRehearsalOrchestration(
+    baseDeps({
+      runner,
+      verifyOwnedRegistryClear: () => ({ ok: false, liveCount: 1 }),
+    }),
+  );
+  assert.equal(result.exitCode, 1);
+  assert.ok(
+    result.steps.some(
+      (step) => step.step === "verify_registry_clear_after_owned_stop",
+    ),
+  );
+}
+
 console.log("rehearse_orchestration.selftest: pass");

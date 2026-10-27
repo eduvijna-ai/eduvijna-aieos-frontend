@@ -49,15 +49,45 @@ export function assertFreshPreparationKitArtifacts(payload, options) {
   if (items.some((row) => "kind" in row && row.kind != null)) {
     throw new Error("artifacts must use artifact_kind, not legacy kind field");
   }
-  const generationRunIds = new Set(
-    items
-      .map((row) => row.generation_run_id)
-      .filter((value) => typeof value === "string" && value.length > 0),
-  );
-  if (generationRunIds.size !== 1) {
-    throw new Error(
-      `expected one shared generation_run_id, diagnostics=${JSON.stringify(diagnostics)}`,
-    );
+  const contentIds = new Set();
+  const versionIds = new Set();
+  let sharedGenerationRunId = null;
+  for (const row of items) {
+    const runId = row.generation_run_id;
+    if (typeof runId !== "string" || runId.length === 0) {
+      throw new Error(
+        `each artifact row requires generation_run_id, diagnostics=${JSON.stringify(diagnostics)}`,
+      );
+    }
+    if (sharedGenerationRunId == null) {
+      sharedGenerationRunId = runId;
+    } else if (runId !== sharedGenerationRunId) {
+      throw new Error(
+        `all artifact rows must share generation_run_id, diagnostics=${JSON.stringify(diagnostics)}`,
+      );
+    }
+    if (typeof row.content_id !== "string" || row.content_id.length === 0) {
+      throw new Error("artifact row content_id required");
+    }
+    if (typeof row.version_id !== "string" || row.version_id.length === 0) {
+      throw new Error("artifact row version_id required");
+    }
+    if (contentIds.has(row.content_id)) {
+      throw new Error("artifact content_id values must be distinct");
+    }
+    if (versionIds.has(row.version_id)) {
+      throw new Error("artifact version_id values must be distinct");
+    }
+    contentIds.add(row.content_id);
+    versionIds.add(row.version_id);
+    const kind = row.artifact_kind;
+    const expectedContentType =
+      kind === "worksheet" ? "worksheet" : `education.${kind}`;
+    if (row.content_type !== expectedContentType) {
+      throw new Error(
+        `artifact_kind ${kind} requires content_type ${expectedContentType}`,
+      );
+    }
   }
   const worksheetRows = items.filter((row) => row.artifact_kind === "worksheet");
   const worksheet = worksheetRows[0];

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { buildI07PythonBootstrapEnv } from "../../scripts/aieos360-cx01-i07-e2e/child_env.mjs";
 import { assertFreshPreparationKitArtifacts } from "../../scripts/aieos360-cx01-i07-integrated-rehearsal/work_artifacts_contract.mjs";
+import { assertStudentPassKitFromAssignmentDetail } from "../../scripts/aieos360-cx01-i07-integrated-rehearsal/student_assignment_pass_kit_contract.mjs";
 import type { TeachingWorkArtifactsResponse } from "../../src/services/api/generated/teachingTypes";
 import { fileURLToPath } from "node:url";
 import type { APIRequestContext, Browser, Page, Request } from "@playwright/test";
@@ -333,6 +334,40 @@ export function resolveFreshPreparationKitWorksheet(
     workId,
     excludeContentId,
   });
+}
+
+export async function assertStudentAssignmentPassKitWorksheet(
+  request: APIRequestContext,
+  assignmentId: string,
+  expected: {
+    contentId: string;
+    versionId: string;
+    title: string;
+  },
+) {
+  const path = `/api/v1/student-os/assignments/${assignmentId}`;
+  const response = await request.get(path, { headers: studentApiHeaders() });
+  if (!response.ok()) {
+    throw new Error(
+      `Student assignment contract: GET ${path} returned HTTP ${response.status()}`,
+    );
+  }
+  const detail = (await response.json()) as {
+    content_id: string;
+    content_version_id: string;
+    resource?: {
+      title: string;
+      content_id: string;
+      content_version_id: string;
+      questions?: Array<{
+        id: string;
+        prompt: string;
+        question_type: string;
+        options?: string[];
+      }>;
+    } | null;
+  };
+  assertStudentPassKitFromAssignmentDetail(detail, expected);
 }
 
 export async function assertPersistedPassKitWorksheetContract(

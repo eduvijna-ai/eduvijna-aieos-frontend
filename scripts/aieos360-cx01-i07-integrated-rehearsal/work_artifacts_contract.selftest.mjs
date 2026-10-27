@@ -36,4 +36,19 @@ assert.throws(() =>
   ),
 );
 
+assert.throws(() =>
+  assertFreshPreparationKitArtifacts(
+    {
+      work_id: "00000000-0000-4000-8000-00000000abcd",
+      items: items.map((row, index) =>
+        index === 0 ? { ...row, generation_run_id: "" } : row,
+      ),
+    },
+    {
+      workId: "00000000-0000-4000-8000-00000000abcd",
+      excludeContentId: "seeded-content-id",
+    },
+  ),
+);
+
 console.log("work_artifacts_contract.selftest: pass");

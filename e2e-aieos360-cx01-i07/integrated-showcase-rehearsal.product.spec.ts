@@ -13,6 +13,7 @@ import {
   PASS_KIT_WORKSHEET_PROOF,
   assertNoApiMocksInstalled,
   assertPersistedPassKitWorksheetContract,
+  assertStudentAssignmentPassKitWorksheet,
   resolveFreshPreparationKitWorksheet,
   assertParentTransportOnly,
   assertPrincipalTransportOnly,
@@ -333,21 +334,14 @@ test.describe("[AIEOS360-CX01-I07-E2E] integrated showcase rehearsal", () => {
     ).toBeVisible();
     await expect(page.getByText(/copy your teacher assigned/i)).toBeVisible();
 
-    const detailResponse = await page.request.get(
-      `/api/v1/student-os/assignments/${state.assignmentId}`,
-      { headers: studentApiHeaders() },
-    );
-    expect(detailResponse.ok()).toBeTruthy();
-    const detail = (await detailResponse.json()) as {
-      content_version_id: string;
-      resource: { title: string };
-    };
-    expect(detail.content_version_id).toBe(state.activeVersionId);
-    expect(detail.resource.title).toBe(state.activeWorksheetTitle);
-    await assertPersistedPassKitWorksheetContract(
+    await assertStudentAssignmentPassKitWorksheet(
       page.request,
-      state.activeContentId!,
-      state.activeVersionId!,
+      state.assignmentId!,
+      {
+        contentId: state.activeContentId!,
+        versionId: state.activeVersionId!,
+        title: state.activeWorksheetTitle!,
+      },
     );
 
     await page.getByRole("button", { name: /^Start$/i }).click();
