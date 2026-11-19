@@ -8,7 +8,6 @@ import {
   OPENAPI_AUTHORITY_SHA,
   resolveBackendRoot,
 } from "./constants.mjs";
-import { repoRoot } from "./paths.mjs";
 import { verifyGovernedFiveRepoRefs } from "../aieos360-cx01-i06-showcase-ai-mode/source_gate.mjs";
 
 export function verifyBackendPin() {
