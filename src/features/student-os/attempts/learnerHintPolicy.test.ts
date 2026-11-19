@@ -1,9 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { verifyLearnerHintForQuestion } from "./learnerHintPolicy";
+import {
+  devSessionPrivacyBoundaryKey,
+  verifyLearnerHintForQuestion,
+} from "./learnerHintPolicy";
 import {
   ATTEMPT_ID,
   CONTENT_VERSION_ID,
 } from "../studentOs.fixtures";
+
+describe("devSessionPrivacyBoundaryKey", () => {
+  it("changes when bearer token changes within the same tenant", () => {
+    const base = {
+      apiOrigin: "http://127.0.0.1:8080",
+      tenantId: "tenant-a",
+      bearerToken: "token-a",
+    };
+    const other = { ...base, bearerToken: "token-b" };
+    expect(devSessionPrivacyBoundaryKey(base)).not.toBe(
+      devSessionPrivacyBoundaryKey(other),
+    );
+  });
+});
 
 describe("verifyLearnerHintForQuestion", () => {
   const questionIds = ["q-tf", "q-mc"] as const;
@@ -77,5 +94,83 @@ describe("verifyLearnerHintForQuestion", () => {
       },
     );
     expect(outcome).toEqual({ kind: "empty" });
+  });
+
+  it("rejects malformed roots, hint arrays, and hint items", () => {
+    expect(
+      verifyLearnerHintForQuestion(null, {
+        attemptId: ATTEMPT_ID,
+        contentVersionId: CONTENT_VERSION_ID,
+        questionId: "q-tf",
+        questionIds,
+      }).kind,
+    ).toBe("invalid");
+
+    expect(
+      verifyLearnerHintForQuestion(
+        {
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: "not-array",
+        },
+        {
+          attemptId: ATTEMPT_ID,
+          contentVersionId: CONTENT_VERSION_ID,
+          questionId: "q-tf",
+          questionIds,
+        },
+      ).kind,
+    ).toBe("invalid");
+
+    expect(
+      verifyLearnerHintForQuestion(
+        {
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [{ question_id: "q-tf", hint_text: 42 }],
+        },
+        {
+          attemptId: ATTEMPT_ID,
+          contentVersionId: CONTENT_VERSION_ID,
+          questionId: "q-tf",
+          questionIds,
+        },
+      ).kind,
+    ).toBe("invalid");
+
+    expect(
+      verifyLearnerHintForQuestion(
+        {
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [
+            { question_id: "q-tf", hint_text: "a" },
+            { question_id: "q-tf", hint_text: "dup" },
+          ],
+        },
+        {
+          attemptId: ATTEMPT_ID,
+          contentVersionId: CONTENT_VERSION_ID,
+          questionId: "q-tf",
+          questionIds,
+        },
+      ).kind,
+    ).toBe("invalid");
+
+    expect(
+      verifyLearnerHintForQuestion(
+        {
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [{ question_id: "q-unknown", hint_text: "sneaky" }],
+        },
+        {
+          attemptId: ATTEMPT_ID,
+          contentVersionId: CONTENT_VERSION_ID,
+          questionId: "q-tf",
+          questionIds,
+        },
+      ).kind,
+    ).toBe("invalid");
   });
 });

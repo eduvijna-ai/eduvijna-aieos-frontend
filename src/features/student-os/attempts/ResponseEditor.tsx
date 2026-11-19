@@ -19,6 +19,7 @@ export function ResponseEditor({
   onChange: (questionId: string, answer: DraftAnswer) => void;
   learnerHints?: {
     enabled: boolean;
+    interactionEnabled: boolean;
     viewForQuestion: (questionId: string) => LearnerHintViewState;
     onRequestHint: (questionId: string) => void;
   };
@@ -52,6 +53,7 @@ export function ResponseEditor({
                   questionId={question.id}
                   questionNumber={index + 1}
                   enabled={learnerHints.enabled}
+                  interactionEnabled={learnerHints.interactionEnabled}
                   view={learnerHints.viewForQuestion(question.id)}
                   onRequest={() => learnerHints.onRequestHint(question.id)}
                 />

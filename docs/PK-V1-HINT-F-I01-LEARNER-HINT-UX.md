@@ -23,8 +23,10 @@ persistence or analytics payload.
 - `attempt_id` and `content_version_id` in the response must match the loaded
   attempt; otherwise the body is discarded.
 - Hints purge on save/submit start, submit success, route/attempt change,
-  unmount, disabled lifecycle, and abort/epoch invalidation (late GET after
-  submit is ignored).
+  session privacy-boundary change, unmount, disabled lifecycle, and
+  abort/epoch invalidation (late GET after submit is ignored).
+- Runtime fail-closed validation of hint GET JSON at `learnerHintPolicy.ts`
+  (attempt/version binding, allowlisted questions, hint text bounds).
 
 ## Tests
 

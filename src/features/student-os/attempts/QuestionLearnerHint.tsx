@@ -12,12 +12,14 @@ export function QuestionLearnerHint({
   questionId,
   questionNumber,
   enabled,
+  interactionEnabled,
   view,
   onRequest,
 }: {
   questionId: string;
   questionNumber: number;
   enabled: boolean;
+  interactionEnabled: boolean;
   view: LearnerHintViewState;
   onRequest: () => void;
 }) {
@@ -39,7 +41,7 @@ export function QuestionLearnerHint({
           view.status === "shown" || view.status === "empty" ? true : undefined
         }
         aria-busy={view.status === "loading"}
-        disabled={view.status === "loading"}
+        disabled={view.status === "loading" || !interactionEnabled}
         onClick={onRequest}
       >
         {view.status === "loading" ? "Loading hint…" : "Show hint"}

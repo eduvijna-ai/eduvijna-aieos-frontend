@@ -2,6 +2,8 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import {
+  connectDevSession,
+  DEV_SESSION,
   mockJsonResponse,
   mockProblemResponse,
   renderApp,
@@ -18,7 +20,9 @@ import {
 const HINTS_URL = `/api/v1/learning/attempts/${ATTEMPT_ID}/learner-hints`;
 
 function inProgressAttemptPageStub(
-  extra?: (call: { url: string; method: string }) => Response | undefined,
+  extra?: (
+    call: { url: string; method: string },
+  ) => Response | Promise<Response> | undefined,
 ) {
   return stubFetch((call) => {
     if (call.url === `/api/v1/learning/attempts/${ATTEMPT_ID}`) {
@@ -179,6 +183,173 @@ describe("Student attempt learner hints (PK-V1-HINT-F)", () => {
     expect(
       screen.queryByRole("button", { name: /Show hint for question/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("re-issues GET on repeated Show hint clicks", async () => {
+    const calls = inProgressAttemptPageStub((call) => {
+      if (call.url === HINTS_URL && call.method === "GET") {
+        return mockJsonResponse({
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [{ question_id: "q-tf", hint_text: "Fresh hint." }],
+        });
+      }
+      return undefined;
+    });
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    await screen.findByText("A leaf has veins.");
+    const show = screen.getAllByRole("button", { name: /Show hint for question/i })[0]!;
+    await userEvent.click(show);
+    await screen.findByText("Fresh hint.");
+    await userEvent.click(show);
+    await waitFor(() => {
+      expect(
+        calls.filter((call) => call.url === HINTS_URL && call.method === "GET"),
+      ).toHaveLength(2);
+    });
+  });
+
+  it.each([
+    [403, "forbidden"],
+    [404, "not_found"],
+    [409, "conflict"],
+    [422, "invalid"],
+    [500, "internal"],
+  ] as const)(
+    "shows safe error without retaining hints after HTTP %i",
+    async (status, code) => {
+      inProgressAttemptPageStub((call) => {
+        if (call.url === HINTS_URL) {
+          return mockProblemResponse(status, code);
+        }
+        return undefined;
+      });
+      renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+      await screen.findByText("A leaf has veins.");
+      await userEvent.click(
+        screen.getAllByRole("button", { name: /Show hint for question/i })[0]!,
+      );
+      expect(
+        await screen.findByText(/could not load a hint/i),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/about:blank/i)).not.toBeInTheDocument();
+    },
+  );
+
+  it("purges a prior hint when a later GET is denied", async () => {
+    let deny = false;
+    inProgressAttemptPageStub((call) => {
+      if (call.url === HINTS_URL) {
+        if (deny) {
+          return mockProblemResponse(403, "forbidden");
+        }
+        return mockJsonResponse({
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [{ question_id: "q-tf", hint_text: "First hint." }],
+        });
+      }
+      return undefined;
+    });
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    await screen.findByText("A leaf has veins.");
+    const show = screen.getAllByRole("button", { name: /Show hint for question/i })[0]!;
+    await userEvent.click(show);
+    await screen.findByText("First hint.");
+    deny = true;
+    await userEvent.click(show);
+    expect(await screen.findByText(/could not load a hint/i)).toBeInTheDocument();
+    expect(screen.queryByText("First hint.")).not.toBeInTheDocument();
+  });
+
+  it("fails closed on malformed hint payload", async () => {
+    inProgressAttemptPageStub((call) => {
+      if (call.url === HINTS_URL) {
+        return mockJsonResponse({
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [{ question_id: "q-tf", hint_text: { bad: true } }],
+        });
+      }
+      return undefined;
+    });
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    await screen.findByText("A leaf has veins.");
+    await userEvent.click(
+      screen.getAllByRole("button", { name: /Show hint for question/i })[0]!,
+    );
+    expect(await screen.findByText(/could not load a hint/i)).toBeInTheDocument();
+  });
+
+  it("clears revealed hint when dev session swaps without unmount", async () => {
+    inProgressAttemptPageStub((call) => {
+      if (call.url === HINTS_URL) {
+        return mockJsonResponse({
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [{ question_id: "q-tf", hint_text: "Student A private hint." }],
+        });
+      }
+      return undefined;
+    });
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    await screen.findByText("A leaf has veins.");
+    await userEvent.click(
+      screen.getAllByRole("button", { name: /Show hint for question/i })[0]!,
+    );
+    await screen.findByText("Student A private hint.");
+
+    connectDevSession({
+      ...DEV_SESSION,
+      bearerToken: "student-b-session-token",
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Student A private hint.")).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not start a hint GET while save is in flight", async () => {
+    let resolveSave: (() => void) | undefined;
+    const saveWait = new Promise<Response>((resolve) => {
+      resolveSave = () =>
+        resolve(
+          mockJsonResponse(sampleAttempt({ aggregate_revision: 2 }), {
+            etag: '"r2"',
+          }),
+        );
+    });
+
+    const calls = inProgressAttemptPageStub((call) => {
+      if (call.url.includes("/responses") && call.method === "PUT") {
+        return saveWait;
+      }
+      if (call.url === HINTS_URL) {
+        return mockJsonResponse({
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [{ question_id: "q-tf", hint_text: "Should not load." }],
+        });
+      }
+      return undefined;
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    await screen.findByText("A leaf has veins.");
+    await userEvent.click(
+      screen.getAllByRole("button", { name: /Show hint for question/i })[0]!,
+    );
+    await screen.findByText("Should not load.");
+    void userEvent.click(screen.getByRole("button", { name: /Save answers/i }));
+    const show = screen.getAllByRole("button", { name: /Show hint for question/i })[0]!;
+    await userEvent.click(show);
+    expect(
+      calls.filter((call) => call.url === HINTS_URL && call.method === "GET"),
+    ).toHaveLength(1);
+    resolveSave?.();
+    await waitFor(() => {
+      expect(screen.queryByText("Should not load.")).not.toBeInTheDocument();
+    });
   });
 
   it("does not expose hint UI on submitted historical attempts", async () => {

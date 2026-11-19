@@ -18,6 +18,9 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
   on-demand only, `cache: no-store`, version binding, submit/save purge;
   frontend mock contract tests only (not full-stack Hint E2E).
 
+- PK-V1-HINT-F-I01R1: Session privacy-boundary hint purge, save/submit in-flight
+  lockout, and fail-closed runtime hint JSON validation (`learnerHintPolicy`).
+
 - AIEOS360-S04-I03: Additive integrated cross-role real-stack E2E
   (`pnpm test:e2e:aieos360-s04-i03`, CI job `aieos360-s04-i03-e2e`) proving
   Teacher + Student + Principal + Parent against one coherent
