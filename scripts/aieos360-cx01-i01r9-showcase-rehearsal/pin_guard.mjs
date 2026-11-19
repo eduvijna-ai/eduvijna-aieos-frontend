@@ -48,21 +48,20 @@ export function verifyBackendTrackedTreeClean(backendRoot) {
 }
 
 export function verifyFrontendOpenApiPins() {
-  const openapiPath = join(
-    repoRoot,
-    "contracts/openapi/aieos-v1.consumer-snapshot.json",
+  const backendRoot = resolveBackendRoot();
+  const backendOpenapiPath = join(
+    backendRoot,
+    "contracts/openapi/aieos-v1.json",
   );
   const digest = createHash("sha256")
-    .update(readFileSync(openapiPath))
+    .update(readFileSync(backendOpenapiPath))
     .digest("hex")
     .toUpperCase();
   if (digest !== OPENAPI_AUTHORITY_SHA) {
     throw new Error(
-      `AIEOS360-CX01-I01R9 BLOCKED — OpenAPI SHA-256 ${digest} != ${OPENAPI_AUTHORITY_SHA}`,
+      `AIEOS360-CX01-I01R9 BLOCKED — Backend OpenAPI SHA-256 ${digest} != ${OPENAPI_AUTHORITY_SHA}`,
     );
   }
-
-  const backendRoot = resolveBackendRoot();
   const versionsDir = join(backendRoot, "migrations/versions");
   const files = readdirSync(versionsDir);
   const hasHead = files.some((name) => {
