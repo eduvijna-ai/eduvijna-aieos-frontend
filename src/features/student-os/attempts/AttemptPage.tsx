@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   getLearningAttempt,
+  getLearningAttemptLearnerHints,
   getStudentAssignment,
   saveLearningAttemptResponses,
   submitLearningAttempt,
@@ -31,6 +32,8 @@ import {
 import { studentMessageForApiError } from "../studentMessages";
 import { LearnerWork } from "./LearnerWork";
 import { ResponseEditor } from "./ResponseEditor";
+import type { LearnerHintViewState } from "./QuestionLearnerHint";
+import { verifyLearnerHintForQuestion } from "./learnerHintPolicy";
 import {
   ShowcaseBackLink,
   ShowcaseExternalHandoff,
@@ -90,6 +93,11 @@ export function AttemptPage() {
   const saveMaterialRef = useRef<string | null>(null);
   const submitKeyRef = useRef<string | null>(null);
   const submitMaterialRef = useRef<string | null>(null);
+  const hintGuardEpochRef = useRef(0);
+  const hintFetchAbortRef = useRef<AbortController | null>(null);
+  const [hintViews, setHintViews] = useState<Record<string, LearnerHintViewState>>(
+    {},
+  );
   const homeHref = useWithShowcase("/student-os/home");
   const assignmentPath = `/student-os/assignments/${attempt?.teaching_assignment_id ?? ""}`;
   const assignmentHref = useWithShowcase(
@@ -144,11 +152,101 @@ export function AttemptPage() {
     void load();
   }, [load]);
 
+  const purgeLearnerHints = useCallback(() => {
+    hintGuardEpochRef.current += 1;
+    hintFetchAbortRef.current?.abort();
+    hintFetchAbortRef.current = null;
+    setHintViews({});
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      purgeLearnerHints();
+    };
+  }, [purgeLearnerHints]);
+
+  useEffect(() => {
+    purgeLearnerHints();
+  }, [attemptId, purgeLearnerHints]);
+
   const readOnly = attempt?.lifecycle_state === "SUBMITTED";
-  const questions = assignment?.resource?.questions ?? [];
+  const questions = useMemo(
+    () => assignment?.resource?.questions ?? [],
+    [assignment?.resource?.questions],
+  );
+  const questionIds = useMemo(
+    () => questions.map((question) => question.id),
+    [questions],
+  );
+  const hintsEnabled =
+    attempt?.lifecycle_state === "IN_PROGRESS" && !readOnly;
+
+  useEffect(() => {
+    if (!hintsEnabled) {
+      purgeLearnerHints();
+    }
+  }, [hintsEnabled, purgeLearnerHints]);
+
+  const viewHintForQuestion = useCallback(
+    (questionId: string): LearnerHintViewState =>
+      hintViews[questionId] ?? { status: "idle" },
+    [hintViews],
+  );
+
+  const requestLearnerHint = useCallback(async (questionId: string) => {
+    if (!attempt || !hintsEnabled) {
+      return;
+    }
+    const requestEpoch = hintGuardEpochRef.current;
+    hintFetchAbortRef.current?.abort();
+    const abort = new AbortController();
+    hintFetchAbortRef.current = abort;
+    setHintViews({ [questionId]: { status: "loading" } });
+    try {
+      const result = await getLearningAttemptLearnerHints(attempt.attempt_id, {
+        signal: abort.signal,
+      });
+      if (
+        requestEpoch !== hintGuardEpochRef.current ||
+        abort.signal.aborted
+      ) {
+        return;
+      }
+      const verified = verifyLearnerHintForQuestion(result.data, {
+        attemptId: attempt.attempt_id,
+        contentVersionId: attempt.content_version_id,
+        questionId,
+        questionIds,
+      });
+      if (requestEpoch !== hintGuardEpochRef.current) {
+        return;
+      }
+      if (verified.kind === "hint") {
+        setHintViews({
+          [questionId]: { status: "shown", text: verified.text },
+        });
+        return;
+      }
+      if (verified.kind === "empty") {
+        setHintViews({ [questionId]: { status: "empty" } });
+        return;
+      }
+      setHintViews({ [questionId]: { status: "error" } });
+    } catch {
+      if (abort.signal.aborted || requestEpoch !== hintGuardEpochRef.current) {
+        return;
+      }
+      setHintViews({ [questionId]: { status: "error" } });
+    } finally {
+      if (hintFetchAbortRef.current === abort) {
+        hintFetchAbortRef.current = null;
+      }
+    }
+  }, [attempt, hintsEnabled, questionIds]);
 
   async function onSave() {
     if (!attempt || !etag) return;
+    purgeLearnerHints();
     setSaving(true);
     setActionError("");
     setStatusMessage("");
@@ -181,6 +279,7 @@ export function AttemptPage() {
 
   async function onSubmit() {
     if (!attempt || !etag) return;
+    purgeLearnerHints();
     setSubmitting(true);
     setActionError("");
     setStatusMessage("");
@@ -299,6 +398,17 @@ export function AttemptPage() {
           onChange={(questionId, answer) => {
             setAnswers((prev) => ({ ...prev, [questionId]: answer }));
           }}
+          learnerHints={
+            hintsEnabled
+              ? {
+                  enabled: true,
+                  viewForQuestion: viewHintForQuestion,
+                  onRequestHint: (questionId) => {
+                    void requestLearnerHint(questionId);
+                  },
+                }
+              : undefined
+          }
         />
       ) : (
         <SubmittedAnswerList attempt={attempt} />

@@ -38,11 +38,13 @@ const REQUIRED_OPERATION_IDS = [
   "learning_attempt_get",
   "learning_attempt_save_responses",
   "learning_attempt_submit",
+  "learning_attempt_learner_hints_get",
 ] as const;
 
 describe("AIEOS360-S01-I04 Student OS architecture", () => {
-  it("pins the AIEOS360-S01-I05-F1 OpenAPI digest", () => {
+  it("pins the PK-V1-HINT-F-I01 OpenAPI digest", () => {
     const sync = read("scripts/sync-openapi-snapshot.mjs");
+    expect(sync).toContain("e8c7154e7207ac1b39cef244b5084ae5cc1ae07b");
     expect(sync).toContain("3d25bb2d7ae3a6a95affdf075a75f20db48a6959");
     const digest = createHash("sha256")
       .update(
@@ -53,7 +55,7 @@ describe("AIEOS360-S01-I04 Student OS architecture", () => {
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "4042FB2725DA70A02A70EE09563B7698AE2E5DA82927614CAF1B5F7E6AA7C1D0",
+      "43F877E122389A7347DDB00D25F37D8BE8BD907F43FF6960E5DC6E794B1A0071",
     );
   });
 
@@ -69,6 +71,8 @@ describe("AIEOS360-S01-I04 Student OS architecture", () => {
     expect(api).toContain("/api/v1/student-os/assignments");
     expect(api).toContain("/api/v1/learning/assignments/");
     expect(api).toContain("/api/v1/learning/attempts/");
+    expect(api).toContain("/learner-hints");
+    expect(api).toContain("cache: \"no-store\"");
   });
 
   it("does not access PostgreSQL, PostgREST, NATS, audit, or Assessment Intelligence", () => {

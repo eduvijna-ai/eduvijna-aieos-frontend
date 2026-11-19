@@ -140,6 +140,7 @@ describe("AIEOS360-S03-I03 Parent OS architecture", () => {
 
   it("advances the active consumer snapshot while documenting S02-I03", () => {
     const sync = read("scripts/sync-openapi-snapshot.mjs");
+    expect(sync).toContain("e8c7154e7207ac1b39cef244b5084ae5cc1ae07b");
     expect(sync).toContain("138f37bfa7a44c33b206c6b78118154bbb9bc8eb");
     expect(sync).toContain("e2bfce86afece6772eaf7c2f1eb18e2dd2240f1b");
     const digest = createHash("sha256")
@@ -151,7 +152,7 @@ describe("AIEOS360-S03-I03 Parent OS architecture", () => {
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "4042FB2725DA70A02A70EE09563B7698AE2E5DA82927614CAF1B5F7E6AA7C1D0",
+      "43F877E122389A7347DDB00D25F37D8BE8BD907F43FF6960E5DC6E794B1A0071",
     );
   });
 });

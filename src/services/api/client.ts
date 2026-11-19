@@ -7,6 +7,8 @@ export type ApiRequestOptions = {
   query?: Record<string, string | number | null | undefined>;
   body?: unknown;
   headers?: Record<string, string>;
+  cache?: RequestCache;
+  signal?: AbortSignal;
   /** When false, omit Authorization / tenant headers even if session exists. */
   withSession?: boolean;
   sessionOverride?: DevSession | null;
@@ -72,6 +74,8 @@ export async function apiRequest<T>(
       headers,
       body:
         options.body === undefined ? undefined : JSON.stringify(options.body),
+      cache: options.cache,
+      signal: options.signal,
     });
   } catch (cause) {
     throw new ApiError("Network request failed", {

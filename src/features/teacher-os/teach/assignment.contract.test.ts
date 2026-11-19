@@ -68,7 +68,7 @@ describe("TOS-DEV10-I03 OpenAPI consumer contract", () => {
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "4042FB2725DA70A02A70EE09563B7698AE2E5DA82927614CAF1B5F7E6AA7C1D0",
+      "43F877E122389A7347DDB00D25F37D8BE8BD907F43FF6960E5DC6E794B1A0071",
     );
   });
 

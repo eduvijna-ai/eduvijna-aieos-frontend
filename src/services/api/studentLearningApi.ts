@@ -17,6 +17,7 @@ export type AttemptResponseWriteRequest =
   components["schemas"]["AttemptResponseWriteRequest"];
 export type AttemptResponsesReplaceRequest =
   components["schemas"]["AttemptResponsesReplaceRequest"];
+export type LearnerHintsResponse = components["schemas"]["LearnerHintsResponse"];
 
 export async function getStudentHome() {
   return apiRequest<StudentHomeResponse>("/api/v1/student-os/home", {
@@ -101,6 +102,20 @@ export async function submitLearningAttempt(
         "If-Match": etag,
         "Idempotency-Key": idempotencyKey,
       },
+    },
+  );
+}
+
+export async function getLearningAttemptLearnerHints(
+  attemptId: string,
+  options?: { signal?: AbortSignal },
+) {
+  return apiRequest<LearnerHintsResponse>(
+    `/api/v1/learning/attempts/${attemptId}/learner-hints`,
+    {
+      method: "GET",
+      cache: "no-store",
+      signal: options?.signal,
     },
   );
 }
