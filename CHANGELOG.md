@@ -21,6 +21,11 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PK-V1-HINT-F-I01R1: Session privacy-boundary hint purge, save/submit in-flight
   lockout, and fail-closed runtime hint JSON validation (`learnerHintPolicy`).
 
+- PK-V1-HINT-F-I01R2: Session **incarnation** boundary (drops 32-bit bearer
+  fingerprint), load-generation fences for attempt/assignment, ambiguous
+  save/submit hint fail-closed reauthorization, Unicode scalar hint length
+  (1–500).
+
 - AIEOS360-S04-I03: Additive integrated cross-role real-stack E2E
   (`pnpm test:e2e:aieos360-s04-i03`, CI job `aieos360-s04-i03-e2e`) proving
   Teacher + Student + Principal + Parent against one coherent

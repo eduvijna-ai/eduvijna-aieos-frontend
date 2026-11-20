@@ -23,10 +23,16 @@ persistence or analytics payload.
 - `attempt_id` and `content_version_id` in the response must match the loaded
   attempt; otherwise the body is discarded.
 - Hints purge on save/submit start, submit success, route/attempt change,
-  session privacy-boundary change, unmount, disabled lifecycle, and
-  abort/epoch invalidation (late GET after submit is ignored).
+  **connected session object incarnation** change (not bearer fingerprint),
+  unmount, disabled lifecycle, and abort/epoch invalidation (late GET after
+  submit is ignored).
+- Attempt/assignment loads use generation + session + route fences so late
+  responses cannot commit across session swaps (fail closed).
+- Ambiguous save/submit outcomes keep hints disabled until a fresh in-session
+  attempt read confirms `IN_PROGRESS`.
 - Runtime fail-closed validation of hint GET JSON at `learnerHintPolicy.ts`
-  (attempt/version binding, allowlisted questions, hint text bounds).
+  (attempt/version binding, allowlisted questions, hint text **Unicode scalar**
+  bounds 1–500).
 
 ## Tests
 

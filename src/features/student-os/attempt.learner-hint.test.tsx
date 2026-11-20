@@ -309,6 +309,32 @@ describe("Student attempt learner hints (PK-V1-HINT-F)", () => {
     });
   });
 
+  it("clears hints when dev session disconnects", async () => {
+    inProgressAttemptPageStub((call) => {
+      if (call.url === HINTS_URL) {
+        return mockJsonResponse({
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [{ question_id: "q-tf", hint_text: "Disconnect hint." }],
+        });
+      }
+      return undefined;
+    });
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    await screen.findByText("A leaf has veins.");
+    await userEvent.click(
+      screen.getAllByRole("button", { name: /Show hint for question/i })[0]!,
+    );
+    await screen.findByText("Disconnect hint.");
+    const { devSessionConnector } = await import(
+      "@/services/session/DevSessionConnector"
+    );
+    devSessionConnector?.disconnect();
+    await waitFor(() => {
+      expect(screen.queryByText("Disconnect hint.")).not.toBeInTheDocument();
+    });
+  });
+
   it("does not start a hint GET while save is in flight", async () => {
     let resolveSave: (() => void) | undefined;
     const saveWait = new Promise<Response>((resolve) => {
@@ -349,6 +375,329 @@ describe("Student attempt learner hints (PK-V1-HINT-F)", () => {
     resolveSave?.();
     await waitFor(() => {
       expect(screen.queryByText("Should not load.")).not.toBeInTheDocument();
+    });
+  });
+
+  it("clears revealed hint on fingerprint-collision session pair (session incarnation)", async () => {
+    const collisionA = {
+      ...DEV_SESSION,
+      bearerToken: "test-session-0000v",
+    };
+    const collisionB = {
+      ...DEV_SESSION,
+      bearerToken: "test-session-00060",
+    };
+
+    inProgressAttemptPageStub((call) => {
+      if (call.url === HINTS_URL) {
+        return mockJsonResponse({
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [{ question_id: "q-tf", hint_text: "Collision-session hint." }],
+        });
+      }
+      return undefined;
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`, collisionA);
+    await screen.findByText("A leaf has veins.");
+    await userEvent.click(
+      screen.getAllByRole("button", { name: /Show hint for question/i })[0]!,
+    );
+    await screen.findByText("Collision-session hint.");
+
+    connectDevSession(collisionB);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Collision-session hint.")).not.toBeInTheDocument();
+    });
+    expect(collisionA.bearerToken).not.toBe(collisionB.bearerToken);
+  });
+
+  it("clears hint when reconnecting the same bearer (new session object)", async () => {
+    inProgressAttemptPageStub((call) => {
+      if (call.url === HINTS_URL) {
+        return mockJsonResponse({
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [{ question_id: "q-tf", hint_text: "Incarnation hint." }],
+        });
+      }
+      return undefined;
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    await screen.findByText("A leaf has veins.");
+    await userEvent.click(
+      screen.getAllByRole("button", { name: /Show hint for question/i })[0]!,
+    );
+    await screen.findByText("Incarnation hint.");
+    connectDevSession({ ...DEV_SESSION });
+    await waitFor(() => {
+      expect(screen.queryByText("Incarnation hint.")).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not apply a late attempt GET from the prior session after swap", async () => {
+    let resolveFirstAttempt: ((response: Response) => void) | undefined;
+    const firstAttemptPending = new Promise<Response>((resolve) => {
+      resolveFirstAttempt = resolve;
+    });
+    let attemptGets = 0;
+
+    stubFetch((call) => {
+      if (
+        call.url === `/api/v1/learning/attempts/${ATTEMPT_ID}` &&
+        call.method === "GET"
+      ) {
+        attemptGets += 1;
+        if (attemptGets === 1) {
+          return firstAttemptPending;
+        }
+        return mockProblemResponse(404, "not_found");
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        return mockJsonResponse(
+          sampleAssignment({
+            attempt_summary: "IN_PROGRESS",
+            attempt_id: ATTEMPT_ID,
+          }),
+        );
+      }
+      return mockProblemResponse(404, "not_found");
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`, {
+      ...DEV_SESSION,
+      bearerToken: "test-session-0000v",
+    });
+    connectDevSession({
+      ...DEV_SESSION,
+      bearerToken: "test-session-00060",
+    });
+
+    resolveFirstAttempt?.(
+      mockJsonResponse(
+        sampleAttempt({
+          lifecycle_state: "SUBMITTED",
+          submitted_at: "2026-09-08T11:00:00Z",
+          submission_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          responses: [
+            {
+              question_id: "q-tf",
+              response_kind: "TRUE_FALSE",
+              boolean_value: true,
+              text_value: null,
+              choice_value: null,
+            },
+          ],
+        }),
+        { etag: '"r9"' },
+      ),
+    );
+
+    expect(
+      await screen.findByText(/Could not open this work/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Your submitted answers/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Submitted work/i)).not.toBeInTheDocument();
+  });
+
+  it("ignores a late assignment GET after session swap", async () => {
+    let resolveAssignment: ((response: Response) => void) | undefined;
+    const assignmentPending = new Promise<Response>((resolve) => {
+      resolveAssignment = resolve;
+    });
+    let assignmentGets = 0;
+
+    stubFetch((call) => {
+      if (call.url === `/api/v1/learning/attempts/${ATTEMPT_ID}`) {
+        return mockJsonResponse(sampleAttempt(), { etag: '"r0"' });
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        assignmentGets += 1;
+        if (assignmentGets === 1) {
+          return assignmentPending;
+        }
+        return mockProblemResponse(404, "not_found");
+      }
+      return mockProblemResponse(404, "not_found");
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    await screen.findByText(/Loading your work/i);
+    connectDevSession({
+      ...DEV_SESSION,
+      bearerToken: "other-learner-token",
+    });
+
+    resolveAssignment?.(mockJsonResponse(sampleAssignment()));
+
+    expect(
+      await screen.findByText(/Could not open this work/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("A leaf has veins.")).not.toBeInTheDocument();
+  });
+
+  it("keeps hints disabled when submit POST fails but server already submitted", async () => {
+    let current = sampleAttempt({ aggregate_revision: 1 });
+
+    stubFetch((call) => {
+      if (call.url === `/api/v1/learning/attempts/${ATTEMPT_ID}`) {
+        if (call.method === "GET") {
+          return mockJsonResponse(current, {
+            etag: `"r${current.aggregate_revision}"`,
+          });
+        }
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        return mockJsonResponse(
+          sampleAssignment({
+            attempt_summary: current.lifecycle_state,
+            attempt_id: ATTEMPT_ID,
+          }),
+        );
+      }
+      if (call.url.endsWith("/actions/submit") && call.method === "POST") {
+        current = sampleAttempt({
+          lifecycle_state: "SUBMITTED",
+          submitted_at: "2026-09-08T11:00:00Z",
+          submission_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          aggregate_revision: 2,
+        });
+        throw new TypeError("network reset");
+      }
+      return mockProblemResponse(404, "not_found");
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    await screen.findByRole("button", { name: /Submit work/i });
+    await userEvent.click(screen.getByRole("button", { name: /Submit work/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Yes, submit/i }));
+
+    await screen.findByText(/does not show a grade or score/i);
+    expect(
+      screen.queryByRole("button", { name: /Show hint for question/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps hints disabled when submit network error and re-read fails", async () => {
+    let submitAttempted = false;
+    stubFetch((call) => {
+      if (call.url === `/api/v1/learning/attempts/${ATTEMPT_ID}`) {
+        if (submitAttempted) {
+          return mockProblemResponse(500, "internal");
+        }
+        return mockJsonResponse(sampleAttempt(), { etag: '"r1"' });
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        return mockJsonResponse(
+          sampleAssignment({
+            attempt_summary: "IN_PROGRESS",
+            attempt_id: ATTEMPT_ID,
+          }),
+        );
+      }
+      if (call.url.endsWith("/actions/submit")) {
+        submitAttempted = true;
+        throw new TypeError("network reset");
+      }
+      if (call.url === HINTS_URL) {
+        return mockJsonResponse({
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [{ question_id: "q-tf", hint_text: "Should stay hidden." }],
+        });
+      }
+      return mockProblemResponse(404, "not_found");
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    const show = await screen.findAllByRole("button", {
+      name: /Show hint for question/i,
+    });
+    await screen.findByRole("button", { name: /Submit work/i });
+    await userEvent.click(screen.getByRole("button", { name: /Submit work/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Yes, submit/i }));
+    expect(
+      await screen.findByRole("alert"),
+    ).toBeInTheDocument();
+    await userEvent.click(show[0]!);
+    expect(screen.queryByText("Should stay hidden.")).not.toBeInTheDocument();
+  });
+
+  it("does not start a hint GET in the same submit flight", async () => {
+    let resolveSubmit: (() => void) | undefined;
+    const submitPending = new Promise<Response>((resolve) => {
+      resolveSubmit = () =>
+        resolve(
+          mockJsonResponse(
+            sampleAttempt({
+              lifecycle_state: "SUBMITTED",
+              submitted_at: "2026-09-08T11:00:00Z",
+              submission_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+            }),
+            { etag: '"r2"' },
+          ),
+        );
+    });
+
+    const calls = inProgressAttemptPageStub((call) => {
+      if (call.url.endsWith("/actions/submit") && call.method === "POST") {
+        return submitPending;
+      }
+      if (call.url === HINTS_URL) {
+        return mockJsonResponse({
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [{ question_id: "q-tf", hint_text: "Mid-submit hint." }],
+        });
+      }
+      return undefined;
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    await screen.findByText("A leaf has veins.");
+    await userEvent.click(screen.getByRole("button", { name: /Submit work/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Yes, submit/i }));
+    const show = screen.getAllByRole("button", { name: /Show hint for question/i })[0]!;
+    await userEvent.click(show);
+    expect(
+      calls.filter((call) => call.url === HINTS_URL && call.method === "GET"),
+    ).toHaveLength(0);
+    resolveSubmit?.();
+    await screen.findByText(/does not show a grade or score/i);
+  });
+
+  it("ignores a pending hint GET that resolves after session swap", async () => {
+    let resolveHint: (() => void) | undefined;
+    const hintPending = new Promise<Response>((resolve) => {
+      resolveHint = () =>
+        resolve(
+          mockJsonResponse({
+            attempt_id: ATTEMPT_ID,
+            content_version_id: CONTENT_VERSION_ID,
+            hints: [{ question_id: "q-tf", hint_text: "Late after swap." }],
+          }),
+        );
+    });
+
+    inProgressAttemptPageStub((call) => {
+      if (call.url === HINTS_URL) {
+        return hintPending;
+      }
+      return undefined;
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    await screen.findByText("A leaf has veins.");
+    void userEvent.click(
+      screen.getAllByRole("button", { name: /Show hint for question/i })[0]!,
+    );
+    connectDevSession({ ...DEV_SESSION, bearerToken: "swap-mid-hint" });
+    resolveHint?.();
+    await waitFor(() => {
+      expect(screen.queryByText("Late after swap.")).not.toBeInTheDocument();
     });
   });
 

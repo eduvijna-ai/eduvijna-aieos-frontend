@@ -1,20 +1,27 @@
-import type { DevSession } from "@/services/session/DevSessionConnector";
-
 export type VerifiedLearnerHintOutcome =
   | { kind: "hint"; text: string }
   | { kind: "empty" }
   | { kind: "mismatch" }
   | { kind: "invalid" };
 
-const HINT_TEXT_MIN_LEN = 1;
-const HINT_TEXT_MAX_LEN = 500;
+const HINT_TEXT_MIN_SCALARS = 1;
+const HINT_TEXT_MAX_SCALARS = 500;
+
+/** Unicode scalar count (not UTF-16 code units) per ADR-AIEOS-063 §5.1. */
+export function hintTextScalarCount(value: string): number {
+  return Array.from(value).length;
+}
 
 function normalizeHintText(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
   const trimmed = value.trim();
-  if (trimmed.length < HINT_TEXT_MIN_LEN || trimmed.length > HINT_TEXT_MAX_LEN) {
+  const scalarCount = hintTextScalarCount(trimmed);
+  if (
+    scalarCount < HINT_TEXT_MIN_SCALARS ||
+    scalarCount > HINT_TEXT_MAX_SCALARS
+  ) {
     return null;
   }
   return trimmed;
@@ -22,23 +29,6 @@ function normalizeHintText(value: unknown): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * Privacy-boundary key for dev sessions — never log or render; excludes raw bearer.
- */
-export function devSessionPrivacyBoundaryKey(
-  session: DevSession | null,
-): string | null {
-  if (!session) {
-    return null;
-  }
-  let fingerprint = 5381;
-  for (let i = 0; i < session.bearerToken.length; i++) {
-    fingerprint =
-      ((fingerprint << 5) + fingerprint) ^ session.bearerToken.charCodeAt(i);
-  }
-  return `${session.tenantId}\u0001${session.apiOrigin}\u0001${fingerprint}`;
 }
 
 export function verifyLearnerHintForQuestion(

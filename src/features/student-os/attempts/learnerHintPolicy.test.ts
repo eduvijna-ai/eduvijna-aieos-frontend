@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  devSessionPrivacyBoundaryKey,
+  hintTextScalarCount,
   verifyLearnerHintForQuestion,
 } from "./learnerHintPolicy";
 import {
@@ -8,17 +8,61 @@ import {
   CONTENT_VERSION_ID,
 } from "../studentOs.fixtures";
 
-describe("devSessionPrivacyBoundaryKey", () => {
-  it("changes when bearer token changes within the same tenant", () => {
-    const base = {
-      apiOrigin: "http://127.0.0.1:8080",
-      tenantId: "tenant-a",
-      bearerToken: "token-a",
+/** Retired 32-bit DJB2 fingerprint — documented collision only; not used for boundaries. */
+function legacyBearerFingerprint(token: string): number {
+  let fingerprint = 5381;
+  for (let i = 0; i < token.length; i++) {
+    fingerprint =
+      ((fingerprint << 5) + fingerprint) ^ token.charCodeAt(i);
+  }
+  return fingerprint;
+}
+
+const COLLISION_TOKEN_A = "test-session-0000v";
+const COLLISION_TOKEN_B = "test-session-00060";
+
+describe("hint text scalar contract", () => {
+  it("counts Unicode scalars, not UTF-16 code units", () => {
+    const fiveHundred = "😀".repeat(500);
+    expect(hintTextScalarCount(fiveHundred)).toBe(500);
+    const fiveHundredOne = "😀".repeat(501);
+    expect(hintTextScalarCount(fiveHundredOne)).toBe(501);
+  });
+
+  it("accepts 500 non-BMP scalars and rejects 501 in verification", () => {
+    const body500 = {
+      attempt_id: ATTEMPT_ID,
+      content_version_id: CONTENT_VERSION_ID,
+      hints: [{ question_id: "q-tf", hint_text: "😀".repeat(500) }],
     };
-    const other = { ...base, bearerToken: "token-b" };
-    expect(devSessionPrivacyBoundaryKey(base)).not.toBe(
-      devSessionPrivacyBoundaryKey(other),
+    expect(
+      verifyLearnerHintForQuestion(body500, {
+        attemptId: ATTEMPT_ID,
+        contentVersionId: CONTENT_VERSION_ID,
+        questionId: "q-tf",
+        questionIds: ["q-tf"],
+      }).kind,
+    ).toBe("hint");
+
+    const body501 = {
+      ...body500,
+      hints: [{ question_id: "q-tf", hint_text: "😀".repeat(501) }],
+    };
+    expect(
+      verifyLearnerHintForQuestion(body501, {
+        attemptId: ATTEMPT_ID,
+        contentVersionId: CONTENT_VERSION_ID,
+        questionId: "q-tf",
+        questionIds: ["q-tf"],
+      }).kind,
+    ).toBe("invalid");
+  });
+
+  it("documents the known 32-bit fingerprint collision pair", () => {
+    expect(legacyBearerFingerprint(COLLISION_TOKEN_A)).toBe(
+      legacyBearerFingerprint(COLLISION_TOKEN_B),
     );
+    expect(COLLISION_TOKEN_A).not.toBe(COLLISION_TOKEN_B);
   });
 });
 
