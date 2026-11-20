@@ -9,6 +9,27 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-F-I01: Optional in-attempt learner hints on Student OS
+  `AttemptPage` / `ResponseEditor` via
+  `GET /api/v1/learning/attempts/{attempt_id}/learner-hints`
+  (`learning_attempt_learner_hints_get`), consumer OpenAPI pin Backend
+  `e8c7154e7207ac1b39cef244b5084ae5cc1ae07b`, SHA-256
+  `43F877E122389A7347DDB00D25F37D8BE8BD907F43FF6960E5DC6E794B1A0071`;
+  on-demand only, `cache: no-store`, version binding, submit/save purge;
+  frontend mock contract tests only (not full-stack Hint E2E).
+
+- PK-V1-HINT-F-I01R1: Session privacy-boundary hint purge, save/submit in-flight
+  lockout, and fail-closed runtime hint JSON validation (`learnerHintPolicy`).
+
+- PK-V1-HINT-F-I01R2: Session **incarnation** boundary (drops 32-bit bearer
+  fingerprint), load-generation fences for attempt/assignment, ambiguous
+  save/submit hint fail-closed reauthorization, Unicode scalar hint length
+  (1–500).
+
+- PK-V1-HINT-F-I01R3: Ambiguous save/submit revalidation reconciles server
+  attempt metadata without clobbering unsaved in-session answer drafts;
+  `SUBMITTED` re-read still authoritative for displayed responses.
+
 - AIEOS360-S04-I03: Additive integrated cross-role real-stack E2E
   (`pnpm test:e2e:aieos360-s04-i03`, CI job `aieos360-s04-i03-e2e`) proving
   Teacher + Student + Principal + Parent against one coherent

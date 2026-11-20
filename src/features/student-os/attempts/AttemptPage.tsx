@@ -1,13 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   getLearningAttempt,
+  getLearningAttemptLearnerHints,
   getStudentAssignment,
   saveLearningAttemptResponses,
   submitLearningAttempt,
   type AttemptResponse,
   type StudentAssignmentResponse,
 } from "@/services/api/studentLearningApi";
+import type { DevSession } from "@/services/session/DevSessionConnector";
 import { useSession } from "@/services/session/useSession";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ErrorState } from "@/shared/components/ErrorState";
@@ -31,6 +40,8 @@ import {
 import { studentMessageForApiError } from "../studentMessages";
 import { LearnerWork } from "./LearnerWork";
 import { ResponseEditor } from "./ResponseEditor";
+import type { LearnerHintViewState } from "./QuestionLearnerHint";
+import { verifyLearnerHintForQuestion } from "./learnerHintPolicy";
 import {
   ShowcaseBackLink,
   ShowcaseExternalHandoff,
@@ -69,9 +80,58 @@ function SubmittedAnswerList({ attempt }: { attempt: AttemptResponse }) {
   );
 }
 
+type LoadFence = {
+  generation: number;
+  session: DevSession | null;
+  attemptId: string;
+};
+
+function draftAnswersEqual(
+  left: DraftAnswer | undefined,
+  right: DraftAnswer | undefined,
+): boolean {
+  return (
+    left?.choiceValue === right?.choiceValue &&
+    left?.textValue === right?.textValue &&
+    left?.booleanValue === right?.booleanValue
+  );
+}
+
+/** Retain unsaved in-session editor drafts when ambiguous re-read is still IN_PROGRESS. */
+function reconcileInProgressDrafts(
+  preserved: Record<string, DraftAnswer>,
+  serverResponses: AttemptResponse["responses"],
+): Record<string, DraftAnswer> {
+  const serverDrafts = draftsFromSavedResponses(serverResponses);
+  const merged: Record<string, DraftAnswer> = { ...serverDrafts };
+  for (const [questionId, localDraft] of Object.entries(preserved)) {
+    if (!draftAnswersEqual(localDraft, serverDrafts[questionId])) {
+      merged[questionId] = { ...localDraft };
+    }
+  }
+  return merged;
+}
+
 export function AttemptPage() {
   const { attemptId = "" } = useParams();
-  const { isConnected, isProduction } = useSession();
+  const { isConnected, isProduction, session } = useSession();
+  const sessionRef = useRef(session);
+  const attemptIdRef = useRef(attemptId);
+  useEffect(() => {
+    sessionRef.current = session;
+    attemptIdRef.current = attemptId;
+  }, [session, attemptId]);
+
+  const loadGenerationRef = useRef(0);
+  const [loadGeneration, setLoadGeneration] = useState(0);
+  const [acceptedGeneration, setAcceptedGeneration] = useState(-1);
+
+  const bumpLoadGeneration = useCallback(() => {
+    loadGenerationRef.current += 1;
+    setLoadGeneration(loadGenerationRef.current);
+    setAcceptedGeneration(-1);
+  }, []);
+
   const [status, setStatus] = useState<
     "loading" | "ready" | "error" | "unavailable"
   >("loading");
@@ -90,6 +150,20 @@ export function AttemptPage() {
   const saveMaterialRef = useRef<string | null>(null);
   const submitKeyRef = useRef<string | null>(null);
   const submitMaterialRef = useRef<string | null>(null);
+  const hintGuardEpochRef = useRef(0);
+  const hintFetchAbortRef = useRef<AbortController | null>(null);
+  const hintsMutationFenceRef = useRef(false);
+  const [hintsInteractionLocked, setHintsInteractionLocked] = useState(false);
+  const [hintsLifecycleAuthorized, setHintsLifecycleAuthorized] =
+    useState(false);
+  const [hintViews, setHintViews] = useState<Record<string, LearnerHintViewState>>(
+    {},
+  );
+  const activeHintSessionRef = useRef<DevSession | null>(null);
+  const sessionIncarnationTrackedRef = useRef<DevSession | null | undefined>(
+    undefined,
+  );
+
   const homeHref = useWithShowcase("/student-os/home");
   const assignmentPath = `/student-os/assignments/${attempt?.teaching_assignment_id ?? ""}`;
   const assignmentHref = useWithShowcase(
@@ -104,51 +178,360 @@ export function AttemptPage() {
       : null;
   }, [attempt]);
 
-  const applyAttempt = useCallback((data: AttemptResponse, nextEtag: string | null) => {
-    setAttempt(data);
-    setEtag(nextEtag ?? revisionEtag(data.aggregate_revision));
-    setAnswers(draftsFromSavedResponses(data.responses));
+  const loadFenceStale = useCallback(
+    (fence: LoadFence) =>
+      fence.generation !== loadGenerationRef.current ||
+      fence.session !== sessionRef.current ||
+      fence.attemptId !== attemptIdRef.current,
+    [],
+  );
+
+  const applyAttempt = useCallback(
+    (
+      data: AttemptResponse,
+      nextEtag: string | null,
+      options?: { reconcilePreservedDrafts?: Record<string, DraftAnswer> },
+    ) => {
+      setAttempt(data);
+      setEtag(nextEtag ?? revisionEtag(data.aggregate_revision));
+      if (
+        data.lifecycle_state === "IN_PROGRESS" &&
+        options?.reconcilePreservedDrafts
+      ) {
+        setAnswers(
+          reconcileInProgressDrafts(
+            options.reconcilePreservedDrafts,
+            data.responses,
+          ),
+        );
+      } else {
+        setAnswers(draftsFromSavedResponses(data.responses));
+      }
+    },
+    [],
+  );
+
+  const purgeLearnerHints = useCallback(() => {
+    hintGuardEpochRef.current += 1;
+    hintFetchAbortRef.current?.abort();
+    hintFetchAbortRef.current = null;
+    activeHintSessionRef.current = null;
+    setHintViews({});
   }, []);
+
+  const invalidateAttemptViewSync = useCallback(() => {
+    bumpLoadGeneration();
+    purgeLearnerHints();
+    setAttempt(null);
+    setAssignment(null);
+    setAnswers({});
+    setEtag(null);
+    setErrorMessage("");
+    setHintsLifecycleAuthorized(false);
+    setHintsInteractionLocked(false);
+    hintsMutationFenceRef.current = false;
+  }, [bumpLoadGeneration, purgeLearnerHints]);
+
+  useLayoutEffect(() => {
+    const prior = sessionIncarnationTrackedRef.current;
+    sessionIncarnationTrackedRef.current = session;
+    if (prior !== undefined && prior !== session) {
+      invalidateAttemptViewSync();
+      setStatus(isConnected || isProduction ? "loading" : "unavailable");
+    }
+  }, [session, invalidateAttemptViewSync, isConnected, isProduction]);
+
+  const priorAttemptRouteRef = useRef(attemptId);
+  useLayoutEffect(() => {
+    if (priorAttemptRouteRef.current !== attemptId) {
+      priorAttemptRouteRef.current = attemptId;
+      invalidateAttemptViewSync();
+      setStatus(isConnected || isProduction ? "loading" : "unavailable");
+    }
+  }, [attemptId, invalidateAttemptViewSync, isConnected, isProduction]);
+
+  useEffect(() => {
+    return () => {
+      purgeLearnerHints();
+    };
+  }, [purgeLearnerHints]);
 
   const load = useCallback(async () => {
     if (!isConnected && !isProduction) {
       setStatus("unavailable");
       setAttempt(null);
+      setAssignment(null);
+      setAcceptedGeneration(-1);
       return;
     }
+
+    const fence: LoadFence = {
+      generation: loadGenerationRef.current,
+      session: sessionRef.current,
+      attemptId: attemptIdRef.current,
+    };
+
     setStatus("loading");
     setErrorMessage("");
+    setAttempt(null);
+    setAssignment(null);
+    setAnswers({});
+    setEtag(null);
+    setAcceptedGeneration(-1);
+    setHintsLifecycleAuthorized(false);
+
     try {
-      const loaded = await getLearningAttempt(attemptId);
+      const loaded = await getLearningAttempt(fence.attemptId);
+      if (loadFenceStale(fence)) {
+        return;
+      }
       applyAttempt(loaded.data, loaded.etag);
       try {
         const assignmentResult = await getStudentAssignment(
           loaded.data.teaching_assignment_id,
         );
+        if (loadFenceStale(fence)) {
+          return;
+        }
         setAssignment(assignmentResult.data);
       } catch (assignmentError) {
+        if (loadFenceStale(fence)) {
+          return;
+        }
         if (loaded.data.lifecycle_state === "SUBMITTED") {
           setAssignment(null);
         } else {
           throw assignmentError;
         }
       }
+      if (loadFenceStale(fence)) {
+        return;
+      }
+      setAcceptedGeneration(fence.generation);
+      setHintsLifecycleAuthorized(loaded.data.lifecycle_state === "IN_PROGRESS");
       setStatus("ready");
     } catch (error) {
+      if (loadFenceStale(fence)) {
+        return;
+      }
       setErrorMessage(studentMessageForApiError(error));
       setStatus("error");
+      setAttempt(null);
+      setAssignment(null);
+      setAcceptedGeneration(-1);
+      setHintsLifecycleAuthorized(false);
     }
-  }, [applyAttempt, attemptId, isConnected, isProduction]);
+  }, [applyAttempt, isConnected, isProduction, loadFenceStale]);
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, loadGeneration, session, attemptId]);
+
+  const viewAuthorized =
+    status === "ready" &&
+    acceptedGeneration === loadGeneration &&
+    acceptedGeneration >= 0 &&
+    attempt !== null;
 
   const readOnly = attempt?.lifecycle_state === "SUBMITTED";
-  const questions = assignment?.resource?.questions ?? [];
+  const questions = useMemo(
+    () => assignment?.resource?.questions ?? [],
+    [assignment?.resource?.questions],
+  );
+  const questionIds = useMemo(
+    () => questions.map((question) => question.id),
+    [questions],
+  );
+  const hintsEnabled =
+    viewAuthorized &&
+    attempt?.lifecycle_state === "IN_PROGRESS" &&
+    !readOnly &&
+    hintsLifecycleAuthorized &&
+    !saving &&
+    !submitting &&
+    !hintsInteractionLocked;
+
+  useEffect(() => {
+    if (!hintsEnabled) {
+      purgeLearnerHints();
+    }
+  }, [hintsEnabled, purgeLearnerHints]);
+
+  const viewHintForQuestion = useCallback(
+    (questionId: string): LearnerHintViewState => {
+      if (
+        activeHintSessionRef.current !== sessionRef.current ||
+        !hintsEnabled
+      ) {
+        return { status: "idle" };
+      }
+      return hintViews[questionId] ?? { status: "idle" };
+    },
+    [hintViews, hintsEnabled],
+  );
+
+  const requestLearnerHint = useCallback(
+    async (questionId: string) => {
+      if (
+        !attempt ||
+        !hintsEnabled ||
+        hintsMutationFenceRef.current ||
+        saving ||
+        submitting ||
+        hintsInteractionLocked
+      ) {
+        return;
+      }
+      const requestEpoch = hintGuardEpochRef.current;
+      const requestSession = sessionRef.current;
+      hintFetchAbortRef.current?.abort();
+      const abort = new AbortController();
+      hintFetchAbortRef.current = abort;
+      activeHintSessionRef.current = requestSession;
+      setHintViews({ [questionId]: { status: "loading" } });
+      try {
+        const result = await getLearningAttemptLearnerHints(attempt.attempt_id, {
+          signal: abort.signal,
+        });
+        if (
+          requestEpoch !== hintGuardEpochRef.current ||
+          abort.signal.aborted ||
+          requestSession !== sessionRef.current
+        ) {
+          return;
+        }
+        const verified = verifyLearnerHintForQuestion(result.data as unknown, {
+          attemptId: attempt.attempt_id,
+          contentVersionId: attempt.content_version_id,
+          questionId,
+          questionIds,
+        });
+        if (
+          requestEpoch !== hintGuardEpochRef.current ||
+          requestSession !== sessionRef.current
+        ) {
+          return;
+        }
+        if (verified.kind === "hint") {
+          activeHintSessionRef.current = requestSession;
+          setHintViews({
+            [questionId]: { status: "shown", text: verified.text },
+          });
+          return;
+        }
+        if (verified.kind === "empty") {
+          activeHintSessionRef.current = requestSession;
+          setHintViews({ [questionId]: { status: "empty" } });
+          return;
+        }
+        activeHintSessionRef.current = requestSession;
+        setHintViews({ [questionId]: { status: "error" } });
+      } catch {
+        if (
+          abort.signal.aborted ||
+          requestEpoch !== hintGuardEpochRef.current ||
+          requestSession !== sessionRef.current
+        ) {
+          return;
+        }
+        setHintViews({ [questionId]: { status: "error" } });
+      } finally {
+        if (hintFetchAbortRef.current === abort) {
+          hintFetchAbortRef.current = null;
+        }
+      }
+    },
+    [
+      attempt,
+      hintsEnabled,
+      hintsInteractionLocked,
+      questionIds,
+      saving,
+      submitting,
+    ],
+  );
+
+  const revalidateAfterAmbiguousMutation = useCallback(
+    async (
+      fence: LoadFence,
+      preservedDrafts: Record<string, DraftAnswer>,
+    ) => {
+      try {
+        const loaded = await getLearningAttempt(fence.attemptId);
+        if (loadFenceStale(fence)) {
+          return;
+        }
+        applyAttempt(loaded.data, loaded.etag, {
+          reconcilePreservedDrafts:
+            loaded.data.lifecycle_state === "IN_PROGRESS"
+              ? preservedDrafts
+              : undefined,
+        });
+        try {
+          const assignmentResult = await getStudentAssignment(
+            loaded.data.teaching_assignment_id,
+          );
+          if (loadFenceStale(fence)) {
+            return;
+          }
+          setAssignment(assignmentResult.data);
+        } catch {
+          if (loadFenceStale(fence)) {
+            return;
+          }
+          if (loaded.data.lifecycle_state === "SUBMITTED") {
+            setAssignment(null);
+          } else {
+            setHintsLifecycleAuthorized(false);
+            setHintsInteractionLocked(true);
+            return;
+          }
+        }
+        if (loadFenceStale(fence)) {
+          return;
+        }
+        setAcceptedGeneration(fence.generation);
+        const inProgress = loaded.data.lifecycle_state === "IN_PROGRESS";
+        setHintsLifecycleAuthorized(inProgress);
+        setHintsInteractionLocked(!inProgress);
+        if (!inProgress) {
+          setConfirmingSubmit(false);
+          purgeLearnerHints();
+        }
+        setStatus("ready");
+      } catch {
+        if (loadFenceStale(fence)) {
+          return;
+        }
+        setHintsLifecycleAuthorized(false);
+        setHintsInteractionLocked(true);
+      }
+    },
+    [applyAttempt, loadFenceStale, purgeLearnerHints],
+  );
+
+  const mutationFence = useCallback(
+    () => ({
+      generation: loadGenerationRef.current,
+      session: sessionRef.current,
+      attemptId: attemptIdRef.current,
+    }),
+    [],
+  );
+
+  const mutationStillCurrent = useCallback(
+    (fence: LoadFence) => !loadFenceStale(fence),
+    [loadFenceStale],
+  );
 
   async function onSave() {
-    if (!attempt || !etag) return;
+    if (!attempt || !etag || !viewAuthorized) return;
+    const preservedDrafts = { ...answers };
+    const fence = mutationFence();
+    hintsMutationFenceRef.current = true;
+    setHintsInteractionLocked(true);
+    setHintsLifecycleAuthorized(false);
+    purgeLearnerHints();
     setSaving(true);
     setActionError("");
     setStatusMessage("");
@@ -163,6 +546,7 @@ export function AttemptPage() {
       saveKeyRef,
       saveMaterialRef,
     );
+    let needsRevalidate = false;
     try {
       const saved = await saveLearningAttemptResponses(
         attempt.attempt_id,
@@ -170,17 +554,41 @@ export function AttemptPage() {
         etag,
         key,
       );
+      if (!mutationStillCurrent(fence)) {
+        return;
+      }
       applyAttempt(saved.data, saved.etag);
       setStatusMessage("Answers saved.");
+      if (saved.data.lifecycle_state === "IN_PROGRESS") {
+        setHintsLifecycleAuthorized(true);
+        setHintsInteractionLocked(false);
+      } else {
+        setHintsLifecycleAuthorized(false);
+        setHintsInteractionLocked(true);
+      }
     } catch (error) {
+      if (!mutationStillCurrent(fence)) {
+        return;
+      }
       setActionError(studentMessageForApiError(error));
+      needsRevalidate = true;
     } finally {
       setSaving(false);
+      hintsMutationFenceRef.current = false;
+    }
+    if (needsRevalidate && mutationStillCurrent(fence)) {
+      await revalidateAfterAmbiguousMutation(fence, preservedDrafts);
     }
   }
 
   async function onSubmit() {
-    if (!attempt || !etag) return;
+    if (!attempt || !etag || !viewAuthorized) return;
+    const preservedDrafts = { ...answers };
+    const fence = mutationFence();
+    hintsMutationFenceRef.current = true;
+    setHintsInteractionLocked(true);
+    setHintsLifecycleAuthorized(false);
+    purgeLearnerHints();
     setSubmitting(true);
     setActionError("");
     setStatusMessage("");
@@ -193,24 +601,41 @@ export function AttemptPage() {
       submitKeyRef,
       submitMaterialRef,
     );
+    let ambiguousFailure = false;
     try {
       const submitted = await submitLearningAttempt(
         attempt.attempt_id,
         etag,
         key,
       );
+      if (!mutationStillCurrent(fence)) {
+        return;
+      }
       applyAttempt(submitted.data, submitted.etag);
       setConfirmingSubmit(false);
       setStatusMessage("Work submitted.");
+      setHintsLifecycleAuthorized(false);
+      setHintsInteractionLocked(true);
+      purgeLearnerHints();
     } catch (error) {
+      if (!mutationStillCurrent(fence)) {
+        return;
+      }
+      setActionError(studentMessageForApiError(error));
       if (error instanceof ApiError && error.code === "network") {
-        setActionError(studentMessageForApiError(error));
+        ambiguousFailure = true;
       } else {
-        setActionError(studentMessageForApiError(error));
         setConfirmingSubmit(false);
+        void load();
+        setHintsInteractionLocked(true);
+        setHintsLifecycleAuthorized(false);
       }
     } finally {
       setSubmitting(false);
+      hintsMutationFenceRef.current = false;
+    }
+    if (ambiguousFailure && mutationStillCurrent(fence)) {
+      await revalidateAfterAmbiguousMutation(fence, preservedDrafts);
     }
   }
 
@@ -227,7 +652,7 @@ export function AttemptPage() {
     return <LoadingState label="Loading your work…" />;
   }
 
-  if (status === "error" || !attempt) {
+  if (status === "error" || !attempt || !viewAuthorized) {
     return (
       <ErrorState
         title="Could not open this work"
@@ -299,6 +724,18 @@ export function AttemptPage() {
           onChange={(questionId, answer) => {
             setAnswers((prev) => ({ ...prev, [questionId]: answer }));
           }}
+          learnerHints={
+            attempt?.lifecycle_state === "IN_PROGRESS" && !readOnly
+              ? {
+                  enabled: true,
+                  interactionEnabled: hintsEnabled,
+                  viewForQuestion: viewHintForQuestion,
+                  onRequestHint: (questionId) => {
+                    void requestLearnerHint(questionId);
+                  },
+                }
+              : undefined
+          }
         />
       ) : (
         <SubmittedAnswerList attempt={attempt} />

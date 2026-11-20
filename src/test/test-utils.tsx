@@ -497,6 +497,7 @@ export type FetchCall = {
   method: string;
   headers: Headers;
   body: unknown;
+  cache?: RequestCache;
 };
 
 /** Record every request the app makes so header and body contracts can be asserted. */
@@ -515,6 +516,7 @@ export function stubFetch(
           typeof init?.body === "string"
             ? (JSON.parse(init.body) as unknown)
             : undefined,
+        cache: init?.cache,
       };
       calls.push(call);
       return handler(call);

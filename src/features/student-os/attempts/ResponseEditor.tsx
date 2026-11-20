@@ -1,17 +1,28 @@
 import type { LearnerQuestionResponse } from "@/services/api/studentLearningApi";
 import { questionKindLabel } from "../assignmentPresentation";
 import type { DraftAnswer } from "../attemptIdempotency";
+import {
+  QuestionLearnerHint,
+  type LearnerHintViewState,
+} from "./QuestionLearnerHint";
 
 export function ResponseEditor({
   questions,
   answers,
   readOnly,
   onChange,
+  learnerHints,
 }: {
   questions: readonly LearnerQuestionResponse[];
   answers: Record<string, DraftAnswer>;
   readOnly: boolean;
   onChange: (questionId: string, answer: DraftAnswer) => void;
+  learnerHints?: {
+    enabled: boolean;
+    interactionEnabled: boolean;
+    viewForQuestion: (questionId: string) => LearnerHintViewState;
+    onRequestHint: (questionId: string) => void;
+  };
 }) {
   if (questions.length === 0) {
     return <p className="muted">This work has no questions to answer.</p>;
@@ -37,6 +48,16 @@ export function ResponseEditor({
                   {questionKindLabel(question.question_type)}
                 </p>
               </div>
+              {learnerHints ? (
+                <QuestionLearnerHint
+                  questionId={question.id}
+                  questionNumber={index + 1}
+                  enabled={learnerHints.enabled}
+                  interactionEnabled={learnerHints.interactionEnabled}
+                  view={learnerHints.viewForQuestion(question.id)}
+                  onRequest={() => learnerHints.onRequestHint(question.id)}
+                />
+              ) : null}
               {question.question_type === "MULTIPLE_CHOICE" ? (
                 <ul className="sos-options" role="list">
                   {question.options.map((option) => (
