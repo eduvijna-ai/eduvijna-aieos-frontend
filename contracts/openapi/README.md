@@ -10,16 +10,26 @@ This directory holds a **consumer snapshot** of the AIEOS HTTP contract for fron
 - The file `aieos-v1.consumer-snapshot.json` in this frontend repo is **NON-AUTHORITATIVE**.
   It must not be treated as the source of truth for API behaviour.
 
-## Snapshot provenance (PK-V1-HINT-F-I01)
+## Snapshot provenance (PK-V1-HINT-T0-F-I01)
 
 | Field | Value |
 |-------|--------|
 | Source repo | `eduvijna-aieos-backend` |
 | Source path | `contracts/openapi/aieos-v1.json` |
-| Source SHA | `e8c7154e7207ac1b39cef244b5084ae5cc1ae07b` |
-| Authoritative OpenAPI SHA-256 | `43F877E122389A7347DDB00D25F37D8BE8BD907F43FF6960E5DC6E794B1A0071` |
+| Source SHA | `5bbc09bc895407b71a61f9ba86a7209ff9c10ffa` |
+| Authoritative OpenAPI SHA-256 | `0061BCF6065FAFA184F196829A87AF98ADEDFCE6B633D45704141A5B48045D22` |
 | Consumer file | `contracts/openapi/aieos-v1.consumer-snapshot.json` |
-| Consumer file SHA-256 | `43F877E122389A7347DDB00D25F37D8BE8BD907F43FF6960E5DC6E794B1A0071` |
+| Consumer file SHA-256 | `0061BCF6065FAFA184F196829A87AF98ADEDFCE6B633D45704141A5B48045D22` |
+
+T0 Teacher Hint authoring / attestation operations at this SHA:
+
+| Operation ID | Method | Path |
+|--------------|--------|------|
+| `content_worksheet_hint_version_append` | POST | `/api/v1/contents/{content_id}/worksheet-learner-hint-versions` |
+| `content_worksheet_hint_attestation_record` | POST | `/api/v1/contents/{content_id}/versions/{version_id}/actions/record-worksheet-hint-attestation` |
+
+Previous pin (PK-V1-HINT-F-I01): source SHA `e8c7154e7207ac1b39cef244b5084ae5cc1ae07b`;
+OpenAPI SHA-256 `43F877E122389A7347DDB00D25F37D8BE8BD907F43FF6960E5DC6E794B1A0071`.
 
 Previous pin (AIEOS360-S03-I03): source SHA `138f37bfa7a44c33b206c6b78118154bbb9bc8eb`;
 OpenAPI SHA-256 `4042FB2725DA70A02A70EE09563B7698AE2E5DA82927614CAF1B5F7E6AA7C1D0`.
@@ -184,7 +194,7 @@ AIEOS_BACKEND_OPENAPI_SHA=138f37bfa7a44c33b206c6b78118154bbb9bc8eb \
 Verify the consumer file hash after sync:
 
 ```bash
-# Expected: 43F877E122389A7347DDB00D25F37D8BE8BD907F43FF6960E5DC6E794B1A0071
+# Expected: 0061BCF6065FAFA184F196829A87AF98ADEDFCE6B633D45704141A5B48045D22
 ```
 
 See `scripts/sync-openapi-snapshot.mjs` for how to refresh from a known backend checkout/SHA.

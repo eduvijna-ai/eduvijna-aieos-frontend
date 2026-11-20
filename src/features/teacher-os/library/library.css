@@ -36,6 +36,33 @@
   flex-wrap: wrap;
 }
 
+.library-field-hint {
+  display: block;
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.library-hint-editor {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.library-hint-row textarea {
+  width: 100%;
+  min-height: 4.5rem;
+}
+
+.library-hint-issue {
+  color: var(--color-danger, #b00020);
+  margin: 0.25rem 0 0;
+}
+
+.library-hint-preview {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-3);
+}
+
 .library-meta {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));

@@ -9,6 +9,15 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-T0-F-I01: Teacher Library worksheet learner-hint authoring
+  (`WorksheetHintAuthorPage`) and Review structured attestation
+  (`WorksheetHintReviewPanel`); consumer OpenAPI pin Backend
+  `5bbc09bc895407b71a61f9ba86a7209ff9c10ffa`, SHA-256
+  `0061BCF6065FAFA184F196829A87AF98ADEDFCE6B633D45704141A5B48045D22`;
+  guarded `content_worksheet_hint_version_append` and
+  `content_worksheet_hint_attestation_record`; explicit submit-for-review;
+  no auto publish or full-stack Hint E2E.
+
 - PK-V1-HINT-F-I01: Optional in-attempt learner hints on Student OS
   `AttemptPage` / `ResponseEditor` via
   `GET /api/v1/learning/attempts/{attempt_id}/learner-hints`

@@ -1,9 +1,11 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { getContent } from "@/services/api/contentApi";
 import {
   getReviewQueueDetail,
   postReviewDecision,
 } from "@/services/api/reviewQueueApi";
+import { WorksheetHintReviewPanel } from "./WorksheetHintReviewPanel";
 import type { TeacherReviewQueueDetail } from "@/services/api/generated/reviewTypes";
 import { useSession } from "@/services/session/useSession";
 import { ApiError, userMessageForApiError } from "@/shared/errors/ApiError";
@@ -37,6 +39,8 @@ export function ReviewDetailPage() {
   const { isConnected, isProduction } = useSession();
   const [detail, setDetail] = useState<TeacherReviewQueueDetail | null>(null);
   const [etag, setEtag] = useState<string | null>(null);
+  const [contentEtag, setContentEtag] = useState<string | null>(null);
+  const [attestationRecorded, setAttestationRecorded] = useState(false);
   const [status, setStatus] = useState<
     "loading" | "ready" | "error" | "unavailable"
   >("loading");
@@ -60,9 +64,13 @@ export function ReviewDetailPage() {
     }
     setErrorMessage("");
     try {
-      const response = await getReviewQueueDetail(contentId, versionId);
+      const [response, contentResponse] = await Promise.all([
+        getReviewQueueDetail(contentId, versionId),
+        getContent(contentId),
+      ]);
       setDetail(response.data);
       setEtag(response.etag);
+      setContentEtag(contentResponse.etag);
       setStatus("ready");
     } catch (error) {
       setErrorMessage(userMessageForApiError(error));
@@ -72,6 +80,7 @@ export function ReviewDetailPage() {
 
   useEffect(() => {
     setActionMessage("");
+    setAttestationRecorded(false);
   }, [contentId, versionId]);
 
   useEffect(() => {
@@ -227,6 +236,17 @@ export function ReviewDetailPage() {
             />
           </section>
 
+          <WorksheetHintReviewPanel
+            contentId={contentId}
+            versionId={versionId}
+            schemaId={detail.schema_id}
+            schemaVersion={detail.schema_version}
+            payload={detail.payload}
+            contentEtag={contentEtag}
+            disabled={busy}
+            onAttestationRecorded={() => setAttestationRecorded(true)}
+          />
+
           <section
             className="panel review-decision"
             aria-labelledby="actions-heading"
@@ -238,6 +258,9 @@ export function ReviewDetailPage() {
             <p className="muted">
               Approval confirms this version is ready. Publishing remains a
               separate step.
+              {attestationRecorded
+                ? " Structured hint attestation is recorded for this review session."
+                : null}
             </p>
             <div className="review-actions">
               <button

@@ -156,6 +156,14 @@ export function LibraryDetailPage() {
                 Review
               </Link>
             ) : null}
+            {detail.content_type === "worksheet" ? (
+              <Link
+                className="btn btn-secondary"
+                to={`/teacher-os/library/${contentId}/learner-hints`}
+              >
+                Author learner hints
+              </Link>
+            ) : null}
           </div>
           {version ? (
             <div className="library-artifact" data-testid="library-artifact">

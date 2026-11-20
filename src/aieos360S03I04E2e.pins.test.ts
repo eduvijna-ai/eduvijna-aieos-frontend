@@ -14,6 +14,9 @@ const I04_BACKEND = "138f37bfa7a44c33b206c6b78118154bbb9bc8eb";
 const I04_OPENAPI =
   "4042FB2725DA70A02A70EE09563B7698AE2E5DA82927614CAF1B5F7E6AA7C1D0";
 const HINT_F_BACKEND = "e8c7154e7207ac1b39cef244b5084ae5cc1ae07b";
+const T0_HINT_BACKEND = "5bbc09bc895407b71a61f9ba86a7209ff9c10ffa";
+const T0_OPENAPI_SHA =
+  "0061BCF6065FAFA184F196829A87AF98ADEDFCE6B633D45704141A5B48045D22";
 const I04_ALEMBIC = "a360s010004";
 
 const S02_I04_FRONTEND_BASE = "4b28e6b499c4593b7d962fe1ed867c2137d43bc7";
@@ -214,9 +217,8 @@ describe("AIEOS360-S03-I04-E2E pin and architecture consistency", () => {
 
     const i03Pins = read("src/aieos360S03I03.pins.test.ts");
     expect(i03Pins).toContain(HINT_F_BACKEND);
-    expect(i03Pins).toContain(
-      "43F877E122389A7347DDB00D25F37D8BE8BD907F43FF6960E5DC6E794B1A0071",
-    );
+    expect(i03Pins).toContain(HINT_F_BACKEND);
+    expect(i03Pins).toContain(T0_OPENAPI_SHA);
     expect(i03Pins).toContain(I03_FRONTEND_BASE);
     expect(i03Pins).toContain(I04_ARCHITECTURE);
     expect(i03Pins).not.toContain(I04_FRONTEND_BASE);
@@ -236,6 +238,7 @@ describe("AIEOS360-S03-I04-E2E pin and architecture consistency", () => {
     expect(ci).toContain("pnpm test:e2e:student-product");
 
     const sync = read("scripts/sync-openapi-snapshot.mjs");
-    expect(sync).toContain(`const PINNED_SHA = "${HINT_F_BACKEND}"`);
+    expect(sync).toContain(`const PINNED_SHA = "${T0_HINT_BACKEND}"`);
+    expect(sync).toContain(HINT_F_BACKEND);
   });
 });
