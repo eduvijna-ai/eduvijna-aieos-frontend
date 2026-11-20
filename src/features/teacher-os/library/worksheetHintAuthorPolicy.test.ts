@@ -7,6 +7,8 @@ import {
   listHintedWorksheetQuestions,
   parseWorksheetHintSource,
   validateDraftHintText,
+  worksheetHintPayloadHasInvalidLearnerHintKey,
+  worksheetQuestionCountEligibleForHintAuthoring,
 } from "./worksheetHintAuthorPolicy";
 
 describe("worksheetHintAuthorPolicy", () => {
@@ -47,6 +49,25 @@ describe("worksheetHintAuthorPolicy", () => {
       explanation: "Any even numerator/denominator pair can work.",
     });
     expect(copy.ok).toBe(false);
+  });
+
+  it("flags invalid learner_hint keys for reviewer fail-closed handling", () => {
+    const invalid = {
+      ...worksheetPayload,
+      questions: worksheetPayload.questions.map((question, index) =>
+        index === 0 ? { ...question, learner_hint: "" } : question,
+      ),
+    };
+    expect(worksheetHintPayloadHasInvalidLearnerHintKey(invalid)).toMatch(
+      /invalid learner_hint/i,
+    );
+  });
+
+  it("requires between six and twelve questions for authoring eligibility", () => {
+    expect(worksheetQuestionCountEligibleForHintAuthoring(6)).toBe(true);
+    expect(worksheetQuestionCountEligibleForHintAuthoring(12)).toBe(true);
+    expect(worksheetQuestionCountEligibleForHintAuthoring(5)).toBe(false);
+    expect(worksheetQuestionCountEligibleForHintAuthoring(13)).toBe(false);
   });
 
   it("counts appendable hints and lists hinted questions", () => {

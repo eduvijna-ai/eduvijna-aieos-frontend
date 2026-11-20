@@ -9,6 +9,8 @@ export type WorksheetLearnerHintAttestationRecordResponse =
   components["schemas"]["WorksheetLearnerHintAttestationRecordResponse"];
 export type ContentVersionResponse =
   components["schemas"]["ContentVersionResponse"];
+export type ReviewSubmissionResponse =
+  components["schemas"]["ReviewSubmissionResponse"];
 
 export async function postWorksheetLearnerHintVersionAppend(
   contentId: string,
@@ -60,7 +62,7 @@ export async function postContentSubmitForReview(
   idempotencyKey: string,
   signal?: AbortSignal,
 ) {
-  return apiRequest<ContentVersionResponse>(
+  return apiRequest<ReviewSubmissionResponse>(
     `/api/v1/contents/${contentId}/versions/${versionId}/actions/submit-for-review`,
     {
       method: "POST",

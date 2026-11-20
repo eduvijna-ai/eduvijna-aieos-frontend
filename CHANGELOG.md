@@ -18,6 +18,12 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
   `content_worksheet_hint_attestation_record`; explicit submit-for-review;
   no auto publish or full-stack Hint E2E.
 
+- PK-V1-HINT-T0-F-I01R1: Privacy and workflow correction on Draft PR #51 —
+  conditional review Content GET, session-fenced review/author mutations, draft
+  retention on 412, attestation checklist reset, submit-for-review
+  `ReviewSubmissionResponse` typing, and discriminating unit tests (no OpenAPI
+  pin change).
+
 - PK-V1-HINT-F-I01: Optional in-attempt learner hints on Student OS
   `AttemptPage` / `ResponseEditor` via
   `GET /api/v1/learning/attempts/{attempt_id}/learner-hints`

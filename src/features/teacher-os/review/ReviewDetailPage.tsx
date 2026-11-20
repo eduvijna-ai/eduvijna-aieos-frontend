@@ -1,12 +1,23 @@
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getContent } from "@/services/api/contentApi";
 import {
   getReviewQueueDetail,
   postReviewDecision,
 } from "@/services/api/reviewQueueApi";
-import { WorksheetHintReviewPanel } from "./WorksheetHintReviewPanel";
+import {
+  WorksheetHintReviewPanel,
+  worksheetHintReviewRequired,
+} from "./WorksheetHintReviewPanel";
 import type { TeacherReviewQueueDetail } from "@/services/api/generated/reviewTypes";
+import type { DevSession } from "@/services/session/DevSessionConnector";
 import { useSession } from "@/services/session/useSession";
 import { ApiError, userMessageForApiError } from "@/shared/errors/ApiError";
 import { EmptyState } from "@/shared/components/EmptyState";
@@ -27,19 +38,65 @@ import "./review.css";
 
 type ActionMode = "idle" | "request-changes" | "reject";
 
+type LoadFence = {
+  generation: number;
+  session: DevSession | null;
+  contentId: string;
+  versionId: string;
+};
+
+type MutationFence = {
+  generation: number;
+  session: DevSession | null;
+  contentId: string;
+  versionId: string;
+};
+
 const OUT_OF_DATE_MESSAGE =
   "This page is out of date. Reload and try again.";
 const STALE_DECISION_MESSAGE =
   "This resource was updated elsewhere. We've loaded the latest version. Review it and try again.";
 
+function mutationFenceStale(
+  fence: MutationFence,
+  generation: number,
+  session: DevSession | null,
+  contentId: string,
+  versionId: string,
+): boolean {
+  return (
+    fence.generation !== generation ||
+    fence.session !== session ||
+    fence.contentId !== contentId ||
+    fence.versionId !== versionId
+  );
+}
+
 export function ReviewDetailPage() {
   const { contentId = "", versionId = "" } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { isConnected, isProduction } = useSession();
+  const { isConnected, isProduction, session } = useSession();
+  const sessionRef = useRef(session);
+  const contentIdRef = useRef(contentId);
+  const versionIdRef = useRef(versionId);
+  useEffect(() => {
+    sessionRef.current = session;
+    contentIdRef.current = contentId;
+    versionIdRef.current = versionId;
+  }, [session, contentId, versionId]);
+
+  const loadGenerationRef = useRef(0);
+  const [loadGeneration, setLoadGeneration] = useState(0);
+  const bumpLoadGeneration = useCallback(() => {
+    loadGenerationRef.current += 1;
+    setLoadGeneration(loadGenerationRef.current);
+  }, []);
+
   const [detail, setDetail] = useState<TeacherReviewQueueDetail | null>(null);
   const [etag, setEtag] = useState<string | null>(null);
   const [contentEtag, setContentEtag] = useState<string | null>(null);
+  const [viewFence, setViewFence] = useState<LoadFence | null>(null);
   const [attestationRecorded, setAttestationRecorded] = useState(false);
   const [status, setStatus] = useState<
     "loading" | "ready" | "error" | "unavailable"
@@ -53,39 +110,127 @@ export function ReviewDetailPage() {
 
   const workReturnPath = safeWorkReturnPath(searchParams.get("fromWork"));
 
-  const loadDetail = useCallback(async (options?: { silent?: boolean }) => {
-    if (!contentId || !versionId) return;
-    if (!isConnected && !isProduction) {
-      setStatus("unavailable");
-      return;
-    }
-    if (!options?.silent) {
-      setStatus("loading");
-    }
-    setErrorMessage("");
-    try {
-      const [response, contentResponse] = await Promise.all([
-        getReviewQueueDetail(contentId, versionId),
-        getContent(contentId),
-      ]);
-      setDetail(response.data);
-      setEtag(response.etag);
-      setContentEtag(contentResponse.etag);
-      setStatus("ready");
-    } catch (error) {
-      setErrorMessage(userMessageForApiError(error));
-      setStatus("error");
-    }
-  }, [contentId, versionId, isConnected, isProduction]);
-
-  useEffect(() => {
-    setActionMessage("");
+  const purgeReviewState = useCallback(() => {
+    setDetail(null);
+    setEtag(null);
+    setContentEtag(null);
+    setViewFence(null);
     setAttestationRecorded(false);
-  }, [contentId, versionId]);
+    setMode("idle");
+    setComment("");
+    setRejectConfirmed(false);
+    setActionMessage("");
+    setErrorMessage("");
+  }, []);
+
+  const loadFenceStale = useCallback((fence: LoadFence) => {
+    return (
+      fence.generation !== loadGenerationRef.current ||
+      fence.session !== sessionRef.current ||
+      fence.contentId !== contentIdRef.current ||
+      fence.versionId !== versionIdRef.current
+    );
+  }, []);
+
+  const viewAuthorized =
+    viewFence !== null &&
+    viewFence.generation === loadGeneration &&
+    viewFence.session === session &&
+    viewFence.contentId === contentId &&
+    viewFence.versionId === versionId;
+
+  const invalidateReviewSync = useCallback(() => {
+    bumpLoadGeneration();
+    purgeReviewState();
+  }, [bumpLoadGeneration, purgeReviewState]);
+
+  const priorIdentityRef = useRef<{
+    session: DevSession | null;
+    contentId: string;
+    versionId: string;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const prior = priorIdentityRef.current;
+    const next = { session, contentId, versionId };
+    priorIdentityRef.current = next;
+    if (
+      prior !== null &&
+      (prior.session !== session ||
+        prior.contentId !== contentId ||
+        prior.versionId !== versionId)
+    ) {
+      invalidateReviewSync();
+      setStatus(isConnected || isProduction ? "loading" : "unavailable");
+    }
+  }, [
+    session,
+    contentId,
+    versionId,
+    invalidateReviewSync,
+    isConnected,
+    isProduction,
+  ]);
+
+  const loadDetail = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!contentId || !versionId) return;
+      if (!isConnected && !isProduction) {
+        setStatus("unavailable");
+        return;
+      }
+      const fence: LoadFence = {
+        generation: loadGenerationRef.current,
+        session: sessionRef.current,
+        contentId,
+        versionId,
+      };
+      if (!options?.silent) {
+        setStatus("loading");
+      }
+      setErrorMessage("");
+      try {
+        const response = await getReviewQueueDetail(contentId, versionId);
+        if (loadFenceStale(fence)) return;
+
+        const reviewDetail = response.data;
+        const needsContentEtag = worksheetHintReviewRequired(
+          reviewDetail.schema_id,
+          reviewDetail.schema_version,
+          reviewDetail.payload,
+        );
+
+        let aggregateEtag: string | null = null;
+        if (needsContentEtag) {
+          try {
+            const contentResponse = await getContent(contentId);
+            if (loadFenceStale(fence)) return;
+            aggregateEtag = contentResponse.etag;
+          } catch (contentError) {
+            if (loadFenceStale(fence)) return;
+            setErrorMessage(userMessageForApiError(contentError));
+            setStatus("error");
+            return;
+          }
+        }
+
+        if (loadFenceStale(fence)) return;
+        setDetail(reviewDetail);
+        setEtag(response.etag);
+        setContentEtag(aggregateEtag);
+        setViewFence({ ...fence });
+        setStatus("ready");
+      } catch (error) {
+        if (loadFenceStale(fence)) return;
+        setErrorMessage(userMessageForApiError(error));
+        setStatus("error");
+      }
+    },
+    [contentId, versionId, isConnected, isProduction, loadFenceStale],
+  );
 
   useEffect(() => {
     void loadDetail();
-  }, [loadDetail]);
+  }, [loadDetail, loadGeneration]);
 
   function returnAfterDecision(action: "approve" | "request-changes" | "reject") {
     if (workReturnPath) {
@@ -117,12 +262,40 @@ export function ReviewDetailPage() {
       setActionMessage(OUT_OF_DATE_MESSAGE);
       return;
     }
+    const startFence: MutationFence = {
+      generation: loadGenerationRef.current,
+      session: sessionRef.current,
+      contentId,
+      versionId,
+    };
     setBusy(true);
     setActionMessage("");
     try {
       await postReviewDecision(contentId, versionId, action, body, etag);
+      if (
+        mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+          versionIdRef.current,
+        )
+      ) {
+        return;
+      }
       returnAfterDecision(action);
     } catch (error) {
+      if (
+        mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+          versionIdRef.current,
+        )
+      ) {
+        return;
+      }
       if (error instanceof ApiError && error.code === "precondition_failed") {
         setActionMessage(STALE_DECISION_MESSAGE);
         await loadDetail({ silent: true });
@@ -130,7 +303,17 @@ export function ReviewDetailPage() {
         setActionMessage(userMessageForApiError(error));
       }
     } finally {
-      setBusy(false);
+      if (
+        !mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+          versionIdRef.current,
+        )
+      ) {
+        setBusy(false);
+      }
     }
   }
 
@@ -190,10 +373,10 @@ export function ReviewDetailPage() {
           <h1>{pageTitle}</h1>
           {statusLabel ? <StatusBadge label={statusLabel} /> : null}
         </div>
-        {detail ? (
+        {viewAuthorized && detail ? (
           <h2 className="review-hero-resource">{detail.title}</h2>
         ) : null}
-        {detail ? (
+        {viewAuthorized && detail ? (
           <p className="muted review-hero-meta">
             {origin ? `${origin} · ` : null}
             Version {detail.version_number}
@@ -221,7 +404,7 @@ export function ReviewDetailPage() {
         ) : null}
       </div>
 
-      {status === "ready" && detail ? (
+      {status === "ready" && viewAuthorized && detail ? (
         <>
           <section
             className="panel review-document"
@@ -243,8 +426,14 @@ export function ReviewDetailPage() {
             schemaVersion={detail.schema_version}
             payload={detail.payload}
             contentEtag={contentEtag}
+            session={session}
+            resourceGeneration={loadGeneration}
             disabled={busy}
-            onAttestationRecorded={() => setAttestationRecorded(true)}
+            onAttestationRecorded={() => {
+              if (viewFence && !loadFenceStale(viewFence)) {
+                setAttestationRecorded(true);
+              }
+            }}
           />
 
           <section

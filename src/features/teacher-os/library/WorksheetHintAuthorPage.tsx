@@ -31,6 +31,7 @@ import {
   parseWorksheetHintSource,
   validateDraftHintText,
   WORKSHEET_HINT_SCHEMA_VERSION,
+  worksheetQuestionCountEligibleForHintAuthoring,
 } from "./worksheetHintAuthorPolicy";
 import "./library.css";
 
@@ -40,8 +41,30 @@ type LoadFence = {
   contentId: string;
 };
 
+type MutationFence = {
+  generation: number;
+  session: DevSession | null;
+  contentId: string;
+  sourceVersionId: string | null;
+};
+
+function mutationFenceStale(
+  fence: MutationFence,
+  generation: number,
+  session: DevSession | null,
+  contentId: string,
+): boolean {
+  return (
+    fence.generation !== generation ||
+    fence.session !== session ||
+    fence.contentId !== contentId
+  );
+}
+
 const OUT_OF_DATE_MESSAGE =
-  "This worksheet changed elsewhere. We've reloaded the latest version.";
+  "This worksheet changed elsewhere. Reload the latest source and reconcile your unsaved hints before trying again.";
+const AMBIGUOUS_APPEND_MESSAGE =
+  "The save result is uncertain. Your draft is still here — reload or retry only after checking the latest version.";
 
 export function WorksheetHintAuthorPage() {
   const { contentId = "" } = useParams();
@@ -92,7 +115,10 @@ export function WorksheetHintAuthorPage() {
   const appendMaterialRef = useRef<string | null>(null);
   const submitKeyRef = useRef<string | null>(null);
   const submitVersionRef = useRef<string | null>(null);
-  const sessionTrackedRef = useRef<DevSession | null | undefined>(undefined);
+  const submitMaterialRef = useRef<string | null>(null);
+  const appendInFlightRef = useRef(false);
+  const submitInFlightRef = useRef(false);
+  const createdMaterialRef = useRef<string | null>(null);
 
   const appendMaterialFingerprint = useMemo(
     () =>
@@ -137,9 +163,10 @@ export function WorksheetHintAuthorPage() {
     setStatusMessage("");
   }, [bumpLoadGeneration, purgeAuthorState]);
 
+  const priorSessionRef = useRef<DevSession | null | undefined>(undefined);
   useLayoutEffect(() => {
-    const prior = sessionTrackedRef.current;
-    sessionTrackedRef.current = session;
+    const prior = priorSessionRef.current;
+    priorSessionRef.current = session;
     if (prior !== undefined && prior !== session) {
       invalidateAuthorSync();
       setStatus(isConnected || isProduction ? "loading" : "unavailable");
@@ -155,7 +182,44 @@ export function WorksheetHintAuthorPage() {
     }
   }, [contentId, invalidateAuthorSync, isConnected, isProduction]);
 
-  const load = useCallback(async () => {
+  const reloadMetadataPreservingDrafts = useCallback(
+    async (draftSnapshot: Record<string, string>) => {
+      const fence: LoadFence = {
+        generation: loadGenerationRef.current,
+        session: sessionRef.current,
+        contentId,
+      };
+      try {
+        const [, contentResponse] = await Promise.all([
+          getLibraryItem(contentId),
+          getContent(contentId),
+        ]);
+        if (loadFenceStale(fence)) return;
+        const versionId = contentResponse.data.current_version_id;
+        if (!versionId) return;
+        const versionResponse = await getLibraryVersion(contentId, versionId);
+        if (loadFenceStale(fence)) return;
+        const version = versionResponse.data;
+        if (version.content_id !== contentId || version.version_id !== versionId) {
+          return;
+        }
+        setContentEtag(contentResponse.etag);
+        setCurrentVersionId(versionId);
+        const reparsed = parseWorksheetHintSource(version.payload);
+        if (reparsed.ok) {
+          setSourcePayload(reparsed.payload);
+        }
+        setHintDrafts(draftSnapshot);
+      } catch {
+        if (!loadFenceStale(fence)) {
+          setStatusMessage(OUT_OF_DATE_MESSAGE);
+        }
+      }
+    },
+    [contentId, loadFenceStale],
+  );
+
+  const load = useCallback(async (options?: { preserveDrafts?: Record<string, string> }) => {
     if (!isConnected && !isProduction) {
       setStatus("unavailable");
       return;
@@ -184,10 +248,12 @@ export function WorksheetHintAuthorPage() {
 
       const detail = libraryResponse.data;
       const content = contentResponse.data;
-      const versionId = content.current_version_id ?? detail.current_version_id;
+      const versionId = content.current_version_id;
       if (!versionId) {
         setStatus("error");
-        setErrorMessage("This worksheet has no current version to author from.");
+        setErrorMessage(
+          "This worksheet has no authoritative current version to author from.",
+        );
         return;
       }
 
@@ -195,6 +261,11 @@ export function WorksheetHintAuthorPage() {
       if (loadFenceStale(fence)) return;
 
       const version = versionResponse.data;
+      if (version.content_id !== contentId || version.version_id !== versionId) {
+        setStatus("error");
+        setErrorMessage("Worksheet version binding does not match this content.");
+        return;
+      }
       if (
         !libraryItemEligibleForHintAuthoring(
           detail.content_type,
@@ -215,6 +286,13 @@ export function WorksheetHintAuthorPage() {
         setErrorMessage(parsed.reason);
         return;
       }
+      if (!worksheetQuestionCountEligibleForHintAuthoring(parsed.questionIds.length)) {
+        setStatus("error");
+        setErrorMessage(
+          "This worksheet must have between 6 and 12 questions to author learner hints.",
+        );
+        return;
+      }
 
       const questionMap: Record<string, Record<string, unknown>> = {};
       const ids: string[] = [];
@@ -229,13 +307,22 @@ export function WorksheetHintAuthorPage() {
         }
       }
 
-      const drafts: Record<string, string> = {};
-      for (const id of ids) {
-        const existing = questionMap[id]?.learner_hint;
-        if (typeof existing === "string" && existing.trim()) {
-          drafts[id] = existing.trim();
-        } else {
-          drafts[id] = "";
+      const preserved = options?.preserveDrafts;
+      const drafts: Record<string, string> = preserved ? { ...preserved } : {};
+      if (!preserved) {
+        for (const id of ids) {
+          const existing = questionMap[id]?.learner_hint;
+          if (typeof existing === "string" && existing.trim()) {
+            drafts[id] = existing.trim();
+          } else {
+            drafts[id] = "";
+          }
+        }
+      } else {
+        for (const id of ids) {
+          if (!(id in drafts)) {
+            drafts[id] = "";
+          }
         }
       }
 
@@ -246,6 +333,9 @@ export function WorksheetHintAuthorPage() {
       setQuestionIds(ids);
       setQuestionsById(questionMap);
       setHintDrafts(drafts);
+      setCreatedVersionId(null);
+      setCreatedContentEtag(null);
+      createdMaterialRef.current = null;
       setClasses(classesResponse.data.items);
       setStatus("ready");
     } catch (error) {
@@ -258,6 +348,23 @@ export function WorksheetHintAuthorPage() {
   useEffect(() => {
     void load();
   }, [load, loadGeneration]);
+
+  useEffect(() => {
+    if (
+      createdMaterialRef.current !== null &&
+      createdMaterialRef.current !== appendMaterialFingerprint
+    ) {
+      setCreatedVersionId(null);
+      setCreatedContentEtag(null);
+      submitKeyRef.current = null;
+      submitVersionRef.current = null;
+      submitMaterialRef.current = null;
+      createdMaterialRef.current = null;
+      setStatusMessage(
+        "Hint or class changed after the last created version. Create a new version before submitting.",
+      );
+    }
+  }, [appendMaterialFingerprint]);
 
   function onHintChange(questionId: string, value: string) {
     setHintDrafts((prev) => ({ ...prev, [questionId]: value }));
@@ -290,7 +397,8 @@ export function WorksheetHintAuthorPage() {
     validHintCount >= 1 && Boolean(classRef.trim()) && !hasBlockingIssues;
 
   async function onCreateHintVersion() {
-    if (!sourcePayload || !contentEtag || !classRef.trim()) {
+    if (appendInFlightRef.current) return;
+    if (!sourcePayload || !contentEtag || !classRef.trim() || !currentVersionId) {
       setStatusMessage("Select a class and add at least one valid hint.");
       return;
     }
@@ -303,6 +411,7 @@ export function WorksheetHintAuthorPage() {
       return;
     }
 
+    const draftSnapshot = { ...hintDrafts };
     const bodyPayload = buildWorksheetHintAppendPayload(sourcePayload, hintDrafts);
     const material = appendMaterialFingerprint;
     if (
@@ -313,6 +422,16 @@ export function WorksheetHintAuthorPage() {
       appendMaterialRef.current = material;
     }
 
+    const startFence: MutationFence = {
+      generation: loadGenerationRef.current,
+      session: sessionRef.current,
+      contentId,
+      sourceVersionId: currentVersionId,
+    };
+    const idempotencyKey = appendKeyRef.current;
+    const etagAtStart = contentEtag;
+
+    appendInFlightRef.current = true;
     setBusyAppend(true);
     setStatusMessage("");
     try {
@@ -322,56 +441,148 @@ export function WorksheetHintAuthorPage() {
           authoring_class_ref: classRef.trim(),
           payload: bodyPayload,
         },
-        contentEtag,
-        appendKeyRef.current,
+        etagAtStart,
+        idempotencyKey,
       );
       if (
-        sessionRef.current !== sessionTrackedRef.current ||
-        contentIdRef.current !== contentId
+        mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+        )
       ) {
         return;
       }
+      createdMaterialRef.current = material;
       setCreatedVersionId(response.data.version_id);
       setCreatedContentEtag(response.etag);
       setStatusMessage(
         `Created hint-bearing worksheet version ${response.data.version_number}. Submit it for independent review when ready.`,
       );
     } catch (error) {
+      if (
+        mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+        )
+      ) {
+        return;
+      }
       if (error instanceof ApiError && error.code === "precondition_failed") {
         setStatusMessage(OUT_OF_DATE_MESSAGE);
-        await load();
+        await reloadMetadataPreservingDrafts(draftSnapshot);
+        return;
+      }
+      const isTransport =
+        error instanceof ApiError &&
+        (error.status === 0 ||
+          error.code === "network" ||
+          (error.status !== null && error.status >= 500));
+      if (isTransport || !(error instanceof ApiError)) {
+        try {
+          const contentResponse = await getContent(contentId);
+          if (
+            mutationFenceStale(
+              startFence,
+              loadGenerationRef.current,
+              sessionRef.current,
+              contentIdRef.current,
+            )
+          ) {
+            return;
+          }
+          const nextVersionId = contentResponse.data.current_version_id;
+          if (nextVersionId && nextVersionId !== startFence.sourceVersionId) {
+            setStatusMessage(
+              "A new worksheet version may exist. Review the latest source before creating another version.",
+            );
+            await reloadMetadataPreservingDrafts(draftSnapshot);
+            return;
+          }
+        } catch {
+          if (
+            mutationFenceStale(
+              startFence,
+              loadGenerationRef.current,
+              sessionRef.current,
+              contentIdRef.current,
+            )
+          ) {
+            return;
+          }
+        }
+        setStatusMessage(AMBIGUOUS_APPEND_MESSAGE);
+        setHintDrafts(draftSnapshot);
         return;
       }
       setStatusMessage(userMessageForApiError(error));
     } finally {
-      setBusyAppend(false);
+      if (
+        !mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+        )
+      ) {
+        appendInFlightRef.current = false;
+        setBusyAppend(false);
+      }
     }
   }
 
   async function onSubmitForReview() {
-    if (!createdVersionId || !createdContentEtag) {
+    if (submitInFlightRef.current) return;
+    if (!createdVersionId || !createdContentEtag || !createdMaterialRef.current) {
       setStatusMessage("Create the hint-bearing version before submitting.");
+      return;
+    }
+    if (createdMaterialRef.current !== appendMaterialFingerprint) {
+      setStatusMessage(
+        "Current hints do not match the created version. Create a new version first.",
+      );
       return;
     }
     if (
       submitVersionRef.current !== createdVersionId ||
+      submitMaterialRef.current !== appendMaterialFingerprint ||
       !submitKeyRef.current
     ) {
       submitKeyRef.current = crypto.randomUUID();
       submitVersionRef.current = createdVersionId;
+      submitMaterialRef.current = appendMaterialFingerprint;
     }
+    const startFence: MutationFence = {
+      generation: loadGenerationRef.current,
+      session: sessionRef.current,
+      contentId,
+      sourceVersionId: createdVersionId,
+    };
+    const submitKey = submitKeyRef.current;
+    const etagForSubmit = createdContentEtag;
+    const versionForSubmit = createdVersionId;
+    const draftSnapshot = { ...hintDrafts };
+
+    submitInFlightRef.current = true;
     setBusySubmitReview(true);
     setStatusMessage("");
     try {
       await postContentSubmitForReview(
         contentId,
-        createdVersionId,
-        createdContentEtag,
-        submitKeyRef.current,
+        versionForSubmit,
+        etagForSubmit,
+        submitKey,
       );
       if (
-        sessionRef.current !== sessionTrackedRef.current ||
-        contentIdRef.current !== contentId
+        mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+        )
       ) {
         return;
       }
@@ -379,14 +590,34 @@ export function WorksheetHintAuthorPage() {
         "Submitted for independent review. Approval and publishing remain separate steps.",
       );
     } catch (error) {
+      if (
+        mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+        )
+      ) {
+        return;
+      }
       if (error instanceof ApiError && error.code === "precondition_failed") {
         setStatusMessage(OUT_OF_DATE_MESSAGE);
-        await load();
+        await reloadMetadataPreservingDrafts(draftSnapshot);
         return;
       }
       setStatusMessage(userMessageForApiError(error));
     } finally {
-      setBusySubmitReview(false);
+      if (
+        !mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+        )
+      ) {
+        submitInFlightRef.current = false;
+        setBusySubmitReview(false);
+      }
     }
   }
 

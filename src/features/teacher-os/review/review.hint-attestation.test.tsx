@@ -93,6 +93,57 @@ describe("Worksheet hint attestation review", () => {
   });
 
   it("does not show hint attestation panel for hint-free worksheets", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (
+        url.includes("/teacher-os/review-queue/") &&
+        !url.endsWith("review-queue")
+      ) {
+        return mockJsonResponse(sampleDetail, { etag: '"r2"' });
+      }
+      return mockJsonResponse({ items: [] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderApp(detailPath);
+    await screen.findByRole("heading", { name: sampleQueueItem.title });
+    expect(screen.queryByTestId("worksheet-hint-review")).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some((call) =>
+        String(call[0]).endsWith(`/api/v1/contents/${CONTENT_ID}`),
+      ),
+    ).toBe(false);
+  });
+
+  it("resets attestation checkboxes when the reviewed version changes", async () => {
+    const versionA = {
+      ...hintedDetail,
+      version_number: 2,
+      payload: {
+        ...hintPayload,
+        questions: hintPayload.questions.map(
+          (question: (typeof hintPayload.questions)[number], index: number) =>
+            index === 0
+              ? { ...question, learner_hint: "Version A hint." }
+              : question,
+        ),
+      },
+    };
+    const versionB = {
+      ...hintedDetail,
+      version_number: 3,
+      payload: {
+        ...hintPayload,
+        questions: hintPayload.questions.map(
+          (question: (typeof hintPayload.questions)[number], index: number) =>
+            index === 0
+              ? { ...question, learner_hint: "Version B hint." }
+              : question,
+        ),
+      },
+    };
+
+    let activeDetail = versionA;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -101,11 +152,11 @@ describe("Worksheet hint attestation review", () => {
           url.includes("/teacher-os/review-queue/") &&
           !url.endsWith("review-queue")
         ) {
-          return mockJsonResponse(sampleDetail, { etag: '"r2"' });
+          return mockJsonResponse(activeDetail, { etag: '"r2"' });
         }
         if (url.endsWith(`/api/v1/contents/${CONTENT_ID}`)) {
           return mockJsonResponse(
-            { content_id: CONTENT_ID },
+            { content_id: CONTENT_ID, current_version_id: VERSION_ID },
             { etag: '"r9"' },
           );
         }
@@ -113,8 +164,22 @@ describe("Worksheet hint attestation review", () => {
       }),
     );
 
+    const { unmount } = renderApp(detailPath);
+    await screen.findByTestId("worksheet-hint-review");
+    const checkboxes = screen.getAllByRole("checkbox");
+    for (const checkbox of checkboxes) {
+      await userEvent.click(checkbox);
+    }
+    expect(
+      screen.getByRole("button", { name: /Record structured attestation/i }),
+    ).toBeEnabled();
+
+    activeDetail = versionB;
+    unmount();
     renderApp(detailPath);
-    await screen.findByRole("heading", { name: sampleQueueItem.title });
-    expect(screen.queryByTestId("worksheet-hint-review")).not.toBeInTheDocument();
+    await screen.findByTestId("worksheet-hint-review");
+    expect(
+      screen.getByRole("button", { name: /Record structured attestation/i }),
+    ).toBeDisabled();
   });
 });

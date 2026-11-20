@@ -22,6 +22,16 @@ Operations: `content_worksheet_hint_version_append`,
 - `/teacher-os/library/:contentId/learner-hints` — authoring
 - Review detail unchanged path; hint panel inline for hint-bearing `@2` worksheets
 
+## I01R1 privacy and workflow
+
+- Review detail loads Content aggregate ETag only for hint-bearing worksheet `@2`.
+- Session-object, route, and generation fences guard review detail, attestation,
+  and authoring append/submit; stale async responses cannot update a new session.
+- Authoring preserves in-memory hint drafts across recoverable 412/revalidation;
+  ambiguous append outcomes re-read Content when safe or stay UNCERTAIN with drafts.
+- Attestation checklists reset on version/payload/session change; invalid
+  `learner_hint` keys fail closed in review.
+
 ## Out of scope
 
 Production grants, Backend edits, Student hint GET changes, full Hint E2E,

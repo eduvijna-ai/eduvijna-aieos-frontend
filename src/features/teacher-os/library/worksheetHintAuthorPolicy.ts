@@ -137,6 +137,18 @@ export function worksheetSchemaEligible(
   );
 }
 
+export const WORKSHEET_HINT_AUTHOR_MIN_QUESTIONS = 6;
+export const WORKSHEET_HINT_AUTHOR_MAX_QUESTIONS = 12;
+
+export function worksheetQuestionCountEligibleForHintAuthoring(
+  questionCount: number,
+): boolean {
+  return (
+    questionCount >= WORKSHEET_HINT_AUTHOR_MIN_QUESTIONS &&
+    questionCount <= WORKSHEET_HINT_AUTHOR_MAX_QUESTIONS
+  );
+}
+
 export function libraryItemEligibleForHintAuthoring(
   contentType: string,
   schemaId: string | null | undefined,
@@ -202,9 +214,32 @@ export type HintedWorksheetQuestion = {
   hintText: string;
 };
 
+export function worksheetHintPayloadHasInvalidLearnerHintKey(
+  payload: unknown,
+): string | null {
+  if (!isRecord(payload) || !Array.isArray(payload.questions)) {
+    return "Worksheet payload is not valid for hint review.";
+  }
+  for (const question of payload.questions) {
+    if (!isRecord(question)) {
+      return "A worksheet question is malformed.";
+    }
+    if (!("learner_hint" in question)) continue;
+    const hintText = normalizeStoredHintText(question.learner_hint);
+    if (!hintText) {
+      const id = asTrimmedString(question.id) ?? "unknown";
+      return `Question ${id} has an invalid learner_hint value.`;
+    }
+  }
+  return null;
+}
+
 export function listHintedWorksheetQuestions(
   payload: unknown,
 ): HintedWorksheetQuestion[] | null {
+  if (worksheetHintPayloadHasInvalidLearnerHintKey(payload)) {
+    return null;
+  }
   if (!isRecord(payload) || !Array.isArray(payload.questions)) {
     return null;
   }
@@ -236,8 +271,36 @@ export function worksheetPayloadRequiresHintReview(
 ): boolean {
   if (!worksheetSchemaEligible(schemaId, schemaVersion)) return false;
   if (schemaVersion !== WORKSHEET_HINT_SCHEMA_VERSION) return false;
+  if (worksheetHintPayloadHasInvalidLearnerHintKey(payload)) return false;
   const hinted = listHintedWorksheetQuestions(payload);
   return hinted !== null && hinted.length > 0;
+}
+
+export type HintReviewPanelMode =
+  | { kind: "hidden" }
+  | { kind: "invalid"; reason: string }
+  | { kind: "review" };
+
+export function resolveHintReviewPanelMode(
+  schemaId: string | null | undefined,
+  schemaVersion: number | null | undefined,
+  payload: unknown,
+): HintReviewPanelMode {
+  if (!worksheetSchemaEligible(schemaId, schemaVersion)) {
+    return { kind: "hidden" };
+  }
+  if (schemaVersion !== WORKSHEET_HINT_SCHEMA_VERSION) {
+    return { kind: "hidden" };
+  }
+  const invalidReason = worksheetHintPayloadHasInvalidLearnerHintKey(payload);
+  if (invalidReason) {
+    return { kind: "invalid", reason: invalidReason };
+  }
+  const hinted = listHintedWorksheetQuestions(payload);
+  if (hinted !== null && hinted.length > 0) {
+    return { kind: "review" };
+  }
+  return { kind: "hidden" };
 }
 
 export function hintIssueMessage(issue: HintFieldIssue): string {

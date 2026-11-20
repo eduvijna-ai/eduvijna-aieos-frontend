@@ -1,11 +1,20 @@
-import { useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   listHintedWorksheetQuestions,
-  worksheetPayloadRequiresHintReview,
+  resolveHintReviewPanelMode,
   type HintedWorksheetQuestion,
 } from "@/features/teacher-os/library/worksheetHintAuthorPolicy";
 import { postWorksheetLearnerHintAttestation } from "@/services/api/worksheetHintAuthoringApi";
+import type { DevSession } from "@/services/session/DevSessionConnector";
 import { ApiError, userMessageForApiError } from "@/shared/errors/ApiError";
+import { ErrorState } from "@/shared/components/ErrorState";
 
 export type HintAttestationCheckState = {
   hardBlockClear: boolean;
@@ -19,8 +28,19 @@ type WorksheetHintReviewPanelProps = {
   schemaVersion: number | null | undefined;
   payload: unknown;
   contentEtag: string | null;
+  session: DevSession | null;
+  resourceGeneration: number;
   onAttestationRecorded: () => void;
   disabled?: boolean;
+};
+
+type ResourceIdentity = {
+  contentId: string;
+  versionId: string;
+  contentEtag: string | null;
+  payloadRef: unknown;
+  session: DevSession | null;
+  resourceGeneration: number;
 };
 
 export function worksheetHintReviewRequired(
@@ -28,7 +48,8 @@ export function worksheetHintReviewRequired(
   schemaVersion: number | null | undefined,
   payload: unknown,
 ): boolean {
-  return worksheetPayloadRequiresHintReview(schemaId, schemaVersion, payload);
+  return resolveHintReviewPanelMode(schemaId, schemaVersion, payload).kind ===
+    "review";
 }
 
 export function WorksheetHintReviewPanel({
@@ -38,13 +59,20 @@ export function WorksheetHintReviewPanel({
   schemaVersion,
   payload,
   contentEtag,
+  session,
+  resourceGeneration,
   onAttestationRecorded,
   disabled = false,
 }: WorksheetHintReviewPanelProps) {
+  const panelMode = resolveHintReviewPanelMode(schemaId, schemaVersion, payload);
   const hintedQuestions = useMemo(
-    () => listHintedWorksheetQuestions(payload) ?? [],
-    [payload],
+    () =>
+      panelMode.kind === "review"
+        ? (listHintedWorksheetQuestions(payload) ?? [])
+        : [],
+    [panelMode.kind, payload],
   );
+
   const [checks, setChecks] = useState<Record<string, HintAttestationCheckState>>(
     {},
   );
@@ -52,10 +80,58 @@ export function WorksheetHintReviewPanel({
   const [busy, setBusy] = useState(false);
   const idempotencyKeyRef = useRef<string | null>(null);
   const bindRef = useRef<string | null>(null);
+  const sessionRef = useRef(session);
+  const resourceGenerationRef = useRef(resourceGeneration);
+  const resourceIdentityRef = useRef<ResourceIdentity | null>(null);
 
-  if (!worksheetHintReviewRequired(schemaId, schemaVersion, payload)) {
-    return null;
-  }
+  useEffect(() => {
+    sessionRef.current = session;
+    resourceGenerationRef.current = resourceGeneration;
+  }, [session, resourceGeneration]);
+
+  const resourceIdentity: ResourceIdentity = useMemo(
+    () => ({
+      contentId,
+      versionId,
+      contentEtag,
+      payloadRef: payload,
+      session,
+      resourceGeneration,
+    }),
+  [
+    contentId,
+    versionId,
+    contentEtag,
+    payload,
+    session,
+    resourceGeneration,
+  ]);
+
+  const identityBindKey = `${contentId}:${versionId}:${contentEtag ?? ""}:${resourceGeneration}`;
+
+  const resetPanelState = useCallback(() => {
+    setChecks({});
+    setStatusMessage("");
+    setBusy(false);
+    idempotencyKeyRef.current = null;
+    bindRef.current = null;
+  }, []);
+
+  useLayoutEffect(() => {
+    const prior = resourceIdentityRef.current;
+    resourceIdentityRef.current = resourceIdentity;
+    if (prior === null) return;
+    const changed =
+      prior.contentId !== resourceIdentity.contentId ||
+      prior.versionId !== resourceIdentity.versionId ||
+      prior.contentEtag !== resourceIdentity.contentEtag ||
+      prior.payloadRef !== resourceIdentity.payloadRef ||
+      prior.session !== resourceIdentity.session ||
+      prior.resourceGeneration !== resourceIdentity.resourceGeneration;
+    if (changed) {
+      resetPanelState();
+    }
+  }, [resourceIdentity, resetPanelState]);
 
   function setCheck(
     questionId: string,
@@ -89,6 +165,10 @@ export function WorksheetHintReviewPanel({
       return;
     }
 
+    const startSession = sessionRef.current;
+    const startGeneration = resourceGenerationRef.current;
+    const startIdentity = identityBindKey;
+
     const bind = `${contentId}:${versionId}:${contentEtag}`;
     if (bindRef.current !== bind || !idempotencyKeyRef.current) {
       idempotencyKeyRef.current = crypto.randomUUID();
@@ -116,11 +196,25 @@ export function WorksheetHintReviewPanel({
         contentEtag,
         idempotencyKeyRef.current,
       );
+      if (
+        startSession !== sessionRef.current ||
+        startGeneration !== resourceGenerationRef.current ||
+        startIdentity !== identityBindKey
+      ) {
+        return;
+      }
       setStatusMessage(
         "Attestation recorded. You can now approve if you are an authorized reviewer.",
       );
       onAttestationRecorded();
     } catch (error) {
+      if (
+        startSession !== sessionRef.current ||
+        startGeneration !== resourceGenerationRef.current ||
+        startIdentity !== identityBindKey
+      ) {
+        return;
+      }
       if (error instanceof ApiError && error.status === 409) {
         setStatusMessage(
           "An attestation may already exist for this version. Try approving, or reload if the server still requires attestation.",
@@ -135,8 +229,27 @@ export function WorksheetHintReviewPanel({
       }
       setStatusMessage(userMessageForApiError(error));
     } finally {
-      setBusy(false);
+      if (
+        startSession === sessionRef.current &&
+        startGeneration === resourceGenerationRef.current &&
+        startIdentity === identityBindKey
+      ) {
+        setBusy(false);
+      }
     }
+  }
+
+  if (panelMode.kind === "hidden") {
+    return null;
+  }
+
+  if (panelMode.kind === "invalid") {
+    return (
+      <ErrorState
+        title="Cannot review learner hints"
+        message={panelMode.reason}
+      />
+    );
   }
 
   return (
