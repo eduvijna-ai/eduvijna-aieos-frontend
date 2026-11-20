@@ -723,3 +723,350 @@ describe("Student attempt learner hints (PK-V1-HINT-F)", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe("ambiguous save/submit draft preservation (PK-V1-HINT-F-I01R3)", () => {
+  it("D1: preserves unsaved short answer when save fails before server commit", async () => {
+    let saveAttempted = false;
+    stubFetch((call) => {
+      if (call.url === `/api/v1/learning/attempts/${ATTEMPT_ID}`) {
+        if (saveAttempted) {
+          return mockJsonResponse(
+            sampleAttempt({ aggregate_revision: 0, responses: [] }),
+            { etag: '"r0"' },
+          );
+        }
+        return mockJsonResponse(sampleAttempt(), { etag: '"r0"' });
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        return mockJsonResponse(
+          sampleAssignment({
+            attempt_summary: "IN_PROGRESS",
+            attempt_id: ATTEMPT_ID,
+          }),
+        );
+      }
+      if (call.url.endsWith("/responses") && call.method === "PUT") {
+        saveAttempted = true;
+        throw new TypeError("network reset");
+      }
+      return mockProblemResponse(404, "not_found");
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    const textarea = await screen.findByRole("textbox", {
+      name: /Your answer for question/i,
+    });
+    await userEvent.type(textarea, "my unsaved draft");
+    await userEvent.click(screen.getByRole("button", { name: /Save answers/i }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(textarea).toHaveValue("my unsaved draft");
+    });
+    expect(screen.queryByText("Answers saved.")).not.toBeInTheDocument();
+  });
+
+  it("D2: preserves changed true/false selection when save is ambiguous", async () => {
+    let saveAttempted = false;
+    const savedTrue = sampleAttempt({
+      aggregate_revision: 1,
+      responses: [
+        {
+          question_id: "q-tf",
+          response_kind: "TRUE_FALSE",
+          boolean_value: true,
+          choice_value: null,
+          text_value: null,
+        },
+      ],
+    });
+    stubFetch((call) => {
+      if (call.url === `/api/v1/learning/attempts/${ATTEMPT_ID}`) {
+        if (saveAttempted) {
+          return mockJsonResponse(savedTrue, { etag: '"r1"' });
+        }
+        return mockJsonResponse(savedTrue, { etag: '"r1"' });
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        return mockJsonResponse(
+          sampleAssignment({
+            attempt_summary: "IN_PROGRESS",
+            attempt_id: ATTEMPT_ID,
+          }),
+        );
+      }
+      if (call.url.endsWith("/responses") && call.method === "PUT") {
+        saveAttempted = true;
+        throw new TypeError("network reset");
+      }
+      return mockProblemResponse(404, "not_found");
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    await screen.findByText("A leaf has veins.");
+    await userEvent.click(screen.getByRole("radio", { name: "False" }));
+    await userEvent.click(screen.getByRole("button", { name: /Save answers/i }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("radio", { name: "False" })).toBeChecked();
+      expect(screen.getByRole("radio", { name: "True" })).not.toBeChecked();
+    });
+    expect(screen.getByRole("radio", { name: "Leaf" })).not.toBeChecked();
+  });
+
+  it("D3: reflects server-committed save when PUT response is lost", async () => {
+    let current = sampleAttempt({ aggregate_revision: 0, responses: [] });
+    let saveAttempted = false;
+    stubFetch((call) => {
+      if (call.url === `/api/v1/learning/attempts/${ATTEMPT_ID}`) {
+        return mockJsonResponse(current, {
+          etag: `"r${current.aggregate_revision}"`,
+        });
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        return mockJsonResponse(
+          sampleAssignment({
+            attempt_summary: "IN_PROGRESS",
+            attempt_id: ATTEMPT_ID,
+          }),
+        );
+      }
+      if (call.url.endsWith("/responses") && call.method === "PUT") {
+        saveAttempted = true;
+        current = sampleAttempt({
+          aggregate_revision: 1,
+          last_saved_at: "2026-09-08T10:05:00Z",
+          responses: [
+            {
+              question_id: "q-sa",
+              response_kind: "SHORT_ANSWER",
+              text_value: "committed on server",
+              boolean_value: null,
+              choice_value: null,
+            },
+          ],
+        });
+        throw new TypeError("network reset");
+      }
+      return mockProblemResponse(404, "not_found");
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    const textarea = await screen.findByRole("textbox", {
+      name: /Your answer for question/i,
+    });
+    await userEvent.type(textarea, "committed on server");
+    await userEvent.click(screen.getByRole("button", { name: /Save answers/i }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(saveAttempted).toBe(true);
+    await waitFor(() => {
+      expect(textarea).toHaveValue("committed on server");
+    });
+    expect(screen.queryByText("Answers saved.")).not.toBeInTheDocument();
+  });
+
+  it("D4: preserves local draft after submit network error while attempt stays IN_PROGRESS", async () => {
+    let submitAttempted = false;
+    const submitHeaders: string[] = [];
+    stubFetch((call) => {
+      if (call.url === `/api/v1/learning/attempts/${ATTEMPT_ID}`) {
+        if (submitAttempted) {
+          return mockJsonResponse(
+            sampleAttempt({ aggregate_revision: 0, responses: [] }),
+            { etag: '"r0"' },
+          );
+        }
+        return mockJsonResponse(sampleAttempt(), { etag: '"r0"' });
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        return mockJsonResponse(
+          sampleAssignment({
+            attempt_summary: "IN_PROGRESS",
+            attempt_id: ATTEMPT_ID,
+          }),
+        );
+      }
+      if (call.url.endsWith("/actions/submit") && call.method === "POST") {
+        submitAttempted = true;
+        const key = call.headers.get("Idempotency-Key");
+        if (key) submitHeaders.push(key);
+        throw new TypeError("network reset");
+      }
+      return mockProblemResponse(404, "not_found");
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    const textarea = await screen.findByRole("textbox", {
+      name: /Your answer for question/i,
+    });
+    await userEvent.type(textarea, "still drafting");
+    await userEvent.click(screen.getByRole("button", { name: /Submit work/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Yes, submit/i }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(textarea).toHaveValue("still drafting");
+    });
+    expect(screen.getByRole("button", { name: /Submit work/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Submit work/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Yes, submit/i }));
+    expect(submitHeaders).toHaveLength(2);
+    expect(submitHeaders[0]).toBe(submitHeaders[1]);
+  });
+
+  it("D5: SUBMITTED revalidation uses server responses instead of local unsaved draft", async () => {
+    let submitAttempted = false;
+    stubFetch((call) => {
+      if (call.url === `/api/v1/learning/attempts/${ATTEMPT_ID}`) {
+        if (submitAttempted) {
+          return mockJsonResponse(
+            sampleAttempt({
+              lifecycle_state: "SUBMITTED",
+              submitted_at: "2026-09-08T11:00:00Z",
+              submission_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+              aggregate_revision: 2,
+              responses: [
+                {
+                  question_id: "q-sa",
+                  response_kind: "SHORT_ANSWER",
+                  text_value: "submitted server text",
+                  boolean_value: null,
+                  choice_value: null,
+                },
+              ],
+            }),
+            { etag: '"r2"' },
+          );
+        }
+        return mockJsonResponse(sampleAttempt(), { etag: '"r0"' });
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        return mockJsonResponse(
+          sampleAssignment({
+            attempt_summary: submitAttempted ? "SUBMITTED" : "IN_PROGRESS",
+            attempt_id: ATTEMPT_ID,
+          }),
+        );
+      }
+      if (call.url.endsWith("/actions/submit") && call.method === "POST") {
+        submitAttempted = true;
+        throw new TypeError("network reset");
+      }
+      return mockProblemResponse(404, "not_found");
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    const textarea = await screen.findByRole("textbox", {
+      name: /Your answer for question/i,
+    });
+    await userEvent.type(textarea, "local only draft");
+    await userEvent.click(screen.getByRole("button", { name: /Submit work/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Yes, submit/i }));
+    expect(
+      await screen.findByText(/does not show a grade or score/i),
+    ).toBeInTheDocument();
+    expect(textarea).toHaveValue("submitted server text");
+    expect(screen.queryByDisplayValue("local only draft")).not.toBeInTheDocument();
+  });
+
+  it("D6: keeps drafts when ambiguous revalidation GET fails", async () => {
+    let saveAttempted = false;
+    stubFetch((call) => {
+      if (call.url === `/api/v1/learning/attempts/${ATTEMPT_ID}`) {
+        if (saveAttempted) {
+          return mockProblemResponse(500, "internal");
+        }
+        return mockJsonResponse(sampleAttempt(), { etag: '"r0"' });
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        return mockJsonResponse(
+          sampleAssignment({
+            attempt_summary: "IN_PROGRESS",
+            attempt_id: ATTEMPT_ID,
+          }),
+        );
+      }
+      if (call.url.endsWith("/responses") && call.method === "PUT") {
+        saveAttempted = true;
+        throw new TypeError("network reset");
+      }
+      if (call.url === HINTS_URL) {
+        return mockJsonResponse({
+          attempt_id: ATTEMPT_ID,
+          content_version_id: CONTENT_VERSION_ID,
+          hints: [{ question_id: "q-tf", hint_text: "Blocked while locked." }],
+        });
+      }
+      return mockProblemResponse(404, "not_found");
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`);
+    const textarea = await screen.findByRole("textbox", {
+      name: /Your answer for question/i,
+    });
+    await userEvent.type(textarea, "persist through 500");
+    await userEvent.click(screen.getByRole("button", { name: /Save answers/i }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(textarea).toHaveValue("persist through 500");
+    });
+    const showHint = screen.getAllByRole("button", {
+      name: /Show hint for question/i,
+    })[0]!;
+    await userEvent.click(showHint);
+    expect(screen.queryByText("Blocked while locked.")).not.toBeInTheDocument();
+  });
+
+  it("D7: does not apply preserved drafts after session swap during ambiguous save", async () => {
+    let resolveRecheck: ((response: Response) => void) | undefined;
+    const recheckPending = new Promise<Response>((resolve) => {
+      resolveRecheck = resolve;
+    });
+    let saveAttempted = false;
+    let attemptGets = 0;
+
+    stubFetch((call) => {
+      if (
+        call.url === `/api/v1/learning/attempts/${ATTEMPT_ID}` &&
+        call.method === "GET"
+      ) {
+        attemptGets += 1;
+        if (saveAttempted && attemptGets > 1) {
+          return recheckPending;
+        }
+        return mockJsonResponse(sampleAttempt(), { etag: '"r0"' });
+      }
+      if (call.url === `/api/v1/student-os/assignments/${ASSIGNMENT_ID}`) {
+        return mockJsonResponse(
+          sampleAssignment({
+            attempt_summary: "IN_PROGRESS",
+            attempt_id: ATTEMPT_ID,
+          }),
+        );
+      }
+      if (call.url.endsWith("/responses") && call.method === "PUT") {
+        saveAttempted = true;
+        throw new TypeError("network reset");
+      }
+      return mockProblemResponse(404, "not_found");
+    });
+
+    renderApp(`/student-os/attempts/${ATTEMPT_ID}`, {
+      ...DEV_SESSION,
+      bearerToken: "test-session-0000v",
+    });
+    const textarea = await screen.findByRole("textbox", {
+      name: /Your answer for question/i,
+    });
+    await userEvent.type(textarea, "session-a draft");
+    await userEvent.click(screen.getByRole("button", { name: /Save answers/i }));
+    await screen.findByRole("alert");
+    connectDevSession({
+      ...DEV_SESSION,
+      bearerToken: "test-session-00060",
+    });
+    resolveRecheck?.(mockJsonResponse(sampleAttempt(), { etag: '"r0"' }));
+    expect(
+      await screen.findByText(/Could not open this work/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("session-a draft")).not.toBeInTheDocument();
+  });
+});

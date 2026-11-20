@@ -86,6 +86,32 @@ type LoadFence = {
   attemptId: string;
 };
 
+function draftAnswersEqual(
+  left: DraftAnswer | undefined,
+  right: DraftAnswer | undefined,
+): boolean {
+  return (
+    left?.choiceValue === right?.choiceValue &&
+    left?.textValue === right?.textValue &&
+    left?.booleanValue === right?.booleanValue
+  );
+}
+
+/** Retain unsaved in-session editor drafts when ambiguous re-read is still IN_PROGRESS. */
+function reconcileInProgressDrafts(
+  preserved: Record<string, DraftAnswer>,
+  serverResponses: AttemptResponse["responses"],
+): Record<string, DraftAnswer> {
+  const serverDrafts = draftsFromSavedResponses(serverResponses);
+  const merged: Record<string, DraftAnswer> = { ...serverDrafts };
+  for (const [questionId, localDraft] of Object.entries(preserved)) {
+    if (!draftAnswersEqual(localDraft, serverDrafts[questionId])) {
+      merged[questionId] = { ...localDraft };
+    }
+  }
+  return merged;
+}
+
 export function AttemptPage() {
   const { attemptId = "" } = useParams();
   const { isConnected, isProduction, session } = useSession();
@@ -161,10 +187,26 @@ export function AttemptPage() {
   );
 
   const applyAttempt = useCallback(
-    (data: AttemptResponse, nextEtag: string | null) => {
+    (
+      data: AttemptResponse,
+      nextEtag: string | null,
+      options?: { reconcilePreservedDrafts?: Record<string, DraftAnswer> },
+    ) => {
       setAttempt(data);
       setEtag(nextEtag ?? revisionEtag(data.aggregate_revision));
-      setAnswers(draftsFromSavedResponses(data.responses));
+      if (
+        data.lifecycle_state === "IN_PROGRESS" &&
+        options?.reconcilePreservedDrafts
+      ) {
+        setAnswers(
+          reconcileInProgressDrafts(
+            options.reconcilePreservedDrafts,
+            data.responses,
+          ),
+        );
+      } else {
+        setAnswers(draftsFromSavedResponses(data.responses));
+      }
     },
     [],
   );
@@ -410,13 +452,21 @@ export function AttemptPage() {
   );
 
   const revalidateAfterAmbiguousMutation = useCallback(
-    async (fence: LoadFence) => {
+    async (
+      fence: LoadFence,
+      preservedDrafts: Record<string, DraftAnswer>,
+    ) => {
       try {
         const loaded = await getLearningAttempt(fence.attemptId);
         if (loadFenceStale(fence)) {
           return;
         }
-        applyAttempt(loaded.data, loaded.etag);
+        applyAttempt(loaded.data, loaded.etag, {
+          reconcilePreservedDrafts:
+            loaded.data.lifecycle_state === "IN_PROGRESS"
+              ? preservedDrafts
+              : undefined,
+        });
         try {
           const assignmentResult = await getStudentAssignment(
             loaded.data.teaching_assignment_id,
@@ -476,6 +526,7 @@ export function AttemptPage() {
 
   async function onSave() {
     if (!attempt || !etag || !viewAuthorized) return;
+    const preservedDrafts = { ...answers };
     const fence = mutationFence();
     hintsMutationFenceRef.current = true;
     setHintsInteractionLocked(true);
@@ -526,12 +577,13 @@ export function AttemptPage() {
       hintsMutationFenceRef.current = false;
     }
     if (needsRevalidate && mutationStillCurrent(fence)) {
-      await revalidateAfterAmbiguousMutation(fence);
+      await revalidateAfterAmbiguousMutation(fence, preservedDrafts);
     }
   }
 
   async function onSubmit() {
     if (!attempt || !etag || !viewAuthorized) return;
+    const preservedDrafts = { ...answers };
     const fence = mutationFence();
     hintsMutationFenceRef.current = true;
     setHintsInteractionLocked(true);
@@ -583,7 +635,7 @@ export function AttemptPage() {
       hintsMutationFenceRef.current = false;
     }
     if (ambiguousFailure && mutationStillCurrent(fence)) {
-      await revalidateAfterAmbiguousMutation(fence);
+      await revalidateAfterAmbiguousMutation(fence, preservedDrafts);
     }
   }
 

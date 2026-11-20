@@ -30,6 +30,10 @@ persistence or analytics payload.
   responses cannot commit across session swaps (fail closed).
 - Ambiguous save/submit outcomes keep hints disabled until a fresh in-session
   attempt read confirms `IN_PROGRESS`.
+- Ambiguous revalidation while still `IN_PROGRESS` updates attempt/ETag from
+  the server but reconciles editor drafts: local unsaved edits that differ from
+  persisted responses are retained; terminal `SUBMITTED` re-read uses server
+  responses only (no substituted local draft).
 - Runtime fail-closed validation of hint GET JSON at `learnerHintPolicy.ts`
   (attempt/version binding, allowlisted questions, hint text **Unicode scalar**
   bounds 1–500).
