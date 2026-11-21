@@ -9,6 +9,54 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-T0-F-I01: Teacher Library worksheet learner-hint authoring
+  (`WorksheetHintAuthorPage`) and Review structured attestation
+  (`WorksheetHintReviewPanel`); consumer OpenAPI pin Backend
+  `5bbc09bc895407b71a61f9ba86a7209ff9c10ffa`, SHA-256
+  `0061BCF6065FAFA184F196829A87AF98ADEDFCE6B633D45704141A5B48045D22`;
+  guarded `content_worksheet_hint_version_append` and
+  `content_worksheet_hint_attestation_record`; explicit submit-for-review;
+  no auto publish or full-stack Hint E2E.
+
+- PK-V1-HINT-T0-F-I01R1: Privacy and workflow correction on Draft PR #51 —
+  conditional review Content GET, session-fenced review/author mutations, draft
+  retention on 412, attestation checklist reset, submit-for-review
+  `ReviewSubmissionResponse` typing, and discriminating unit tests (no OpenAPI
+  pin change).
+
+- PK-V1-HINT-T0-F-I01R2: Version-binding and review-identity correction on Draft
+  PR #51 — `RECONCILIATION_REQUIRED` authoring gate after source drift, live
+  attestation resource-identity epoch, in-flight ref reset on session swap,
+  submit ambiguous revalidation, and strict worksheet authoring source parse (no
+  OpenAPI pin change).
+
+- PK-V1-HINT-T0-F-I01R3: Fail-closed 412 revalidation, material question binding
+  + Content ETag drift gate, monotonic review attestation epoch with unmount and
+  silent-refresh parent fencing, and discriminating adversarial tests (no OpenAPI
+  pin change).
+
+- PK-V1-HINT-T0-F-I01R4: Authoring authority finite-state machine on Draft PR
+  #51 — `AuthorPhase` transitions (no teacher override from failed re-read),
+  pending mutation receipt/idempotency across uncertain append, explicit Reload
+  latest authoritative worksheet, and adversarial page tests (no OpenAPI pin
+  change).
+
+- PK-V1-HINT-T0-F-I01R5: Exact-request outcome recovery on Draft PR #51 —
+  immutable pending receipts with frozen append body, uncertain reload without
+  receipt/phase reset, explicit Recover original append/submit replay POST, and
+  adversarial tests (no OpenAPI pin change).
+
+- PK-V1-HINT-T0-F-I01R6: Append current-authority verify phase, recovery-epoch
+  fencing, fail-closed recovery 412/409/403 with receipt retention, validated
+  submit replay, and interleaving adversarial tests on Draft PR #51 (no OpenAPI pin
+  change).
+
+- PK-V1-HINT-T0-F-I01R7: Recovery gate ownership on session purge (stale
+  `recoverInFlight` cannot block a new session), per-recovery gate release in
+  `finally`, superseded-recorded V2 no longer vetoes V3 reconcile → V4 authoring,
+  and adversarial session-recovery + V3-liveness page tests on Draft PR #51 (no
+  OpenAPI pin change).
+
 - PK-V1-HINT-F-I01: Optional in-attempt learner hints on Student OS
   `AttemptPage` / `ResponseEditor` via
   `GET /api/v1/learning/attempts/{attempt_id}/learner-hints`

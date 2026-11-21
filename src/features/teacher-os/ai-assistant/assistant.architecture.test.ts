@@ -43,7 +43,7 @@ describe("TOS-DEV10-I04 Assistant architecture", () => {
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "43F877E122389A7347DDB00D25F37D8BE8BD907F43FF6960E5DC6E794B1A0071",
+      "0061BCF6065FAFA184F196829A87AF98ADEDFCE6B633D45704141A5B48045D22",
     );
   });
 });

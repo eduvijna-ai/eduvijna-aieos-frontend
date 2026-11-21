@@ -11,8 +11,9 @@ const repoRoot = path.resolve(
 
 const I03_ARCHITECTURE = "67f4020b78cacdf1716e18d83f4410cb16fdcb4d";
 const HINT_F_BACKEND = "e8c7154e7207ac1b39cef244b5084ae5cc1ae07b";
+const T0_HINT_BACKEND = "5bbc09bc895407b71a61f9ba86a7209ff9c10ffa";
 const ACTIVE_OPENAPI_SHA =
-  "43F877E122389A7347DDB00D25F37D8BE8BD907F43FF6960E5DC6E794B1A0071";
+  "0061BCF6065FAFA184F196829A87AF98ADEDFCE6B633D45704141A5B48045D22";
 const I03_BACKEND = "138f37bfa7a44c33b206c6b78118154bbb9bc8eb";
 const I03_FRONTEND_BASE = "1b4263d0668f66d84cc261c79a2e81883375219e";
 const I03_OPENAPI =
@@ -48,7 +49,8 @@ describe("AIEOS360-S03-I03 Parent OS consumer contract pin", () => {
     expect(docs).toContain(I03_ALEMBIC);
 
     const sync = read("scripts/sync-openapi-snapshot.mjs");
-    expect(sync).toContain(`const PINNED_SHA = "${HINT_F_BACKEND}"`);
+    expect(sync).toContain(`const PINNED_SHA = "${T0_HINT_BACKEND}"`);
+    expect(sync).toContain(HINT_F_BACKEND);
     expect(sync).toContain(I03_OPENAPI);
 
     const digest = createHash("sha256")

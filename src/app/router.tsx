@@ -13,6 +13,7 @@ import { AssessPage } from "@/features/teacher-os/assess/AssessPage";
 import { ImprovePage } from "@/features/teacher-os/improve/ImprovePage";
 import { LibraryPage } from "@/features/teacher-os/library/LibraryPage";
 import { LibraryDetailPage } from "@/features/teacher-os/library/LibraryDetailPage";
+import { WorksheetHintAuthorPage } from "@/features/teacher-os/library/WorksheetHintAuthorPage";
 import { AiAssistantPage } from "@/features/teacher-os/ai-assistant/AiAssistantPage";
 import { SettingsPage } from "@/features/teacher-os/settings/SettingsPage";
 import { ProviderAggregatorPage } from "@/features/teacher-os/settings/ProviderAggregatorPage";
@@ -83,6 +84,10 @@ export function AppRouter() {
         <Route path="improve" element={<ImprovePage />} />
         <Route path="library" element={<LibraryPage />} />
         <Route path="library/:contentId" element={<LibraryDetailPage />} />
+        <Route
+          path="library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
         <Route path="ai-assistant" element={<AiAssistantPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route

@@ -42,8 +42,9 @@ const REQUIRED_OPERATION_IDS = [
 ] as const;
 
 describe("AIEOS360-S01-I04 Student OS architecture", () => {
-  it("pins the PK-V1-HINT-F-I01 OpenAPI digest", () => {
+  it("pins the PK-V1-HINT-T0-F-I01 OpenAPI digest", () => {
     const sync = read("scripts/sync-openapi-snapshot.mjs");
+    expect(sync).toContain("5bbc09bc895407b71a61f9ba86a7209ff9c10ffa");
     expect(sync).toContain("e8c7154e7207ac1b39cef244b5084ae5cc1ae07b");
     expect(sync).toContain("3d25bb2d7ae3a6a95affdf075a75f20db48a6959");
     const digest = createHash("sha256")
@@ -55,7 +56,7 @@ describe("AIEOS360-S01-I04 Student OS architecture", () => {
       .digest("hex")
       .toUpperCase();
     expect(digest).toBe(
-      "43F877E122389A7347DDB00D25F37D8BE8BD907F43FF6960E5DC6E794B1A0071",
+      "0061BCF6065FAFA184F196829A87AF98ADEDFCE6B633D45704141A5B48045D22",
     );
   });
 
