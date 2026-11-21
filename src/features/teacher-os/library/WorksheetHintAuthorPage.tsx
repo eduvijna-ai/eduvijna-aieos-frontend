@@ -224,6 +224,8 @@ export function WorksheetHintAuthorPage() {
   const appendInFlightRef = useRef(false);
   const submitInFlightRef = useRef(false);
   const recoverInFlightRef = useRef(false);
+  const recoveryGateSeqRef = useRef(0);
+  const activeRecoveryGateRef = useRef<number | null>(null);
   const createdMaterialRef = useRef<string | null>(null);
   const pendingMutationReceiptRef = useRef<PendingMutationReceipt | null>(null);
   const operationEpochRef = useRef(0);
@@ -299,6 +301,8 @@ export function WorksheetHintAuthorPage() {
     clearPendingMutationKeys();
     appendInFlightRef.current = false;
     submitInFlightRef.current = false;
+    recoverInFlightRef.current = false;
+    activeRecoveryGateRef.current = null;
     setBusyAppend(false);
     setBusySubmitReview(false);
     createdMaterialRef.current = null;
@@ -803,20 +807,30 @@ export function WorksheetHintAuthorPage() {
   function onConfirmReconciliation() {
     if (authorPhaseRef.current !== "RECONCILIATION_REQUIRED") return;
     if (pendingMutationReceiptRef.current) return;
+    const bound = boundSourceRef.current;
     if (
-      recordedAppendVersionRef.current &&
-      recordedAppendVersionRef.current !== currentVersionId
+      !bound ||
+      bound.versionId !== currentVersionId ||
+      !contentEtag ||
+      bound.contentEtag !== contentEtag
     ) {
       return;
     }
-    if (createdVersionId && createdVersionId !== currentVersionId) {
-      setCreatedVersionId(null);
-      setCreatedContentEtag(null);
-      createdMaterialRef.current = null;
-    }
+    const hadSupersededRecordedAppend =
+      recordedAppendVersionRef.current !== null &&
+      recordedAppendVersionRef.current !== currentVersionId;
+    recordedAppendVersionRef.current = null;
+    setCreatedVersionId(null);
+    setCreatedContentEtag(null);
+    createdMaterialRef.current = null;
+    clearPendingMutationKeys(undefined, { force: true });
     setAuthorPhaseSync("READY");
     setShowPreview(false);
-    setStatusMessage("");
+    setStatusMessage(
+      hadSupersededRecordedAppend
+        ? "Reconciled against the latest worksheet source. Preview a new hint-bearing version from this source before creating."
+        : "",
+    );
   }
 
   async function finalizeResolvedAppend(
@@ -1020,10 +1034,19 @@ export function WorksheetHintAuthorPage() {
       pendingMutationReceiptRef.current !== receiptAtStart ||
       !isUncertainPhase(authorPhaseRef.current);
 
+    const recoveryGate = ++recoveryGateSeqRef.current;
+    activeRecoveryGateRef.current = recoveryGate;
     recoverInFlightRef.current = true;
+    const releaseRecoveryGate = (clearBusy: () => void) => {
+      if (activeRecoveryGateRef.current === recoveryGate) {
+        activeRecoveryGateRef.current = null;
+        recoverInFlightRef.current = false;
+        clearBusy();
+      }
+    };
     if (receipt.kind === "append") {
       if (!receipt.appendRequest) {
-        recoverInFlightRef.current = false;
+        releaseRecoveryGate(() => setBusyAppend(false));
         return;
       }
       setBusyAppend(true);
@@ -1097,17 +1120,7 @@ export function WorksheetHintAuthorPage() {
         setAuthorPhaseSync("APPEND_OUTCOME_UNCERTAIN");
         setStatusMessage(userMessageForApiError(error));
       } finally {
-        if (
-          !mutationFenceStale(
-            startFence,
-            loadGenerationRef.current,
-            sessionRef.current,
-            contentIdRef.current,
-          )
-        ) {
-          recoverInFlightRef.current = false;
-          setBusyAppend(false);
-        }
+        releaseRecoveryGate(() => setBusyAppend(false));
       }
       return;
     }
@@ -1183,17 +1196,7 @@ export function WorksheetHintAuthorPage() {
       setAuthorPhaseSync("SUBMIT_OUTCOME_UNCERTAIN");
       setStatusMessage(userMessageForApiError(error));
     } finally {
-      if (
-        !mutationFenceStale(
-          startFence,
-          loadGenerationRef.current,
-          sessionRef.current,
-          contentIdRef.current,
-        )
-      ) {
-        recoverInFlightRef.current = false;
-        setBusySubmitReview(false);
-      }
+      releaseRecoveryGate(() => setBusySubmitReview(false));
     }
   }
 

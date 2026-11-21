@@ -332,18 +332,49 @@ describe("WorksheetHintAuthorPage", () => {
     expect(screen.queryByText(/Created hint-bearing worksheet version/i)).toBeNull();
   });
 
-  it("lets a new session start actions after a prior session left in-flight refs set", async () => {
-    let resolveAppend!: (value: Response) => void;
-    const appendPromise = new Promise<Response>((resolve) => {
-      resolveAppend = resolve;
+  it("lets a new session append after prior session left recover in flight", async () => {
+    let resolveRecovery!: (value: Response) => void;
+    const recoveryPromise = new Promise<Response>((resolve) => {
+      resolveRecovery = resolve;
     });
+    const appendPosts: Array<{ key: string | null; body: string }> = [];
+    let appendAttempts = 0;
 
     stubAuthoringFlow((url, init) => {
       if (
         url.includes("/worksheet-learner-hint-versions") &&
         init?.method === "POST"
       ) {
-        return appendPromise;
+        appendAttempts += 1;
+        const headers = new Headers(init?.headers);
+        const body = String(init?.body ?? "");
+        appendPosts.push({ key: headers.get("Idempotency-Key"), body });
+        if (appendAttempts === 1) {
+          return mockJsonResponse(
+            { title: "Service unavailable", status: 503 },
+            { status: 503 },
+          );
+        }
+        if (appendAttempts === 2) {
+          return recoveryPromise;
+        }
+        return mockJsonResponse(appendVersionResponse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), {
+          etag: '"b-created"',
+          status: 201,
+        });
+      }
+      if (url.endsWith(`/api/v1/contents/${CONTENT_ID}`) && init?.method !== "POST") {
+        return mockJsonResponse(
+          {
+            content_id: CONTENT_ID,
+            current_version_id:
+              appendAttempts >= 3
+                ? "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+                : VERSION_ID,
+            stewardship_state: "APPROVED",
+          },
+          { etag: appendAttempts >= 3 ? '"b-created"' : '"r4"' },
+        );
       }
       return undefined as unknown as Response;
     });
@@ -365,12 +396,14 @@ describe("WorksheetHintAuthorPage", () => {
     );
     await userEvent.type(
       document.getElementById("hint-q-1") as HTMLTextAreaElement,
-      "Think about equal parts.",
+      "Session A uncertain hint.",
     );
     await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
     await userEvent.click(
       screen.getByRole("button", { name: /Create hint-bearing version/i }),
     );
+    await waitFor(() => screen.getByTestId("recover-original-append"));
+    await userEvent.click(screen.getByTestId("recover-original-append"));
 
     devSessionConnector?.connect({
       ...DEV_SESSION,
@@ -383,23 +416,32 @@ describe("WorksheetHintAuthorPage", () => {
     );
     await userEvent.type(
       document.getElementById("hint-q-1") as HTMLTextAreaElement,
-      "Fresh hint for session B.",
+      "Session B distinct hint body.",
     );
     await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
-    const createButton = screen.getByRole("button", {
-      name: /Create hint-bearing version/i,
-    });
-    expect(createButton).not.toBeDisabled();
-
-    resolveAppend(
-      mockJsonResponse(
-        appendVersionResponse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
-        { etag: '"r5"', status: 201 },
-      ),
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
     );
+
+    await waitFor(() => expect(appendAttempts).toBeGreaterThanOrEqual(3));
+    expect(appendPosts).toHaveLength(3);
+    expect(appendPosts[1].key).toBe(appendPosts[0].key);
+    expect(appendPosts[2].key).not.toBe(appendPosts[0].key);
+    expect(appendPosts[2].body).toContain("Session B distinct hint body.");
+
+    resolveRecovery(
+      mockJsonResponse(appendVersionResponse(CREATED_HINT_VERSION), {
+        etag: '"stale-a"',
+        status: 201,
+      }),
+    );
+
     await waitFor(() => {
-      expect(screen.queryByText(/Created hint-bearing worksheet version/i)).toBeNull();
+      expect(
+        screen.queryByText(/Session A uncertain hint/i),
+      ).not.toBeInTheDocument();
     });
+    expect(appendPosts[2].body).toContain("Session B distinct hint body.");
   });
 
   it("blocks create after 412 when authoritative content has no current version", async () => {
@@ -1219,11 +1261,13 @@ describe("WorksheetHintAuthorPage", () => {
     ).toHaveLength(0);
   });
 
-  it("does not enable stale V2 submit after reconcile when V3 is current", async () => {
+  it("reconciles superseded V2 on V3 and creates V4 with fresh idempotency", async () => {
     const V2 = CREATED_HINT_VERSION;
     const V3 = "33333333-3333-3333-3333-333333333333";
+    const V4 = "44444444-4444-4444-4444-444444444444";
     let contentGets = 0;
     let submitPosts = 0;
+    const appendKeys: string[] = [];
 
     stubAuthoringFlow((url, init) => {
       if (url.endsWith(`/api/v1/contents/${CONTENT_ID}`) && init?.method !== "POST") {
@@ -1238,13 +1282,23 @@ describe("WorksheetHintAuthorPage", () => {
             { etag: '"r4"' },
           );
         }
+        if (contentGets === 2) {
+          return mockJsonResponse(
+            {
+              content_id: CONTENT_ID,
+              current_version_id: V3,
+              stewardship_state: "APPROVED",
+            },
+            { etag: '"r7"' },
+          );
+        }
         return mockJsonResponse(
           {
             content_id: CONTENT_ID,
-            current_version_id: V3,
+            current_version_id: V4,
             stewardship_state: "APPROVED",
           },
-          { etag: '"r7"' },
+          { etag: '"r8"' },
         );
       }
       if (url.includes(`/library/${CONTENT_ID}/versions/${V3}`)) {
@@ -1265,18 +1319,31 @@ describe("WorksheetHintAuthorPage", () => {
       }
       if (url.includes("/actions/submit-for-review") && init?.method === "POST") {
         submitPosts += 1;
+        const versionInUrl = url.match(/versions\/([^/]+)/)?.[1];
+        expect(versionInUrl).toBe(V4);
         return mockJsonResponse(
           {
             content_id: CONTENT_ID,
-            version_id: V2,
+            version_id: V4,
             stewardship_state: "IN_REVIEW",
           },
-          { etag: '"r6"', status: 201 },
+          { etag: '"r9"', status: 201 },
         );
       }
       if (url.includes("/worksheet-learner-hint-versions") && init?.method === "POST") {
-        return mockJsonResponse(appendVersionResponse(V2), {
-          etag: '"r5"',
+        const headers = new Headers(init?.headers);
+        const key = headers.get("Idempotency-Key");
+        if (key) appendKeys.push(key);
+        const ifMatch = headers.get("If-Match");
+        if (ifMatch === '"r4"') {
+          return mockJsonResponse(appendVersionResponse(V2), {
+            etag: '"r5"',
+            status: 201,
+          });
+        }
+        expect(ifMatch).toBe('"r7"');
+        return mockJsonResponse(appendVersionResponse(V4, 4), {
+          etag: '"r8"',
           status: 201,
         });
       }
@@ -1312,16 +1379,33 @@ describe("WorksheetHintAuthorPage", () => {
         document.querySelector("[data-author-phase='RECONCILIATION_REQUIRED']"),
       ).toBeInTheDocument();
     });
+    expect(appendKeys).toHaveLength(1);
     await userEvent.click(
       screen.getByRole("button", { name: /I reviewed the updated questions/i }),
     );
     expect(
       screen.getByRole("button", { name: /Submit for independent review/i }),
     ).toBeDisabled();
+
+    const q1 = document.getElementById("hint-q-1") as HTMLTextAreaElement;
+    await userEvent.clear(q1);
+    await userEvent.type(q1, "Hint aligned to V3 superseding prompt.");
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+
+    await waitFor(() => expect(appendKeys).toHaveLength(2));
+    expect(appendKeys[1]).not.toBe(appendKeys[0]);
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Submit for independent review/i }),
+      ).toBeEnabled();
+    });
     await userEvent.click(
       screen.getByRole("button", { name: /Submit for independent review/i }),
     );
-    expect(submitPosts).toBe(0);
+    expect(submitPosts).toBe(1);
   });
 
   it("preserves append receipt after recovery 412", async () => {

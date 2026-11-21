@@ -79,6 +79,15 @@ Backend proof (read-only pin `5bbc09bc…`):
 - Submit recovery/success validates `IN_REVIEW` binding and blocks duplicate
   newly keyed submit for the same version on the mounted page.
 
+## I01R7 session-recovery ownership + V3 reconcile liveness
+
+- Session/route purge clears `recoverInFlight` and active recovery gate; each
+  recovery acquires a monotonic gate id released only when that gate still owns
+  the live identity (late session A cannot clear session B recovery or CREATE).
+- Historical `recordedAppendVersion` (e.g. V2) is provenance only — reconciling
+  verified current V3 clears it and enables new preview/append from V3 (V4) with
+  fresh idempotency; stale V2 submit remains disabled.
+
 ## Out of scope
 
 Production grants, Backend edits, Student hint GET changes, full Hint E2E,

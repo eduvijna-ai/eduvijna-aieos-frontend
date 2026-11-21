@@ -51,6 +51,12 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
   submit replay, and interleaving adversarial tests on Draft PR #51 (no OpenAPI pin
   change).
 
+- PK-V1-HINT-T0-F-I01R7: Recovery gate ownership on session purge (stale
+  `recoverInFlight` cannot block a new session), per-recovery gate release in
+  `finally`, superseded-recorded V2 no longer vetoes V3 reconcile → V4 authoring,
+  and adversarial session-recovery + V3-liveness page tests on Draft PR #51 (no
+  OpenAPI pin change).
+
 - PK-V1-HINT-F-I01: Optional in-attempt learner hints on Student OS
   `AttemptPage` / `ResponseEditor` via
   `GET /api/v1/learning/attempts/{attempt_id}/learner-hints`
