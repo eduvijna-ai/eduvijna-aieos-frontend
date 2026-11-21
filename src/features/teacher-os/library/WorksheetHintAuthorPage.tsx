@@ -81,8 +81,12 @@ const RECONCILIATION_MESSAGE =
 type SourceBinding = {
   versionId: string;
   signature: string;
+  contentEtag: string;
   questionsById: Record<string, Record<string, unknown>>;
 };
+
+const REVALIDATION_BLOCKED_MESSAGE =
+  "Cannot refresh worksheet authority right now. Your unsaved hints are preserved — use Reload when the source is available.";
 
 export function WorksheetHintAuthorPage() {
   const { contentId = "" } = useParams();
@@ -129,6 +133,7 @@ export function WorksheetHintAuthorPage() {
     null,
   );
   const [reconciliationRequired, setReconciliationRequired] = useState(false);
+  const [sourceAuthorityBlocked, setSourceAuthorityBlocked] = useState(false);
   const [unassignedDrafts, setUnassignedDrafts] = useState<
     Record<string, string>
   >({});
@@ -185,7 +190,22 @@ export function WorksheetHintAuthorPage() {
     createdMaterialRef.current = null;
     boundSourceRef.current = null;
     setReconciliationRequired(false);
+    setSourceAuthorityBlocked(false);
     setUnassignedDrafts({});
+  }, []);
+
+  const enterFailClosedRevalidation = useCallback(() => {
+    setSourceAuthorityBlocked(true);
+    setReconciliationRequired(true);
+    setShowPreview(false);
+    setCreatedVersionId(null);
+    setCreatedContentEtag(null);
+    createdMaterialRef.current = null;
+    appendKeyRef.current = null;
+    appendMaterialRef.current = null;
+    submitKeyRef.current = null;
+    submitVersionRef.current = null;
+    submitMaterialRef.current = null;
   }, []);
 
   const invalidateAuthorSync = useCallback(() => {
@@ -242,7 +262,16 @@ export function WorksheetHintAuthorPage() {
       const drifted =
         requireReconciliationOnDrift &&
         prior !== null &&
-        (prior.versionId !== versionId || prior.signature !== signature);
+        (prior.versionId !== versionId ||
+          prior.signature !== signature ||
+          prior.contentEtag !== contentEtagValue);
+
+      const priorQuestionSignature = (id: string) =>
+        prior
+          ? worksheetQuestionBindingSignature([id], prior.questionsById)
+          : "";
+      const nextQuestionSignature = (id: string) =>
+        worksheetQuestionBindingSignature([id], questionMap);
 
       const nextDrafts: Record<string, string> = {};
       const orphans: Record<string, string> = {};
@@ -256,18 +285,24 @@ export function WorksheetHintAuthorPage() {
       }
 
       if (drifted && prior) {
+        const versionChanged = prior.versionId !== versionId;
         for (const id of ids) {
           const draft = preservedDrafts[id];
           if (!draft?.trim()) continue;
-          const oldQuestion = prior.questionsById[id];
-          const newQuestion = questionMap[id];
-          if (!oldQuestion) continue;
-          const sameBinding =
-            typeof oldQuestion.prompt === "string" &&
-            oldQuestion.prompt === newQuestion?.prompt &&
-            String(oldQuestion.answer ?? "") === String(newQuestion?.answer ?? "");
-          if (!sameBinding) {
-            orphans[`${id} (previous source)`] = draft;
+          const hadPriorQuestion = Boolean(prior.questionsById[id]);
+          const bindingChanged =
+            hadPriorQuestion &&
+            priorQuestionSignature(id) !== nextQuestionSignature(id);
+          if (
+            versionChanged ||
+            bindingChanged ||
+            !hadPriorQuestion
+          ) {
+            const orphanKey =
+              versionChanged || bindingChanged
+                ? `${id} (previous source)`
+                : id;
+            orphans[orphanKey] = draft;
             nextDrafts[id] = "";
           }
         }
@@ -294,8 +329,12 @@ export function WorksheetHintAuthorPage() {
       boundSourceRef.current = {
         versionId,
         signature,
+        contentEtag: contentEtagValue,
         questionsById: questionMap,
       };
+      if (drifted) {
+        setSourceAuthorityBlocked(true);
+      }
       return drifted;
     },
     [],
@@ -303,35 +342,78 @@ export function WorksheetHintAuthorPage() {
 
   const reloadMetadataPreservingDrafts = useCallback(
     async (draftSnapshot: Record<string, string>) => {
+      enterFailClosedRevalidation();
       const fence: LoadFence = {
         generation: loadGenerationRef.current,
         session: sessionRef.current,
         contentId,
       };
+      const failClosed = (message: string) => {
+        if (loadFenceStale(fence)) return;
+        enterFailClosedRevalidation();
+        setHintDrafts(draftSnapshot);
+        setStatusMessage(message);
+      };
       try {
-        const [, contentResponse] = await Promise.all([
+        const [libraryResponse, contentResponse] = await Promise.all([
           getLibraryItem(contentId),
           getContent(contentId),
         ]);
         if (loadFenceStale(fence)) return;
         const versionId = contentResponse.data.current_version_id;
-        if (!versionId) return;
+        if (!versionId) {
+          failClosed(REVALIDATION_BLOCKED_MESSAGE);
+          return;
+        }
         const versionResponse = await getLibraryVersion(contentId, versionId);
         if (loadFenceStale(fence)) return;
         const version = versionResponse.data;
         if (version.content_id !== contentId || version.version_id !== versionId) {
+          failClosed(REVALIDATION_BLOCKED_MESSAGE);
+          return;
+        }
+        const detail = libraryResponse.data;
+        if (
+          !libraryItemEligibleForHintAuthoring(
+            detail.content_type,
+            version.schema_id,
+            version.schema_version,
+          )
+        ) {
+          failClosed(
+            "The latest content is not an eligible worksheet for hint authoring.",
+          );
           return;
         }
         const reparsed = parseWorksheetHintSourceForAuthoring(version.payload);
         if (!reparsed.ok) {
-          setStatusMessage(reparsed.reason);
-          setHintDrafts(draftSnapshot);
+          failClosed(reparsed.reason);
           return;
         }
         if (!contentResponse.etag) {
-          setStatusMessage(OUT_OF_DATE_MESSAGE);
-          setHintDrafts(draftSnapshot);
+          failClosed(REVALIDATION_BLOCKED_MESSAGE);
           return;
+        }
+        let classItems: SchoolContextClassItem[] = [];
+        try {
+          const classesResponse = await listAssignableClasses();
+          if (loadFenceStale(fence)) return;
+          classItems = classesResponse.data.items;
+        } catch {
+          failClosed(
+            "Could not refresh School Context classes. Choose a class again after reload.",
+          );
+          return;
+        }
+        setClasses(classItems);
+        const selectedStillValid = classItems.some(
+          (item) => item.class_ref === classRef,
+        );
+        if (classRef && !selectedStillValid) {
+          setClassRef("");
+          setStatusMessage(
+            "Your previously selected class is no longer assignable. Choose a current class before creating a version.",
+          );
         }
         const needsReconcile = applyAuthoringSource(
           reparsed,
@@ -340,16 +422,24 @@ export function WorksheetHintAuthorPage() {
           draftSnapshot,
           true,
         );
+        if (loadFenceStale(fence)) return;
+        enterFailClosedRevalidation();
+        setSourceAuthorityBlocked(true);
+        setReconciliationRequired(true);
         setStatusMessage(
           needsReconcile ? RECONCILIATION_MESSAGE : OUT_OF_DATE_MESSAGE,
         );
       } catch {
-        if (!loadFenceStale(fence)) {
-          setStatusMessage(OUT_OF_DATE_MESSAGE);
-        }
+        failClosed(REVALIDATION_BLOCKED_MESSAGE);
       }
     },
-    [applyAuthoringSource, contentId, loadFenceStale],
+    [
+      applyAuthoringSource,
+      classRef,
+      contentId,
+      enterFailClosedRevalidation,
+      loadFenceStale,
+    ],
   );
 
   const load = useCallback(async (options?: { preserveDrafts?: Record<string, string> }) => {
@@ -451,6 +541,7 @@ export function WorksheetHintAuthorPage() {
 
       setTitle(detail.title);
       setReconciliationRequired(false);
+      setSourceAuthorityBlocked(false);
       setUnassignedDrafts({});
       applyAuthoringSource(
         parsed,
@@ -523,10 +614,12 @@ export function WorksheetHintAuthorPage() {
     validHintCount >= 1 &&
     Boolean(classRef.trim()) &&
     !hasBlockingIssues &&
-    !reconciliationRequired;
+    !reconciliationRequired &&
+    !sourceAuthorityBlocked;
 
   function onConfirmReconciliation() {
     setReconciliationRequired(false);
+    setSourceAuthorityBlocked(false);
     setShowPreview(false);
     setStatusMessage("");
   }
@@ -853,7 +946,7 @@ export function WorksheetHintAuthorPage() {
             private to this screen.
           </p>
 
-          {reconciliationRequired ? (
+          {reconciliationRequired || sourceAuthorityBlocked ? (
             <div className="library-reconcile-banner" role="alert">
               <p>{RECONCILIATION_MESSAGE}</p>
               <button
@@ -962,7 +1055,10 @@ export function WorksheetHintAuthorPage() {
               type="button"
               className="btn btn-secondary"
               disabled={
-                busySubmitReview || !createdVersionId || reconciliationRequired
+                busySubmitReview ||
+                !createdVersionId ||
+                reconciliationRequired ||
+                sourceAuthorityBlocked
               }
               onClick={() => void onSubmitForReview()}
             >

@@ -30,6 +30,11 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
   submit ambiguous revalidation, and strict worksheet authoring source parse (no
   OpenAPI pin change).
 
+- PK-V1-HINT-T0-F-I01R3: Fail-closed 412 revalidation, material question binding
+  + Content ETag drift gate, monotonic review attestation epoch with unmount and
+  silent-refresh parent fencing, and discriminating adversarial tests (no OpenAPI
+  pin change).
+
 - PK-V1-HINT-F-I01: Optional in-attempt learner hints on Student OS
   `AttemptPage` / `ResponseEditor` via
   `GET /api/v1/learning/attempts/{attempt_id}/learner-hints`

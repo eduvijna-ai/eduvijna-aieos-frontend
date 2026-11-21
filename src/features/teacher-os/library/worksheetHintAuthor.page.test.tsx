@@ -388,4 +388,214 @@ describe("WorksheetHintAuthorPage", () => {
       expect(screen.queryByText(/Created hint-bearing worksheet version/i)).toBeNull();
     });
   });
+
+  it("blocks create after 412 when authoritative content has no current version", async () => {
+    const draftText = "Draft with missing current version.";
+    let contentCalls = 0;
+
+    stubAuthoringFlow((url, init) => {
+      if (
+        url.includes("/worksheet-learner-hint-versions") &&
+        init?.method === "POST"
+      ) {
+        return mockJsonResponse(
+          { title: "Precondition failed", status: 412, detail: {} },
+          { status: 412 },
+        );
+      }
+      if (url.endsWith(`/api/v1/contents/${CONTENT_ID}`) && init?.method !== "POST") {
+        contentCalls += 1;
+        if (contentCalls >= 2) {
+          return mockJsonResponse({
+            content_id: CONTENT_ID,
+            current_version_id: null,
+            stewardship_state: "APPROVED",
+          });
+        }
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    const textarea = document.getElementById("hint-q-1") as HTMLTextAreaElement;
+    await userEvent.type(textarea, draftText);
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Create hint-bearing version/i }),
+      ).toBeDisabled();
+    });
+    expect(textarea.value).toBe(draftText);
+  });
+
+  it("requires reconciliation when same version id gains a new Content ETag", async () => {
+    const draftText = "Hint for etag-only revision.";
+    let contentGets = 0;
+
+    stubAuthoringFlow((url, init) => {
+      if (
+        url.includes("/worksheet-learner-hint-versions") &&
+        init?.method === "POST"
+      ) {
+        return mockJsonResponse(
+          { title: "Precondition failed", status: 412, detail: {} },
+          { status: 412 },
+        );
+      }
+      if (url.endsWith(`/api/v1/contents/${CONTENT_ID}`) && init?.method !== "POST") {
+        contentGets += 1;
+        return mockJsonResponse(
+          {
+            content_id: CONTENT_ID,
+            current_version_id: VERSION_ID,
+            stewardship_state: "APPROVED",
+          },
+          { etag: contentGets >= 2 ? '"r4-new"' : '"r4"' },
+        );
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    const textarea = document.getElementById("hint-q-1") as HTMLTextAreaElement;
+    await userEvent.type(textarea, draftText);
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    expect(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    ).toBeEnabled();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Create hint-bearing version/i }),
+      ).toBeDisabled();
+    });
+    expect(textarea.value).toBe(draftText);
+  });
+
+  it("blocks create when V1 to distinct V2 changes q-1 prompt and answer", async () => {
+    const VERSION_V2 = "22222222-2222-2222-2222-222222222222";
+    const draftText = "Hint authored on version 1.";
+    let phase: "initial" | "after412" = "initial";
+
+    stubAuthoringFlow((url, init) => {
+      if (
+        url.includes("/worksheet-learner-hint-versions") &&
+        init?.method === "POST"
+      ) {
+        phase = "after412";
+        return mockJsonResponse(
+          { title: "Precondition failed", status: 412, detail: {} },
+          { status: 412 },
+        );
+      }
+      if (url.endsWith(`/api/v1/contents/${CONTENT_ID}`) && init?.method !== "POST") {
+        return mockJsonResponse(
+          {
+            content_id: CONTENT_ID,
+            current_version_id: phase === "initial" ? VERSION_ID : VERSION_V2,
+            stewardship_state: "APPROVED",
+          },
+          { etag: phase === "initial" ? '"r4"' : '"r6"' },
+        );
+      }
+      if (url.includes(`/library/${CONTENT_ID}/versions/`)) {
+        const versionMatch = url.match(/\/versions\/([^/?]+)/);
+        const requestedVersion = versionMatch?.[1];
+        if (requestedVersion === VERSION_V2) {
+          return mockJsonResponse({
+            ...libraryVersion,
+            version_id: VERSION_V2,
+            version_number: 2,
+            payload: {
+              ...authoringWorksheetPayload,
+              questions: authoringWorksheetPayload.questions.map(
+                (question, index) =>
+                  index === 0
+                    ? {
+                        ...question,
+                        prompt: "Completely different fraction wording.",
+                        answer: "99",
+                      }
+                    : question,
+              ),
+            },
+          });
+        }
+        if (requestedVersion === VERSION_ID) {
+          return mockJsonResponse(libraryVersion);
+        }
+        return mockJsonResponse({ title: "Not Found", status: 404 }, { status: 404 });
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    const textarea = document.getElementById("hint-q-1") as HTMLTextAreaElement;
+    await userEvent.type(textarea, draftText);
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Create hint-bearing version/i }),
+      ).toBeDisabled();
+      expect(screen.getByRole("alert")).toHaveTextContent(/worksheet source changed/i);
+      expect(screen.getByText(new RegExp(VERSION_V2))).toBeInTheDocument();
+    });
+    expect(
+      screen.getByRole("button", { name: /I reviewed the updated questions/i }),
+    ).toBeInTheDocument();
+  });
 });

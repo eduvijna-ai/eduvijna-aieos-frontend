@@ -16,6 +16,7 @@ import {
   WorksheetHintReviewPanel,
   worksheetHintReviewRequired,
   hintReviewResourceIdentityLive,
+  allocateHintReviewResourceEpoch,
   type HintReviewResourceIdentity,
 } from "./WorksheetHintReviewPanel";
 import type { TeacherReviewQueueDetail } from "@/services/api/generated/reviewTypes";
@@ -100,6 +101,8 @@ export function ReviewDetailPage() {
   const [contentEtag, setContentEtag] = useState<string | null>(null);
   const [viewFence, setViewFence] = useState<LoadFence | null>(null);
   const [attestationRecorded, setAttestationRecorded] = useState(false);
+  const [reviewResourceEpoch, setReviewResourceEpoch] = useState(0);
+  const reviewResourceEpochRef = useRef(0);
   const [status, setStatus] = useState<
     "loading" | "ready" | "error" | "unavailable"
   >("loading");
@@ -118,6 +121,8 @@ export function ReviewDetailPage() {
     setContentEtag(null);
     setViewFence(null);
     setAttestationRecorded(false);
+    setReviewResourceEpoch(0);
+    reviewResourceEpochRef.current = 0;
     setMode("idle");
     setComment("");
     setRejectConfirmed(false);
@@ -216,6 +221,9 @@ export function ReviewDetailPage() {
         }
 
         if (loadFenceStale(fence)) return;
+        const nextEpoch = allocateHintReviewResourceEpoch();
+        reviewResourceEpochRef.current = nextEpoch;
+        setReviewResourceEpoch(nextEpoch);
         setAttestationRecorded(false);
         setDetail(reviewDetail);
         setEtag(response.etag);
@@ -431,9 +439,13 @@ export function ReviewDetailPage() {
             contentEtag={contentEtag}
             session={session}
             resourceGeneration={loadGeneration}
+            reviewResourceEpoch={reviewResourceEpoch}
             disabled={busy}
             onAttestationRecorded={(identity: HintReviewResourceIdentity) => {
               if (!detail || viewFence === null || loadFenceStale(viewFence)) {
+                return;
+              }
+              if (identity.reviewResourceEpoch !== reviewResourceEpochRef.current) {
                 return;
               }
               const live: HintReviewResourceIdentity = {
@@ -443,6 +455,8 @@ export function ReviewDetailPage() {
                 payloadRef: detail.payload,
                 session,
                 resourceGeneration: loadGeneration,
+                incarnationEpoch: identity.incarnationEpoch,
+                reviewResourceEpoch: reviewResourceEpochRef.current,
               };
               if (hintReviewResourceIdentityLive(identity, live)) {
                 setAttestationRecorded(true);

@@ -42,6 +42,17 @@ Operations: `content_worksheet_hint_version_append`,
 - Session invalidation clears stale append/submit in-flight refs so a new
   teacher can act without a permanent busy lock.
 
+## I01R3 fail-closed revalidation and attestation epoch
+
+- Authoring revalidation enters a blocked state synchronously on 412 or
+  ambiguous recovery; CREATE/SUBMIT stay disabled until the teacher reconciles
+  against a fresh Content/version/schema/class list read.
+- Question binding signatures include material fields (type, options,
+  objectives, explanation) and Content ETag revision — not only prompt/answer.
+- Review attestation uses a monotonic per-incarnation epoch, invalidated on
+  unmount and parent silent refresh, so late POST success cannot set parent
+  attestation status for a superseded reviewer incarnation.
+
 ## Out of scope
 
 Production grants, Backend edits, Student hint GET changes, full Hint E2E,

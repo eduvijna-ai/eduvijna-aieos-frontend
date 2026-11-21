@@ -30,6 +30,7 @@ type WorksheetHintReviewPanelProps = {
   contentEtag: string | null;
   session: DevSession | null;
   resourceGeneration: number;
+  reviewResourceEpoch: number;
   onAttestationRecorded: (identity: HintReviewResourceIdentity) => void;
   disabled?: boolean;
 };
@@ -41,20 +42,39 @@ export type HintReviewResourceIdentity = {
   payloadRef: unknown;
   session: DevSession | null;
   resourceGeneration: number;
+  incarnationEpoch: number;
+  reviewResourceEpoch: number;
 };
+
+let hintReviewResourceEpochSeq = 0;
+
+export function allocateHintReviewResourceEpoch(): number {
+  hintReviewResourceEpochSeq += 1;
+  return hintReviewResourceEpochSeq;
+}
+
+/** @internal — reset monotonic sequence for unit tests only */
+export function resetHintReviewResourceEpochForTests(): void {
+  hintReviewResourceEpochSeq = 0;
+}
 
 export function hintReviewResourceIdentityLive(
   captured: HintReviewResourceIdentity,
   current: HintReviewResourceIdentity | null,
 ): boolean {
   if (!current) return false;
+  if (captured.incarnationEpoch <= 0 || current.incarnationEpoch <= 0) {
+    return false;
+  }
   return (
     captured.contentId === current.contentId &&
     captured.versionId === current.versionId &&
     captured.contentEtag === current.contentEtag &&
     captured.payloadRef === current.payloadRef &&
     captured.session === current.session &&
-    captured.resourceGeneration === current.resourceGeneration
+    captured.resourceGeneration === current.resourceGeneration &&
+    captured.reviewResourceEpoch === current.reviewResourceEpoch &&
+    captured.incarnationEpoch === current.incarnationEpoch
   );
 }
 
@@ -76,6 +96,7 @@ export function WorksheetHintReviewPanel({
   contentEtag,
   session,
   resourceGeneration,
+  reviewResourceEpoch,
   onAttestationRecorded,
   disabled = false,
 }: WorksheetHintReviewPanelProps) {
@@ -98,29 +119,13 @@ export function WorksheetHintReviewPanel({
   const sessionRef = useRef(session);
   const resourceGenerationRef = useRef(resourceGeneration);
   const resourceIdentityRef = useRef<HintReviewResourceIdentity | null>(null);
+  const incarnationEpochRef = useRef<number>(0);
+  const parentEpochRef = useRef(reviewResourceEpoch);
 
   useEffect(() => {
     sessionRef.current = session;
     resourceGenerationRef.current = resourceGeneration;
   }, [session, resourceGeneration]);
-
-  const resourceIdentity: HintReviewResourceIdentity = useMemo(
-    () => ({
-      contentId,
-      versionId,
-      contentEtag,
-      payloadRef: payload,
-      session,
-      resourceGeneration,
-    }),
-  [
-    contentId,
-    versionId,
-    contentEtag,
-    payload,
-    session,
-    resourceGeneration,
-  ]);
 
   const resetPanelState = useCallback(() => {
     setChecks({});
@@ -131,20 +136,53 @@ export function WorksheetHintReviewPanel({
   }, []);
 
   useLayoutEffect(() => {
-    const prior = resourceIdentityRef.current;
-    resourceIdentityRef.current = resourceIdentity;
-    if (prior === null) return;
-    const changed =
-      prior.contentId !== resourceIdentity.contentId ||
-      prior.versionId !== resourceIdentity.versionId ||
-      prior.contentEtag !== resourceIdentity.contentEtag ||
-      prior.payloadRef !== resourceIdentity.payloadRef ||
-      prior.session !== resourceIdentity.session ||
-      prior.resourceGeneration !== resourceIdentity.resourceGeneration;
-    if (changed) {
+    if (parentEpochRef.current !== reviewResourceEpoch) {
       resetPanelState();
+      parentEpochRef.current = reviewResourceEpoch;
     }
-  }, [resourceIdentity, resetPanelState]);
+    const incarnationEpoch = allocateHintReviewResourceEpoch();
+    incarnationEpochRef.current = incarnationEpoch;
+    const nextIdentity: HintReviewResourceIdentity = {
+      contentId,
+      versionId,
+      contentEtag,
+      payloadRef: payload,
+      session,
+      resourceGeneration,
+      incarnationEpoch,
+      reviewResourceEpoch,
+    };
+    const prior = resourceIdentityRef.current;
+    resourceIdentityRef.current = nextIdentity;
+    if (prior !== null) {
+      const changed =
+        prior.contentId !== nextIdentity.contentId ||
+        prior.versionId !== nextIdentity.versionId ||
+        prior.contentEtag !== nextIdentity.contentEtag ||
+        prior.payloadRef !== nextIdentity.payloadRef ||
+        prior.session !== nextIdentity.session ||
+        prior.resourceGeneration !== nextIdentity.resourceGeneration ||
+        prior.reviewResourceEpoch !== nextIdentity.reviewResourceEpoch;
+      if (changed) {
+        resetPanelState();
+      }
+    }
+    return () => {
+      incarnationEpochRef.current = 0;
+      resourceIdentityRef.current = resourceIdentityRef.current
+        ? { ...resourceIdentityRef.current, incarnationEpoch: 0 }
+        : null;
+    };
+  }, [
+    contentId,
+    versionId,
+    contentEtag,
+    payload,
+    session,
+    resourceGeneration,
+    reviewResourceEpoch,
+    resetPanelState,
+  ]);
 
   function setCheck(
     questionId: string,
@@ -184,9 +222,13 @@ export function WorksheetHintReviewPanel({
       return;
     }
 
+    if (incarnationEpochRef.current <= 0) {
+      return;
+    }
+
     const startIdentity: HintReviewResourceIdentity = { ...currentIdentity };
 
-    const bind = `${startIdentity.contentId}:${startIdentity.versionId}:${startIdentity.contentEtag}`;
+    const bind = `${startIdentity.contentId}:${startIdentity.versionId}:${startIdentity.contentEtag}:${startIdentity.incarnationEpoch}`;
     if (bindRef.current !== bind || !idempotencyKeyRef.current) {
       idempotencyKeyRef.current = crypto.randomUUID();
       bindRef.current = bind;

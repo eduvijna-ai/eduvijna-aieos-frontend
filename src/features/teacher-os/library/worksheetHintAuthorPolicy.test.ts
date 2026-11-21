@@ -9,6 +9,7 @@ import {
   parseWorksheetHintSourceForAuthoring,
   validateDraftHintText,
   worksheetHintPayloadHasInvalidLearnerHintKey,
+  worksheetQuestionBindingSignature,
   worksheetQuestionCountEligibleForHintAuthoring,
 } from "./worksheetHintAuthorPolicy";
 
@@ -99,6 +100,23 @@ describe("worksheetHintAuthorPolicy", () => {
     expect(worksheetQuestionCountEligibleForHintAuthoring(12)).toBe(true);
     expect(worksheetQuestionCountEligibleForHintAuthoring(5)).toBe(false);
     expect(worksheetQuestionCountEligibleForHintAuthoring(13)).toBe(false);
+  });
+
+  it("includes material question fields in binding signature", () => {
+    const baseQuestion = {
+      id: "q-1",
+      prompt: "Prompt",
+      answer: "1",
+      explanation: "Because",
+      question_type: "short_answer",
+      options: ["a", "b"],
+      objective_ids: ["obj-1"],
+    };
+    const sigA = worksheetQuestionBindingSignature(["q-1"], { "q-1": baseQuestion });
+    const changedOptions = worksheetQuestionBindingSignature(["q-1"], {
+      "q-1": { ...baseQuestion, options: ["a", "c"] },
+    });
+    expect(sigA).not.toBe(changedOptions);
   });
 
   it("counts appendable hints and lists hinted questions", () => {

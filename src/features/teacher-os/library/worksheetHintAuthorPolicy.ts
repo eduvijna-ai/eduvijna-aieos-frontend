@@ -253,10 +253,26 @@ export function worksheetQuestionBindingSignature(
   return JSON.stringify(
     questionIds.map((id) => {
       const question = questionsById[id];
+      const options = Array.isArray(question?.options)
+        ? (question.options as unknown[]).map((option) => String(option))
+        : [];
+      const objectiveIds = Array.isArray(question?.objective_ids)
+        ? (question.objective_ids as unknown[])
+            .filter((entry): entry is string => typeof entry === "string")
+            .map((entry) => entry.trim())
+        : [];
       return {
         id,
         prompt: typeof question?.prompt === "string" ? question.prompt : "",
         answer: question?.answer !== undefined ? String(question.answer) : "",
+        explanation:
+          typeof question?.explanation === "string" ? question.explanation : "",
+        question_type:
+          typeof question?.question_type === "string"
+            ? question.question_type
+            : "",
+        options,
+        objective_ids: objectiveIds,
       };
     }),
   );
