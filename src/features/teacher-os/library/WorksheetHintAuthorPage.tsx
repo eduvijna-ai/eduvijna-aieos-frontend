@@ -17,6 +17,7 @@ import {
 import {
   postContentSubmitForReview,
   postWorksheetLearnerHintVersionAppend,
+  type WorksheetLearnerHintVersionAppendRequest,
 } from "@/services/api/worksheetHintAuthoringApi";
 import type { DevSession } from "@/services/session/DevSessionConnector";
 import { useSession } from "@/services/session/useSession";
@@ -67,7 +68,15 @@ type PendingMutationReceipt = {
   etag: string;
   materialFingerprint: string;
   idempotencyKey: string;
+  /** Frozen at first POST — used only for explicit recovery replay. */
+  appendRequest?: WorksheetLearnerHintVersionAppendRequest;
 };
+
+function isUncertainPhase(phase: AuthorPhase): boolean {
+  return (
+    phase === "APPEND_OUTCOME_UNCERTAIN" || phase === "SUBMIT_OUTCOME_UNCERTAIN"
+  );
+}
 
 function reviewNavigationMatchesVersion(
   detail: TeacherLibraryDetail,
@@ -92,9 +101,9 @@ function mutationFenceStale(
 const OUT_OF_DATE_MESSAGE =
   "This worksheet changed elsewhere. Reload the latest source and reconcile your unsaved hints before trying again.";
 const AMBIGUOUS_APPEND_MESSAGE =
-  "The save result is uncertain. Your draft is still here — use Reload latest worksheet to verify the server state before creating another version.";
+  "The save result is uncertain. Your draft and the original request are preserved — reload shows the latest worksheet, or use Recover original append attempt with the same idempotency key.";
 const AMBIGUOUS_SUBMIT_MESSAGE =
-  "The submit result is uncertain. Your worksheet and drafts are unchanged — reload to verify server state before retrying.";
+  "The submit result is uncertain. Use Reload to inspect server state, or Recover original submit attempt to replay the exact request.";
 const RECONCILIATION_MESSAGE =
   "The worksheet source changed. Review the updated questions, reapply any saved hint text, then preview again before creating a version.";
 
@@ -170,6 +179,7 @@ export function WorksheetHintAuthorPage() {
   const submitMaterialRef = useRef<string | null>(null);
   const appendInFlightRef = useRef(false);
   const submitInFlightRef = useRef(false);
+  const recoverInFlightRef = useRef(false);
   const createdMaterialRef = useRef<string | null>(null);
   const pendingMutationReceiptRef = useRef<PendingMutationReceipt | null>(null);
 
@@ -191,23 +201,32 @@ export function WorksheetHintAuthorPage() {
     [],
   );
 
-  const clearPendingMutationKeys = useCallback((kind?: "append" | "submit") => {
-    if (!kind || kind === "append") {
-      appendKeyRef.current = null;
-      appendMaterialRef.current = null;
-      if (pendingMutationReceiptRef.current?.kind === "append") {
-        pendingMutationReceiptRef.current = null;
+  const clearPendingMutationKeys = useCallback(
+    (kind?: "append" | "submit", options?: { force?: boolean }) => {
+      const keepReceipt =
+        isUncertainPhase(authorPhaseRef.current) && !options?.force;
+      if (!kind || kind === "append") {
+        if (!keepReceipt) {
+          appendKeyRef.current = null;
+          appendMaterialRef.current = null;
+          if (pendingMutationReceiptRef.current?.kind === "append") {
+            pendingMutationReceiptRef.current = null;
+          }
+        }
       }
-    }
-    if (!kind || kind === "submit") {
-      submitKeyRef.current = null;
-      submitVersionRef.current = null;
-      submitMaterialRef.current = null;
-      if (pendingMutationReceiptRef.current?.kind === "submit") {
-        pendingMutationReceiptRef.current = null;
+      if (!kind || kind === "submit") {
+        if (!keepReceipt) {
+          submitKeyRef.current = null;
+          submitVersionRef.current = null;
+          submitMaterialRef.current = null;
+          if (pendingMutationReceiptRef.current?.kind === "submit") {
+            pendingMutationReceiptRef.current = null;
+          }
+        }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
   const purgeAuthorState = useCallback(() => {
     setSourcePayload(null);
@@ -234,6 +253,9 @@ export function WorksheetHintAuthorPage() {
   }, [clearPendingMutationKeys, setAuthorPhaseSync]);
 
   const beginRevalidation = useCallback(() => {
+    if (isUncertainPhase(authorPhaseRef.current)) {
+      return;
+    }
     setAuthorPhaseSync("REVALIDATING");
     setShowPreview(false);
     setCreatedVersionId(null);
@@ -344,7 +366,9 @@ export function WorksheetHintAuthorPage() {
         setCreatedVersionId(null);
         setCreatedContentEtag(null);
         createdMaterialRef.current = null;
-        clearPendingMutationKeys();
+        if (!isUncertainPhase(authorPhaseRef.current)) {
+          clearPendingMutationKeys();
+        }
         setFieldIssues({});
       }
 
@@ -368,7 +392,12 @@ export function WorksheetHintAuthorPage() {
 
   const reloadMetadataPreservingDrafts = useCallback(
     async (draftSnapshot: Record<string, string>) => {
-      beginRevalidation();
+      const phaseAtStart = authorPhaseRef.current;
+      const uncertainAtStart = isUncertainPhase(phaseAtStart);
+      const receiptAtStart = pendingMutationReceiptRef.current;
+      if (!uncertainAtStart) {
+        beginRevalidation();
+      }
       const fence: LoadFence = {
         generation: loadGenerationRef.current,
         session: sessionRef.current,
@@ -376,6 +405,14 @@ export function WorksheetHintAuthorPage() {
       };
       const failClosed = (message: string) => {
         if (loadFenceStale(fence)) return;
+        if (uncertainAtStart && receiptAtStart) {
+          pendingMutationReceiptRef.current = receiptAtStart;
+          setAuthorPhaseSync(phaseAtStart);
+          setHintDrafts(draftSnapshot);
+          setShowPreview(false);
+          setStatusMessage(message);
+          return;
+        }
         setAuthorPhaseSync("AUTHORITY_UNAVAILABLE");
         setHintDrafts(draftSnapshot);
         setShowPreview(false);
@@ -442,6 +479,26 @@ export function WorksheetHintAuthorPage() {
             "Your previously selected class is no longer assignable. Choose a current class before creating a version.",
           );
         }
+        if (uncertainAtStart && receiptAtStart) {
+          if (loadFenceStale(fence)) return;
+          setClasses(classItems);
+          const selectedStillValidUncertain = classItems.some(
+            (item) => item.class_ref === classRef,
+          );
+          if (classRef && !selectedStillValidUncertain) {
+            setClassRef("");
+          }
+          pendingMutationReceiptRef.current = receiptAtStart;
+          setAuthorPhaseSync(phaseAtStart);
+          setHintDrafts(draftSnapshot);
+          setShowPreview(false);
+          setStatusMessage(
+            phaseAtStart === "APPEND_OUTCOME_UNCERTAIN"
+              ? `${AMBIGUOUS_APPEND_MESSAGE} Current authoritative version: ${versionId}.`
+              : `${AMBIGUOUS_SUBMIT_MESSAGE} Current authoritative version: ${versionId}.`,
+          );
+          return;
+        }
         const needsReconcile = applyAuthoringSource(
           reparsed,
           versionId,
@@ -450,6 +507,9 @@ export function WorksheetHintAuthorPage() {
           true,
         );
         if (loadFenceStale(fence)) return;
+        if (pendingMutationReceiptRef.current) {
+          return;
+        }
         setAuthorPhaseSync("RECONCILIATION_REQUIRED");
         setShowPreview(false);
         setStatusMessage(
@@ -658,14 +718,239 @@ export function WorksheetHintAuthorPage() {
 
   function onConfirmReconciliation() {
     if (authorPhaseRef.current !== "RECONCILIATION_REQUIRED") return;
+    if (pendingMutationReceiptRef.current) return;
     setAuthorPhaseSync("READY");
     setShowPreview(false);
     setStatusMessage("");
   }
 
+  async function finalizeResolvedAppend(
+    startFence: MutationFence,
+    versionId: string,
+    versionNumber: number | undefined,
+    responseEtag: string | null,
+    material: string,
+  ) {
+    if (
+      mutationFenceStale(
+        startFence,
+        loadGenerationRef.current,
+        sessionRef.current,
+        contentIdRef.current,
+      )
+    ) {
+      return;
+    }
+    clearPendingMutationKeys("append", { force: true });
+    createdMaterialRef.current = material;
+    setCreatedVersionId(versionId);
+    setCreatedContentEtag(responseEtag);
+    try {
+      const contentResponse = await getContent(contentId);
+      if (
+        mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+        )
+      ) {
+        return;
+      }
+      const authoritativeCurrent = contentResponse.data.current_version_id;
+      if (authoritativeCurrent && authoritativeCurrent !== versionId) {
+        setAuthorPhaseSync("RECONCILIATION_REQUIRED");
+        setShowPreview(false);
+        setStatusMessage(
+          `Hint version ${versionNumber ?? versionId} was recorded, but the content now points at ${authoritativeCurrent}. Reconcile against the latest source before any new action.`,
+        );
+        return;
+      }
+      if (contentResponse.etag) {
+        setCreatedContentEtag(contentResponse.etag);
+      }
+    } catch {
+      if (
+        mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+        )
+      ) {
+        return;
+      }
+    }
+    setAuthorPhaseSync("READY");
+    setStatusMessage(
+      `Created hint-bearing worksheet version ${versionNumber ?? versionId}. Submit it for independent review when ready.`,
+    );
+  }
+
+  async function onRecoverOriginalMutation() {
+    if (recoverInFlightRef.current) return;
+    const phase = authorPhaseRef.current;
+    const receipt = pendingMutationReceiptRef.current;
+    if (!receipt || !isUncertainPhase(phase)) return;
+    if (
+      receipt.generation !== loadGenerationRef.current ||
+      receipt.session !== sessionRef.current ||
+      receipt.contentId !== contentIdRef.current
+    ) {
+      return;
+    }
+
+    const startFence: MutationFence = {
+      generation: loadGenerationRef.current,
+      session: sessionRef.current,
+      contentId,
+      sourceVersionId: receipt.sourceVersionId,
+    };
+
+    recoverInFlightRef.current = true;
+  if (receipt.kind === "append") {
+      if (!receipt.appendRequest) {
+        recoverInFlightRef.current = false;
+        return;
+      }
+      setBusyAppend(true);
+      setStatusMessage("");
+      try {
+        const response = await postWorksheetLearnerHintVersionAppend(
+          contentId,
+          receipt.appendRequest,
+          receipt.etag,
+          receipt.idempotencyKey,
+        );
+        if (response.data.content_id !== contentId) {
+          setStatusMessage(
+            "Recovery response does not match this content. The original request remains unresolved.",
+          );
+          return;
+        }
+        await finalizeResolvedAppend(
+          startFence,
+          response.data.version_id,
+          response.data.version_number,
+          response.etag,
+          receipt.materialFingerprint,
+        );
+      } catch (error) {
+        if (
+          mutationFenceStale(
+            startFence,
+            loadGenerationRef.current,
+            sessionRef.current,
+            contentIdRef.current,
+          )
+        ) {
+          return;
+        }
+        if (error instanceof ApiError && error.code === "precondition_failed") {
+          clearPendingMutationKeys("append", { force: true });
+          pendingMutationReceiptRef.current = null;
+          setStatusMessage(OUT_OF_DATE_MESSAGE);
+          await reloadMetadataPreservingDrafts({ ...hintDrafts });
+          return;
+        }
+        const isTransport =
+          error instanceof ApiError &&
+          (error.status === 0 ||
+            error.code === "network" ||
+            (error.status !== null && error.status >= 500));
+        if (isTransport || !(error instanceof ApiError)) {
+          setAuthorPhaseSync("APPEND_OUTCOME_UNCERTAIN");
+          setStatusMessage(AMBIGUOUS_APPEND_MESSAGE);
+          return;
+        }
+        setStatusMessage(userMessageForApiError(error));
+      } finally {
+        if (
+          !mutationFenceStale(
+            startFence,
+            loadGenerationRef.current,
+            sessionRef.current,
+            contentIdRef.current,
+          )
+        ) {
+          recoverInFlightRef.current = false;
+          setBusyAppend(false);
+        }
+      }
+      return;
+    }
+
+    setBusySubmitReview(true);
+    setStatusMessage("");
+    try {
+      await postContentSubmitForReview(
+        contentId,
+        receipt.sourceVersionId,
+        receipt.etag,
+        receipt.idempotencyKey,
+      );
+      if (
+        mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+        )
+      ) {
+        return;
+      }
+      clearPendingMutationKeys("submit", { force: true });
+      setAuthorPhaseSync("READY");
+      setStatusMessage(
+        "Submitted for independent review. Approval and publishing remain separate steps.",
+      );
+    } catch (error) {
+      if (
+        mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+        )
+      ) {
+        return;
+      }
+      if (error instanceof ApiError && error.code === "precondition_failed") {
+        clearPendingMutationKeys("submit", { force: true });
+        setStatusMessage(OUT_OF_DATE_MESSAGE);
+        await reloadMetadataPreservingDrafts({ ...hintDrafts });
+        return;
+      }
+      const isTransport =
+        error instanceof ApiError &&
+        (error.status === 0 ||
+          error.code === "network" ||
+          (error.status !== null && error.status >= 500));
+      if (isTransport || !(error instanceof ApiError)) {
+        setAuthorPhaseSync("SUBMIT_OUTCOME_UNCERTAIN");
+        setStatusMessage(AMBIGUOUS_SUBMIT_MESSAGE);
+        return;
+      }
+      setStatusMessage(userMessageForApiError(error));
+    } finally {
+      if (
+        !mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+        )
+      ) {
+        recoverInFlightRef.current = false;
+        setBusySubmitReview(false);
+      }
+    }
+  }
+
   async function onCreateHintVersion() {
-    if (appendInFlightRef.current) return;
+    if (appendInFlightRef.current || recoverInFlightRef.current) return;
     if (authorPhaseRef.current !== "READY") return;
+    if (pendingMutationReceiptRef.current) return;
     if (!sourcePayload || !contentEtag || !classRef.trim() || !currentVersionId) {
       setStatusMessage("Select a class and add at least one valid hint.");
       return;
@@ -682,19 +967,7 @@ export function WorksheetHintAuthorPage() {
     const draftSnapshot = { ...hintDrafts };
     const bodyPayload = buildWorksheetHintAppendPayload(sourcePayload, hintDrafts);
     const material = appendMaterialFingerprint;
-    const pending = pendingMutationReceiptRef.current;
-    if (
-      pending?.kind === "append" &&
-      pending.materialFingerprint === material &&
-      pending.session === sessionRef.current &&
-      pending.contentId === contentIdRef.current
-    ) {
-      appendKeyRef.current = pending.idempotencyKey;
-      appendMaterialRef.current = material;
-    } else if (
-      appendMaterialRef.current !== material ||
-      !appendKeyRef.current
-    ) {
+    if (appendMaterialRef.current !== material || !appendKeyRef.current) {
       appendKeyRef.current = crypto.randomUUID();
       appendMaterialRef.current = material;
     }
@@ -705,8 +978,24 @@ export function WorksheetHintAuthorPage() {
       contentId,
       sourceVersionId: currentVersionId,
     };
-    const idempotencyKey = appendKeyRef.current;
+    const idempotencyKey = appendKeyRef.current as string;
     const etagAtStart = contentEtag;
+
+    const frozenAppendRequest: WorksheetLearnerHintVersionAppendRequest = {
+      authoring_class_ref: classRef.trim(),
+      payload: structuredClone(bodyPayload) as WorksheetLearnerHintVersionAppendRequest["payload"],
+    };
+    pendingMutationReceiptRef.current = {
+      kind: "append",
+      generation: loadGenerationRef.current,
+      session: sessionRef.current,
+      contentId,
+      sourceVersionId: currentVersionId,
+      etag: etagAtStart,
+      materialFingerprint: material,
+      idempotencyKey,
+      appendRequest: frozenAppendRequest,
+    };
 
     appendInFlightRef.current = true;
     setBusyAppend(true);
@@ -714,30 +1003,16 @@ export function WorksheetHintAuthorPage() {
     try {
       const response = await postWorksheetLearnerHintVersionAppend(
         contentId,
-        {
-          authoring_class_ref: classRef.trim(),
-          payload: bodyPayload,
-        },
+        frozenAppendRequest,
         etagAtStart,
         idempotencyKey,
       );
-      if (
-        mutationFenceStale(
-          startFence,
-          loadGenerationRef.current,
-          sessionRef.current,
-          contentIdRef.current,
-        )
-      ) {
-        return;
-      }
-      pendingMutationReceiptRef.current = null;
-      createdMaterialRef.current = material;
-      setCreatedVersionId(response.data.version_id);
-      setCreatedContentEtag(response.etag);
-      setAuthorPhaseSync("READY");
-      setStatusMessage(
-        `Created hint-bearing worksheet version ${response.data.version_number}. Submit it for independent review when ready.`,
+      await finalizeResolvedAppend(
+        startFence,
+        response.data.version_id,
+        response.data.version_number,
+        response.etag,
+        material,
       );
     } catch (error) {
       if (
@@ -751,7 +1026,7 @@ export function WorksheetHintAuthorPage() {
         return;
       }
       if (error instanceof ApiError && error.code === "precondition_failed") {
-        clearPendingMutationKeys("append");
+        clearPendingMutationKeys("append", { force: true });
         pendingMutationReceiptRef.current = null;
         setStatusMessage(OUT_OF_DATE_MESSAGE);
         await reloadMetadataPreservingDrafts(draftSnapshot);
@@ -763,54 +1038,15 @@ export function WorksheetHintAuthorPage() {
           error.code === "network" ||
           (error.status !== null && error.status >= 500));
       if (isTransport || !(error instanceof ApiError)) {
+        authorPhaseRef.current = "APPEND_OUTCOME_UNCERTAIN";
         setAuthorPhaseSync("APPEND_OUTCOME_UNCERTAIN");
         setShowPreview(false);
-        pendingMutationReceiptRef.current = {
-          kind: "append",
-          generation: loadGenerationRef.current,
-          session: sessionRef.current,
-          contentId,
-          sourceVersionId: currentVersionId,
-          etag: etagAtStart,
-          materialFingerprint: material,
-          idempotencyKey,
-        };
-        try {
-          const contentResponse = await getContent(contentId);
-          if (
-            mutationFenceStale(
-              startFence,
-              loadGenerationRef.current,
-              sessionRef.current,
-              contentIdRef.current,
-            )
-          ) {
-            return;
-          }
-          const nextVersionId = contentResponse.data.current_version_id;
-          if (nextVersionId && nextVersionId !== startFence.sourceVersionId) {
-            setStatusMessage(
-              "A new worksheet version may exist. Reload latest worksheet to verify before any new save.",
-            );
-            await reloadMetadataPreservingDrafts(draftSnapshot);
-            return;
-          }
-        } catch {
-          if (
-            mutationFenceStale(
-              startFence,
-              loadGenerationRef.current,
-              sessionRef.current,
-              contentIdRef.current,
-            )
-          ) {
-            return;
-          }
-        }
-        setStatusMessage(AMBIGUOUS_APPEND_MESSAGE);
         setHintDrafts(draftSnapshot);
+        setStatusMessage(AMBIGUOUS_APPEND_MESSAGE);
         return;
       }
+      clearPendingMutationKeys("append", { force: true });
+      pendingMutationReceiptRef.current = null;
       setStatusMessage(userMessageForApiError(error));
     } finally {
       if (
@@ -828,10 +1064,9 @@ export function WorksheetHintAuthorPage() {
   }
 
   async function onSubmitForReview() {
-    if (submitInFlightRef.current) return;
-    const phase = authorPhaseRef.current;
-    if (phase !== "READY" && phase !== "APPEND_OUTCOME_UNCERTAIN") return;
-    if (phase === "APPEND_OUTCOME_UNCERTAIN") return;
+    if (submitInFlightRef.current || recoverInFlightRef.current) return;
+    if (authorPhaseRef.current !== "READY") return;
+    if (pendingMutationReceiptRef.current) return;
     if (!createdVersionId || !createdContentEtag || !createdMaterialRef.current) {
       setStatusMessage("Create the hint-bearing version before submitting.");
       return;
@@ -862,6 +1097,17 @@ export function WorksheetHintAuthorPage() {
     const versionForSubmit = createdVersionId;
     const draftSnapshot = { ...hintDrafts };
 
+    pendingMutationReceiptRef.current = {
+      kind: "submit",
+      generation: loadGenerationRef.current,
+      session: sessionRef.current,
+      contentId,
+      sourceVersionId: versionForSubmit,
+      etag: etagForSubmit,
+      materialFingerprint: appendMaterialFingerprint,
+      idempotencyKey: submitKey,
+    };
+
     submitInFlightRef.current = true;
     setBusySubmitReview(true);
     setStatusMessage("");
@@ -882,7 +1128,7 @@ export function WorksheetHintAuthorPage() {
       ) {
         return;
       }
-      pendingMutationReceiptRef.current = null;
+      clearPendingMutationKeys("submit", { force: true });
       setStatusMessage(
         "Submitted for independent review. Approval and publishing remain separate steps.",
       );
@@ -909,17 +1155,8 @@ export function WorksheetHintAuthorPage() {
           error.code === "network" ||
           (error.status !== null && error.status >= 500));
       if (isTransport || !(error instanceof ApiError)) {
+        authorPhaseRef.current = "SUBMIT_OUTCOME_UNCERTAIN";
         setAuthorPhaseSync("SUBMIT_OUTCOME_UNCERTAIN");
-        pendingMutationReceiptRef.current = {
-          kind: "submit",
-          generation: loadGenerationRef.current,
-          session: sessionRef.current,
-          contentId,
-          sourceVersionId: versionForSubmit,
-          etag: etagForSubmit,
-          materialFingerprint: appendMaterialFingerprint,
-          idempotencyKey: submitKey,
-        };
         try {
           const [contentResponse, versionResponse, libraryResponse] =
             await Promise.all([
@@ -945,7 +1182,7 @@ export function WorksheetHintAuthorPage() {
                 versionForSubmit,
               ));
           if (submitted) {
-            pendingMutationReceiptRef.current = null;
+            clearPendingMutationKeys("submit", { force: true });
             setAuthorPhaseSync("READY");
             setStatusMessage(
               "Submitted for independent review. Approval and publishing remain separate steps.",
@@ -1069,6 +1306,28 @@ export function WorksheetHintAuthorPage() {
               >
                 Reload latest authoritative worksheet
               </button>
+              {authorPhase === "APPEND_OUTCOME_UNCERTAIN" ? (
+                <button
+                  type="button"
+                  className="btn"
+                  data-testid="recover-original-append"
+                  disabled={busyAppend}
+                  onClick={() => void onRecoverOriginalMutation()}
+                >
+                  Recover original append attempt
+                </button>
+              ) : null}
+              {authorPhase === "SUBMIT_OUTCOME_UNCERTAIN" ? (
+                <button
+                  type="button"
+                  className="btn"
+                  data-testid="recover-original-submit"
+                  disabled={busySubmitReview}
+                  onClick={() => void onRecoverOriginalMutation()}
+                >
+                  Recover original submit attempt
+                </button>
+              ) : null}
             </div>
           ) : null}
 

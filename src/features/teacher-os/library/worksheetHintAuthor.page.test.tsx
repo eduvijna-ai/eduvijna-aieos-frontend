@@ -36,6 +36,8 @@ const authoringWorksheetPayload = {
   })),
 };
 
+const CREATED_HINT_VERSION = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+
 const libraryVersion = {
   content_id: CONTENT_ID,
   version_id: VERSION_ID,
@@ -48,6 +50,8 @@ const libraryVersion = {
 function stubAuthoringFlow(
   fetchImpl?: (url: string, init?: RequestInit) => Promise<Response> | Response,
 ) {
+  let authoritativeVersionId = VERSION_ID;
+  let contentEtag = '"r4"';
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -66,10 +70,10 @@ function stubAuthoringFlow(
         return mockJsonResponse(
           {
             content_id: CONTENT_ID,
-            current_version_id: VERSION_ID,
+            current_version_id: authoritativeVersionId,
             stewardship_state: "APPROVED",
           },
-          { etag: '"r4"' },
+          { etag: contentEtag },
         );
       }
       if (url.includes("/school-context/classes")) {
@@ -81,13 +85,15 @@ function stubAuthoringFlow(
         const headers = new Headers(init.headers);
         expect(headers.get("If-Match")).toBe('"r4"');
         expect(headers.get("Idempotency-Key")).toMatch(/^[0-9a-f-]{36}$/i);
+        authoritativeVersionId = CREATED_HINT_VERSION;
+        contentEtag = '"r5"';
         return mockJsonResponse(
           {
             content_id: CONTENT_ID,
-            version_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            version_id: CREATED_HINT_VERSION,
             version_number: 2,
           },
-          { etag: '"r5"', status: 201 },
+          { etag: contentEtag, status: 201 },
         );
       }
       return mockJsonResponse({ title: "Not Found", status: 404 }, { status: 404 });
@@ -751,9 +757,12 @@ describe("WorksheetHintAuthorPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("preserves idempotency key for same material after uncertain append until resolution", async () => {
+  it("stays uncertain after reload on same V1 until explicit recovery with same key and body", async () => {
     const keys: string[] = [];
+    const etags: string[] = [];
+    const bodies: string[] = [];
     let appendAttempts = 0;
+    const CREATED_V2 = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
     stubAuthoringFlow((url, init) => {
       if (
@@ -763,7 +772,10 @@ describe("WorksheetHintAuthorPage", () => {
         appendAttempts += 1;
         const headers = new Headers(init.headers);
         const key = headers.get("Idempotency-Key");
+        const etag = headers.get("If-Match");
         if (key) keys.push(key);
+        if (etag) etags.push(etag);
+        if (init.body) bodies.push(String(init.body));
         if (appendAttempts === 1) {
           return mockJsonResponse(
             { title: "Service unavailable", status: 503 },
@@ -773,10 +785,20 @@ describe("WorksheetHintAuthorPage", () => {
         return mockJsonResponse(
           {
             content_id: CONTENT_ID,
-            version_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            version_id: CREATED_V2,
             version_number: 2,
           },
-          { etag: '"r5"', status: 201 },
+          { etag: '"r5-after-recovery"', status: 201 },
+        );
+      }
+      if (url.endsWith(`/api/v1/contents/${CONTENT_ID}`) && init?.method !== "POST") {
+        return mockJsonResponse(
+          {
+            content_id: CONTENT_ID,
+            current_version_id: appendAttempts >= 2 ? CREATED_V2 : VERSION_ID,
+            stewardship_state: "APPROVED",
+          },
+          { etag: appendAttempts >= 2 ? '"r5-after-recovery"' : '"r4"' },
         );
       }
       return undefined as unknown as Response;
@@ -806,28 +828,197 @@ describe("WorksheetHintAuthorPage", () => {
       screen.getByRole("button", { name: /Create hint-bearing version/i }),
     );
     await waitFor(() => {
-      expect(screen.getByTestId("reload-authoritative-worksheet")).toBeInTheDocument();
+      expect(screen.getByTestId("recover-original-append")).toBeInTheDocument();
     });
     expect(appendAttempts).toBe(1);
+    expect(
+      screen.queryByRole("button", { name: /I reviewed the updated questions/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    ).toBeDisabled();
 
     await userEvent.click(screen.getByTestId("reload-authoritative-worksheet"));
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /I reviewed the updated questions/i }),
+        document.querySelector("[data-author-phase='APPEND_OUTCOME_UNCERTAIN']"),
       ).toBeInTheDocument();
     });
-    await userEvent.click(
-      screen.getByRole("button", { name: /I reviewed the updated questions/i }),
+    expect(
+      screen.queryByRole("button", { name: /I reviewed the updated questions/i }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("recover-original-append"));
+    await waitFor(() => {
+      expect(appendAttempts).toBe(2);
+    });
+    expect(keys[1]).toBe(keys[0]);
+    expect(etags[1]).toBe(etags[0]);
+    expect(bodies[1]).toBe(bodies[0]);
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent(/Created hint-bearing/i);
+    });
+  });
+
+  it("does not drop uncertain receipt when reload sees V2 from another writer", async () => {
+    const VERSION_V2 = "22222222-2222-2222-2222-222222222222";
+    let appendAttempts = 0;
+
+    stubAuthoringFlow((url, init) => {
+      if (
+        url.includes("/worksheet-learner-hint-versions") &&
+        init?.method === "POST"
+      ) {
+        appendAttempts += 1;
+        return mockJsonResponse(
+          { title: "Service unavailable", status: 503 },
+          { status: 503 },
+        );
+      }
+      if (url.endsWith(`/api/v1/contents/${CONTENT_ID}`) && init?.method !== "POST") {
+        return mockJsonResponse(
+          {
+            content_id: CONTENT_ID,
+            current_version_id: VERSION_V2,
+            stewardship_state: "APPROVED",
+          },
+          { etag: '"r6"' },
+        );
+      }
+      if (url.includes(`/library/${CONTENT_ID}/versions/${VERSION_V2}`)) {
+        return mockJsonResponse({
+          ...libraryVersion,
+          version_id: VERSION_V2,
+          version_number: 2,
+          payload: {
+            ...authoringWorksheetPayload,
+            questions: authoringWorksheetPayload.questions.map((q, i) =>
+              i === 0
+                ? { ...q, prompt: "Another teacher wrote this version." }
+                : q,
+            ),
+          },
+        });
+      }
+      if (url.includes(`/library/${CONTENT_ID}/versions/${VERSION_ID}`)) {
+        return mockJsonResponse(libraryVersion);
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.type(
+      document.getElementById("hint-q-1") as HTMLTextAreaElement,
+      "Hint before uncertain.",
     );
     await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
     await userEvent.click(
       screen.getByRole("button", { name: /Create hint-bearing version/i }),
     );
     await waitFor(() => {
-      expect(appendAttempts).toBe(2);
+      expect(screen.getByTestId("recover-original-append")).toBeInTheDocument();
     });
-    expect(keys[0]).toBeDefined();
-    expect(keys[1]).toBe(keys[0]);
+    await userEvent.click(screen.getByTestId("reload-authoritative-worksheet"));
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent(VERSION_V2);
+    });
+    expect(
+      document.querySelector("[data-author-phase='APPEND_OUTCOME_UNCERTAIN']"),
+    ).toBeInTheDocument();
+    expect(appendAttempts).toBe(1);
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+    expect(appendAttempts).toBe(1);
+  });
+
+  it("replays submit recovery with original etag and idempotency key", async () => {
+    const CREATED_V2 = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const submitKeys: string[] = [];
+    const submitEtags: string[] = [];
+    let submitAttempts = 0;
+
+    stubAuthoringFlow((url, init) => {
+      if (url.includes("/actions/submit-for-review") && init?.method === "POST") {
+        submitAttempts += 1;
+        const headers = new Headers(init.headers);
+        const key = headers.get("Idempotency-Key");
+        const etag = headers.get("If-Match");
+        if (key) submitKeys.push(key);
+        if (etag) submitEtags.push(etag);
+        if (submitAttempts === 1) {
+          return mockJsonResponse(
+            { title: "Service unavailable", status: 503 },
+            { status: 503 },
+          );
+        }
+        return mockJsonResponse(
+          {
+            content_id: CONTENT_ID,
+            version_id: CREATED_V2,
+            stewardship_state: "IN_REVIEW",
+          },
+          { etag: '"r6"', status: 201 },
+        );
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.type(
+      document.getElementById("hint-q-1") as HTMLTextAreaElement,
+      "Think about equal parts.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Submit for independent review/i }),
+      ).toBeEnabled();
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: /Submit for independent review/i }),
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("recover-original-submit")).toBeInTheDocument();
+    });
+    expect(submitAttempts).toBe(1);
+    await userEvent.click(screen.getByTestId("recover-original-submit"));
+    await waitFor(() => {
+      expect(submitAttempts).toBe(2);
+    });
+    expect(submitKeys[1]).toBe(submitKeys[0]);
+    expect(submitEtags[1]).toBe(submitEtags[0]);
+    expect(screen.getByRole("status")).toHaveTextContent(/Submitted for independent review/i);
   });
 
   it("explicit submit-for-review after successful create uses separate idempotency", async () => {

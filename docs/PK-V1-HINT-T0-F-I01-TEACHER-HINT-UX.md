@@ -53,6 +53,18 @@ Operations: `content_worksheet_hint_version_append`,
   unmount and parent silent refresh, so late POST success cannot set parent
   attestation status for a superseded reviewer incarnation.
 
+## I01R5 exact-request outcome recovery
+
+- Pending append/submit receipts freeze the original body, If-Match, and
+  Idempotency-Key at the first POST; uncertain phases block fresh CREATE/SUBMIT.
+- Reload refreshes display metadata only during uncertainty — it does not prove
+  write outcome or clear the receipt.
+- **Recover original append/submit attempt** replays the exact governed POST;
+  backend idempotency returns the established result when already committed.
+
+Backend proof (read-only pin `5bbc09bc…`):
+`worksheet_hint_append.py` and `review.py` fingerprint-bound durable replay.
+
 ## Out of scope
 
 Production grants, Backend edits, Student hint GET changes, full Hint E2E,
