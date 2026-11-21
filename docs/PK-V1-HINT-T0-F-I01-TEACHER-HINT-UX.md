@@ -65,6 +65,20 @@ Operations: `content_worksheet_hint_version_append`,
 Backend proof (read-only pin `5bbc09bc…`):
 `worksheet_hint_append.py` and `review.py` fingerprint-bound durable replay.
 
+## I01R6 finalization + recovery-epoch closure
+
+- Successful append (including exact-key recovery) enters
+  `APPEND_CURRENT_VERIFY_REQUIRED` before any submit eligibility; a Content GET
+  must prove `current_version_id` equals the recorded version and return a fresh
+  ETag.
+- Recorded append outcome is tracked separately from current authority — V3
+  supersede clears stale submit binding and requires reconcile against real
+  source.
+- Monotonic `operationEpoch` invalidates late reload/recover callbacks; recovery
+  412/409/403 on uncertain replay preserves the original pending receipt.
+- Submit recovery/success validates `IN_REVIEW` binding and blocks duplicate
+  newly keyed submit for the same version on the mounted page.
+
 ## Out of scope
 
 Production grants, Backend edits, Student hint GET changes, full Hint E2E,

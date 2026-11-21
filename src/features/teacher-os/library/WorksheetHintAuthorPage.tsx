@@ -17,6 +17,8 @@ import {
 import {
   postContentSubmitForReview,
   postWorksheetLearnerHintVersionAppend,
+  type ContentVersionResponse,
+  type ReviewSubmissionResponse,
   type WorksheetLearnerHintVersionAppendRequest,
 } from "@/services/api/worksheetHintAuthoringApi";
 import type { DevSession } from "@/services/session/DevSessionConnector";
@@ -56,6 +58,7 @@ export type AuthorPhase =
   | "REVALIDATING"
   | "AUTHORITY_UNAVAILABLE"
   | "RECONCILIATION_REQUIRED"
+  | "APPEND_CURRENT_VERIFY_REQUIRED"
   | "APPEND_OUTCOME_UNCERTAIN"
   | "SUBMIT_OUTCOME_UNCERTAIN";
 
@@ -75,6 +78,36 @@ type PendingMutationReceipt = {
 function isUncertainPhase(phase: AuthorPhase): boolean {
   return (
     phase === "APPEND_OUTCOME_UNCERTAIN" || phase === "SUBMIT_OUTCOME_UNCERTAIN"
+  );
+}
+
+function validateAppendHttpOutcome(
+  expectedContentId: string,
+  data: ContentVersionResponse,
+  responseEtag: string | null,
+): { versionId: string; versionNumber: number } | null {
+  if (data.content_id !== expectedContentId) return null;
+  const versionId = data.version_id?.trim();
+  if (!versionId) return null;
+  if (
+    data.schema_id !== "education.worksheet" ||
+    data.schema_version !== WORKSHEET_HINT_SCHEMA_VERSION
+  ) {
+    return null;
+  }
+  if (!responseEtag?.trim()) return null;
+  return { versionId, versionNumber: data.version_number };
+}
+
+function validateSubmitHttpOutcome(
+  expectedContentId: string,
+  expectedVersionId: string,
+  data: ReviewSubmissionResponse,
+): boolean {
+  return (
+    data.content_id === expectedContentId &&
+    data.version_id === expectedVersionId &&
+    data.stewardship_state === "IN_REVIEW"
   );
 }
 
@@ -106,6 +139,14 @@ const AMBIGUOUS_SUBMIT_MESSAGE =
   "The submit result is uncertain. Use Reload to inspect server state, or Recover original submit attempt to replay the exact request.";
 const RECONCILIATION_MESSAGE =
   "The worksheet source changed. Review the updated questions, reapply any saved hint text, then preview again before creating a version.";
+const APPEND_RECORDED_VERIFY_MESSAGE =
+  "Hint version recorded on the server. Verifying current worksheet authority before enabling submit…";
+const APPEND_RECORDED_BLOCKED_MESSAGE =
+  "A hint-bearing version was recorded, but current worksheet authority could not be confirmed. Reload when the source is available — do not create another version until resolved.";
+const RECOVERY_APPEND_412_MESSAGE =
+  "Recovery replay returned precondition failed. The original append attempt remains unresolved — use Recover again or Reload for context only.";
+const RECOVERY_SUBMIT_412_MESSAGE =
+  "Recovery replay returned precondition failed. The original submit attempt remains unresolved.";
 
 type SourceBinding = {
   versionId: string;
@@ -161,6 +202,9 @@ export function WorksheetHintAuthorPage() {
   const [createdContentEtag, setCreatedContentEtag] = useState<string | null>(
     null,
   );
+  const [submitCompletedVersionId, setSubmitCompletedVersionId] = useState<
+    string | null
+  >(null);
   const [authorPhase, setAuthorPhase] = useState<AuthorPhase>("REVALIDATING");
   const authorPhaseRef = useRef<AuthorPhase>("REVALIDATING");
   const setAuthorPhaseSync = useCallback((phase: AuthorPhase) => {
@@ -182,6 +226,18 @@ export function WorksheetHintAuthorPage() {
   const recoverInFlightRef = useRef(false);
   const createdMaterialRef = useRef<string | null>(null);
   const pendingMutationReceiptRef = useRef<PendingMutationReceipt | null>(null);
+  const operationEpochRef = useRef(0);
+  const submitCompletedForVersionRef = useRef<string | null>(null);
+  const recordedAppendVersionRef = useRef<string | null>(null);
+
+  const bumpOperationEpoch = useCallback(() => {
+    operationEpochRef.current += 1;
+    return operationEpochRef.current;
+  }, []);
+
+  const operationEpochStale = useCallback((epoch: number) => {
+    return epoch !== operationEpochRef.current;
+  }, []);
 
   const appendMaterialFingerprint = useMemo(
     () =>
@@ -248,9 +304,13 @@ export function WorksheetHintAuthorPage() {
     createdMaterialRef.current = null;
     boundSourceRef.current = null;
     pendingMutationReceiptRef.current = null;
+    submitCompletedForVersionRef.current = null;
+    setSubmitCompletedVersionId(null);
+    recordedAppendVersionRef.current = null;
+    bumpOperationEpoch();
     setAuthorPhaseSync("REVALIDATING");
     setUnassignedDrafts({});
-  }, [clearPendingMutationKeys, setAuthorPhaseSync]);
+  }, [bumpOperationEpoch, clearPendingMutationKeys, setAuthorPhaseSync]);
 
   const beginRevalidation = useCallback(() => {
     if (isUncertainPhase(authorPhaseRef.current)) {
@@ -392,6 +452,7 @@ export function WorksheetHintAuthorPage() {
 
   const reloadMetadataPreservingDrafts = useCallback(
     async (draftSnapshot: Record<string, string>) => {
+      const epochAtStart = bumpOperationEpoch();
       const phaseAtStart = authorPhaseRef.current;
       const uncertainAtStart = isUncertainPhase(phaseAtStart);
       const receiptAtStart = pendingMutationReceiptRef.current;
@@ -403,8 +464,23 @@ export function WorksheetHintAuthorPage() {
         session: sessionRef.current,
         contentId,
       };
+      const asyncStale = () =>
+        loadFenceStale(fence) || operationEpochStale(epochAtStart);
       const failClosed = (message: string) => {
-        if (loadFenceStale(fence)) return;
+        if (asyncStale()) return;
+        if (
+          uncertainAtStart &&
+          receiptAtStart &&
+          pendingMutationReceiptRef.current === receiptAtStart &&
+          isUncertainPhase(authorPhaseRef.current)
+        ) {
+          pendingMutationReceiptRef.current = receiptAtStart;
+          setAuthorPhaseSync(phaseAtStart);
+          setHintDrafts(draftSnapshot);
+          setShowPreview(false);
+          setStatusMessage(message);
+          return;
+        }
         if (uncertainAtStart && receiptAtStart) {
           pendingMutationReceiptRef.current = receiptAtStart;
           setAuthorPhaseSync(phaseAtStart);
@@ -423,14 +499,14 @@ export function WorksheetHintAuthorPage() {
           getLibraryItem(contentId),
           getContent(contentId),
         ]);
-        if (loadFenceStale(fence)) return;
+        if (asyncStale()) return;
         const versionId = contentResponse.data.current_version_id;
         if (!versionId) {
           failClosed(REVALIDATION_BLOCKED_MESSAGE);
           return;
         }
         const versionResponse = await getLibraryVersion(contentId, versionId);
-        if (loadFenceStale(fence)) return;
+        if (asyncStale()) return;
         const version = versionResponse.data;
         if (version.content_id !== contentId || version.version_id !== versionId) {
           failClosed(REVALIDATION_BLOCKED_MESSAGE);
@@ -461,11 +537,37 @@ export function WorksheetHintAuthorPage() {
         let classItems: SchoolContextClassItem[] = [];
         try {
           const classesResponse = await listAssignableClasses();
-          if (loadFenceStale(fence)) return;
+          if (asyncStale()) return;
           classItems = classesResponse.data.items;
         } catch {
           failClosed(
             "Could not refresh School Context classes. Choose a class again after reload.",
+          );
+          return;
+        }
+        if (uncertainAtStart && receiptAtStart) {
+          if (asyncStale()) return;
+          setClasses(classItems);
+          const selectedStillValidUncertain = classItems.some(
+            (item) => item.class_ref === classRef,
+          );
+          if (classRef && !selectedStillValidUncertain) {
+            setClassRef("");
+          }
+          if (
+            pendingMutationReceiptRef.current !== receiptAtStart ||
+            !isUncertainPhase(authorPhaseRef.current)
+          ) {
+            return;
+          }
+          pendingMutationReceiptRef.current = receiptAtStart;
+          setAuthorPhaseSync(phaseAtStart);
+          setHintDrafts(draftSnapshot);
+          setShowPreview(false);
+          setStatusMessage(
+            phaseAtStart === "APPEND_OUTCOME_UNCERTAIN"
+              ? `${AMBIGUOUS_APPEND_MESSAGE} Current authoritative version: ${versionId}.`
+              : `${AMBIGUOUS_SUBMIT_MESSAGE} Current authoritative version: ${versionId}.`,
           );
           return;
         }
@@ -479,26 +581,6 @@ export function WorksheetHintAuthorPage() {
             "Your previously selected class is no longer assignable. Choose a current class before creating a version.",
           );
         }
-        if (uncertainAtStart && receiptAtStart) {
-          if (loadFenceStale(fence)) return;
-          setClasses(classItems);
-          const selectedStillValidUncertain = classItems.some(
-            (item) => item.class_ref === classRef,
-          );
-          if (classRef && !selectedStillValidUncertain) {
-            setClassRef("");
-          }
-          pendingMutationReceiptRef.current = receiptAtStart;
-          setAuthorPhaseSync(phaseAtStart);
-          setHintDrafts(draftSnapshot);
-          setShowPreview(false);
-          setStatusMessage(
-            phaseAtStart === "APPEND_OUTCOME_UNCERTAIN"
-              ? `${AMBIGUOUS_APPEND_MESSAGE} Current authoritative version: ${versionId}.`
-              : `${AMBIGUOUS_SUBMIT_MESSAGE} Current authoritative version: ${versionId}.`,
-          );
-          return;
-        }
         const needsReconcile = applyAuthoringSource(
           reparsed,
           versionId,
@@ -506,7 +588,7 @@ export function WorksheetHintAuthorPage() {
           draftSnapshot,
           true,
         );
-        if (loadFenceStale(fence)) return;
+        if (asyncStale()) return;
         if (pendingMutationReceiptRef.current) {
           return;
         }
@@ -522,10 +604,12 @@ export function WorksheetHintAuthorPage() {
     [
       applyAuthoringSource,
       beginRevalidation,
+      bumpOperationEpoch,
       classRef,
       clearPendingMutationKeys,
       contentId,
       loadFenceStale,
+      operationEpochStale,
       setAuthorPhaseSync,
     ],
   );
@@ -719,6 +803,17 @@ export function WorksheetHintAuthorPage() {
   function onConfirmReconciliation() {
     if (authorPhaseRef.current !== "RECONCILIATION_REQUIRED") return;
     if (pendingMutationReceiptRef.current) return;
+    if (
+      recordedAppendVersionRef.current &&
+      recordedAppendVersionRef.current !== currentVersionId
+    ) {
+      return;
+    }
+    if (createdVersionId && createdVersionId !== currentVersionId) {
+      setCreatedVersionId(null);
+      setCreatedContentEtag(null);
+      createdMaterialRef.current = null;
+    }
     setAuthorPhaseSync("READY");
     setShowPreview(false);
     setStatusMessage("");
@@ -728,8 +823,8 @@ export function WorksheetHintAuthorPage() {
     startFence: MutationFence,
     versionId: string,
     versionNumber: number | undefined,
-    responseEtag: string | null,
     material: string,
+    verifyEpochAtStart: number,
   ) {
     if (
       mutationFenceStale(
@@ -737,53 +832,158 @@ export function WorksheetHintAuthorPage() {
         loadGenerationRef.current,
         sessionRef.current,
         contentIdRef.current,
-      )
+      ) ||
+      operationEpochStale(verifyEpochAtStart)
     ) {
       return;
     }
     clearPendingMutationKeys("append", { force: true });
-    createdMaterialRef.current = material;
-    setCreatedVersionId(versionId);
-    setCreatedContentEtag(responseEtag);
+    setCreatedVersionId(null);
+    setCreatedContentEtag(null);
+    createdMaterialRef.current = null;
+    recordedAppendVersionRef.current = versionId;
+    setAuthorPhaseSync("APPEND_CURRENT_VERIFY_REQUIRED");
+    setShowPreview(false);
+    setStatusMessage(APPEND_RECORDED_VERIFY_MESSAGE);
+
+    const appendAsyncStale = () =>
+      mutationFenceStale(
+        startFence,
+        loadGenerationRef.current,
+        sessionRef.current,
+        contentIdRef.current,
+      ) || operationEpochStale(verifyEpochAtStart);
+
     try {
       const contentResponse = await getContent(contentId);
-      if (
-        mutationFenceStale(
-          startFence,
-          loadGenerationRef.current,
-          sessionRef.current,
-          contentIdRef.current,
-        )
-      ) {
+      if (appendAsyncStale()) return;
+
+      const contentData = contentResponse.data;
+      if (contentData.content_id && contentData.content_id !== contentId) {
+        setAuthorPhaseSync("AUTHORITY_UNAVAILABLE");
+        setStatusMessage(APPEND_RECORDED_BLOCKED_MESSAGE);
         return;
       }
-      const authoritativeCurrent = contentResponse.data.current_version_id;
-      if (authoritativeCurrent && authoritativeCurrent !== versionId) {
-        setAuthorPhaseSync("RECONCILIATION_REQUIRED");
-        setShowPreview(false);
+      const authoritativeCurrent = contentData.current_version_id;
+      const freshEtag = contentResponse.etag?.trim();
+      if (!authoritativeCurrent || !freshEtag) {
+        setAuthorPhaseSync("AUTHORITY_UNAVAILABLE");
         setStatusMessage(
-          `Hint version ${versionNumber ?? versionId} was recorded, but the content now points at ${authoritativeCurrent}. Reconcile against the latest source before any new action.`,
+          `${APPEND_RECORDED_BLOCKED_MESSAGE} Recorded version: ${versionNumber ?? versionId}.`,
         );
         return;
       }
-      if (contentResponse.etag) {
-        setCreatedContentEtag(contentResponse.etag);
-      }
-    } catch {
-      if (
-        mutationFenceStale(
-          startFence,
-          loadGenerationRef.current,
-          sessionRef.current,
-          contentIdRef.current,
-        )
-      ) {
+      if (authoritativeCurrent !== versionId) {
+        recordedAppendVersionRef.current = versionId;
+        setCreatedVersionId(null);
+        setCreatedContentEtag(null);
+        createdMaterialRef.current = null;
+        try {
+          const [libraryResponse, versionResponse, classesResponse] =
+            await Promise.all([
+              getLibraryItem(contentId),
+              getLibraryVersion(contentId, authoritativeCurrent),
+              listAssignableClasses(),
+            ]);
+          if (appendAsyncStale()) return;
+          const version = versionResponse.data;
+          if (
+            version.content_id !== contentId ||
+            version.version_id !== authoritativeCurrent
+          ) {
+            setAuthorPhaseSync("AUTHORITY_UNAVAILABLE");
+            setStatusMessage(APPEND_RECORDED_BLOCKED_MESSAGE);
+            return;
+          }
+          const reparsed = parseWorksheetHintSourceForAuthoring(version.payload);
+          if (!reparsed.ok) {
+            setAuthorPhaseSync("AUTHORITY_UNAVAILABLE");
+            setStatusMessage(APPEND_RECORDED_BLOCKED_MESSAGE);
+            return;
+          }
+          if (
+            !libraryItemEligibleForHintAuthoring(
+              libraryResponse.data.content_type,
+              version.schema_id,
+              version.schema_version,
+            )
+          ) {
+            setAuthorPhaseSync("AUTHORITY_UNAVAILABLE");
+            setStatusMessage(APPEND_RECORDED_BLOCKED_MESSAGE);
+            return;
+          }
+          if (!contentResponse.etag) {
+            setAuthorPhaseSync("AUTHORITY_UNAVAILABLE");
+            setStatusMessage(APPEND_RECORDED_BLOCKED_MESSAGE);
+            return;
+          }
+          setClasses(classesResponse.data.items);
+          applyAuthoringSource(
+            reparsed,
+            authoritativeCurrent,
+            contentResponse.etag,
+            { ...hintDrafts },
+            true,
+          );
+          if (appendAsyncStale()) return;
+          setAuthorPhaseSync("RECONCILIATION_REQUIRED");
+          setShowPreview(false);
+          setStatusMessage(
+            `Hint version ${versionNumber ?? versionId} was recorded, but the content now points at ${authoritativeCurrent}. Reconcile against the latest source before any new action.`,
+          );
+        } catch {
+          if (appendAsyncStale()) return;
+          setAuthorPhaseSync("AUTHORITY_UNAVAILABLE");
+          setStatusMessage(APPEND_RECORDED_BLOCKED_MESSAGE);
+        }
         return;
       }
+
+      createdMaterialRef.current = material;
+      setCreatedVersionId(versionId);
+      setCreatedContentEtag(freshEtag);
+      recordedAppendVersionRef.current = null;
+      bumpOperationEpoch();
+      setAuthorPhaseSync("READY");
+      setStatusMessage(
+        `Created hint-bearing worksheet version ${versionNumber ?? versionId}. Submit it for independent review when ready.`,
+      );
+    } catch {
+      if (appendAsyncStale()) return;
+      setAuthorPhaseSync("AUTHORITY_UNAVAILABLE");
+      setStatusMessage(
+        `${APPEND_RECORDED_BLOCKED_MESSAGE} Recorded version: ${versionNumber ?? versionId}.`,
+      );
     }
+  }
+
+  function finalizeResolvedSubmit(
+    startFence: MutationFence,
+    versionId: string,
+    responseEtag: string | null,
+    completionEpochAtStart: number,
+  ) {
+    if (
+      mutationFenceStale(
+        startFence,
+        loadGenerationRef.current,
+        sessionRef.current,
+        contentIdRef.current,
+      ) ||
+      operationEpochStale(completionEpochAtStart)
+    ) {
+      return;
+    }
+    clearPendingMutationKeys("submit", { force: true });
+    submitCompletedForVersionRef.current = versionId;
+    setSubmitCompletedVersionId(versionId);
+    bumpOperationEpoch();
     setAuthorPhaseSync("READY");
+    if (responseEtag?.trim()) {
+      setCreatedContentEtag(responseEtag);
+    }
     setStatusMessage(
-      `Created hint-bearing worksheet version ${versionNumber ?? versionId}. Submit it for independent review when ready.`,
+      "Submitted for independent review. Approval and publishing remain separate steps.",
     );
   }
 
@@ -800,6 +1000,8 @@ export function WorksheetHintAuthorPage() {
       return;
     }
 
+    const recoveryEpochAtStart = bumpOperationEpoch();
+    const receiptAtStart = receipt;
     const startFence: MutationFence = {
       generation: loadGenerationRef.current,
       session: sessionRef.current,
@@ -807,8 +1009,19 @@ export function WorksheetHintAuthorPage() {
       sourceVersionId: receipt.sourceVersionId,
     };
 
+    const recoveryAsyncStale = () =>
+      mutationFenceStale(
+        startFence,
+        loadGenerationRef.current,
+        sessionRef.current,
+        contentIdRef.current,
+      ) ||
+      operationEpochStale(recoveryEpochAtStart) ||
+      pendingMutationReceiptRef.current !== receiptAtStart ||
+      !isUncertainPhase(authorPhaseRef.current);
+
     recoverInFlightRef.current = true;
-  if (receipt.kind === "append") {
+    if (receipt.kind === "append") {
       if (!receipt.appendRequest) {
         recoverInFlightRef.current = false;
         return;
@@ -822,35 +1035,51 @@ export function WorksheetHintAuthorPage() {
           receipt.etag,
           receipt.idempotencyKey,
         );
-        if (response.data.content_id !== contentId) {
+        if (recoveryAsyncStale()) return;
+        const validated = validateAppendHttpOutcome(
+          contentId,
+          response.data,
+          response.etag,
+        );
+        if (!validated) {
+          pendingMutationReceiptRef.current = receiptAtStart;
+          setAuthorPhaseSync("APPEND_OUTCOME_UNCERTAIN");
           setStatusMessage(
-            "Recovery response does not match this content. The original request remains unresolved.",
+            "Recovery response was malformed. The original append request remains unresolved.",
           );
           return;
         }
+        const verifyEpoch = operationEpochRef.current;
         await finalizeResolvedAppend(
           startFence,
-          response.data.version_id,
-          response.data.version_number,
-          response.etag,
+          validated.versionId,
+          validated.versionNumber,
           receipt.materialFingerprint,
+          verifyEpoch,
         );
       } catch (error) {
-        if (
-          mutationFenceStale(
-            startFence,
-            loadGenerationRef.current,
-            sessionRef.current,
-            contentIdRef.current,
-          )
-        ) {
+        if (recoveryAsyncStale()) return;
+        if (error instanceof ApiError && error.code === "precondition_failed") {
+          pendingMutationReceiptRef.current = receiptAtStart;
+          setAuthorPhaseSync("APPEND_OUTCOME_UNCERTAIN");
+          setStatusMessage(RECOVERY_APPEND_412_MESSAGE);
           return;
         }
-        if (error instanceof ApiError && error.code === "precondition_failed") {
-          clearPendingMutationKeys("append", { force: true });
-          pendingMutationReceiptRef.current = null;
-          setStatusMessage(OUT_OF_DATE_MESSAGE);
-          await reloadMetadataPreservingDrafts({ ...hintDrafts });
+        if (error instanceof ApiError && error.status === 409) {
+          pendingMutationReceiptRef.current = receiptAtStart;
+          setAuthorPhaseSync("APPEND_OUTCOME_UNCERTAIN");
+          setStatusMessage(
+            "Recovery replay conflicted with stored idempotency material. The original request remains unresolved.",
+          );
+          return;
+        }
+        if (
+          error instanceof ApiError &&
+          (error.status === 403 || error.status === 404)
+        ) {
+          pendingMutationReceiptRef.current = receiptAtStart;
+          setAuthorPhaseSync("APPEND_OUTCOME_UNCERTAIN");
+          setStatusMessage(userMessageForApiError(error));
           return;
         }
         const isTransport =
@@ -859,10 +1088,13 @@ export function WorksheetHintAuthorPage() {
             error.code === "network" ||
             (error.status !== null && error.status >= 500));
         if (isTransport || !(error instanceof ApiError)) {
+          pendingMutationReceiptRef.current = receiptAtStart;
           setAuthorPhaseSync("APPEND_OUTCOME_UNCERTAIN");
           setStatusMessage(AMBIGUOUS_APPEND_MESSAGE);
           return;
         }
+        pendingMutationReceiptRef.current = receiptAtStart;
+        setAuthorPhaseSync("APPEND_OUTCOME_UNCERTAIN");
         setStatusMessage(userMessageForApiError(error));
       } finally {
         if (
@@ -883,42 +1115,57 @@ export function WorksheetHintAuthorPage() {
     setBusySubmitReview(true);
     setStatusMessage("");
     try {
-      await postContentSubmitForReview(
+      const response = await postContentSubmitForReview(
         contentId,
         receipt.sourceVersionId,
         receipt.etag,
         receipt.idempotencyKey,
       );
+      if (recoveryAsyncStale()) return;
       if (
-        mutationFenceStale(
-          startFence,
-          loadGenerationRef.current,
-          sessionRef.current,
-          contentIdRef.current,
+        !validateSubmitHttpOutcome(
+          contentId,
+          receipt.sourceVersionId,
+          response.data,
         )
       ) {
+        pendingMutationReceiptRef.current = receiptAtStart;
+        setAuthorPhaseSync("SUBMIT_OUTCOME_UNCERTAIN");
+        setStatusMessage(
+          "Recovery submit response did not match the requested version or IN_REVIEW state.",
+        );
         return;
       }
-      clearPendingMutationKeys("submit", { force: true });
-      setAuthorPhaseSync("READY");
-      setStatusMessage(
-        "Submitted for independent review. Approval and publishing remain separate steps.",
+      const completionEpoch = operationEpochRef.current;
+      finalizeResolvedSubmit(
+        startFence,
+        receipt.sourceVersionId,
+        response.etag,
+        completionEpoch,
       );
     } catch (error) {
-      if (
-        mutationFenceStale(
-          startFence,
-          loadGenerationRef.current,
-          sessionRef.current,
-          contentIdRef.current,
-        )
-      ) {
+      if (recoveryAsyncStale()) return;
+      if (error instanceof ApiError && error.code === "precondition_failed") {
+        pendingMutationReceiptRef.current = receiptAtStart;
+        setAuthorPhaseSync("SUBMIT_OUTCOME_UNCERTAIN");
+        setStatusMessage(RECOVERY_SUBMIT_412_MESSAGE);
         return;
       }
-      if (error instanceof ApiError && error.code === "precondition_failed") {
-        clearPendingMutationKeys("submit", { force: true });
-        setStatusMessage(OUT_OF_DATE_MESSAGE);
-        await reloadMetadataPreservingDrafts({ ...hintDrafts });
+      if (error instanceof ApiError && error.status === 409) {
+        pendingMutationReceiptRef.current = receiptAtStart;
+        setAuthorPhaseSync("SUBMIT_OUTCOME_UNCERTAIN");
+        setStatusMessage(
+          "Recovery submit replay conflicted with stored idempotency material.",
+        );
+        return;
+      }
+      if (
+        error instanceof ApiError &&
+        (error.status === 403 || error.status === 404)
+      ) {
+        pendingMutationReceiptRef.current = receiptAtStart;
+        setAuthorPhaseSync("SUBMIT_OUTCOME_UNCERTAIN");
+        setStatusMessage(userMessageForApiError(error));
         return;
       }
       const isTransport =
@@ -927,10 +1174,13 @@ export function WorksheetHintAuthorPage() {
           error.code === "network" ||
           (error.status !== null && error.status >= 500));
       if (isTransport || !(error instanceof ApiError)) {
+        pendingMutationReceiptRef.current = receiptAtStart;
         setAuthorPhaseSync("SUBMIT_OUTCOME_UNCERTAIN");
         setStatusMessage(AMBIGUOUS_SUBMIT_MESSAGE);
         return;
       }
+      pendingMutationReceiptRef.current = receiptAtStart;
+      setAuthorPhaseSync("SUBMIT_OUTCOME_UNCERTAIN");
       setStatusMessage(userMessageForApiError(error));
     } finally {
       if (
@@ -1007,12 +1257,37 @@ export function WorksheetHintAuthorPage() {
         etagAtStart,
         idempotencyKey,
       );
+      if (
+        mutationFenceStale(
+          startFence,
+          loadGenerationRef.current,
+          sessionRef.current,
+          contentIdRef.current,
+        )
+      ) {
+        return;
+      }
+      const validated = validateAppendHttpOutcome(
+        contentId,
+        response.data,
+        response.etag,
+      );
+      if (!validated) {
+        clearPendingMutationKeys("append", { force: true });
+        pendingMutationReceiptRef.current = null;
+        setAuthorPhaseSync("AUTHORITY_UNAVAILABLE");
+        setStatusMessage(
+          "Append succeeded but the response was malformed. Reload authoritative worksheet state before retrying.",
+        );
+        return;
+      }
+      const verifyEpoch = operationEpochRef.current;
       await finalizeResolvedAppend(
         startFence,
-        response.data.version_id,
-        response.data.version_number,
-        response.etag,
+        validated.versionId,
+        validated.versionNumber,
         material,
+        verifyEpoch,
       );
     } catch (error) {
       if (
@@ -1071,6 +1346,12 @@ export function WorksheetHintAuthorPage() {
       setStatusMessage("Create the hint-bearing version before submitting.");
       return;
     }
+    if (submitCompletedForVersionRef.current === createdVersionId) {
+      setStatusMessage(
+        "This version was already submitted for independent review from this screen.",
+      );
+      return;
+    }
     if (createdMaterialRef.current !== appendMaterialFingerprint) {
       setStatusMessage(
         "Current hints do not match the created version. Create a new version first.",
@@ -1112,7 +1393,7 @@ export function WorksheetHintAuthorPage() {
     setBusySubmitReview(true);
     setStatusMessage("");
     try {
-      await postContentSubmitForReview(
+      const response = await postContentSubmitForReview(
         contentId,
         versionForSubmit,
         etagForSubmit,
@@ -1128,9 +1409,21 @@ export function WorksheetHintAuthorPage() {
       ) {
         return;
       }
-      clearPendingMutationKeys("submit", { force: true });
-      setStatusMessage(
-        "Submitted for independent review. Approval and publishing remain separate steps.",
+      if (
+        !validateSubmitHttpOutcome(contentId, versionForSubmit, response.data)
+      ) {
+        pendingMutationReceiptRef.current = null;
+        setStatusMessage(
+          "Submit response did not match the requested version or IN_REVIEW state.",
+        );
+        return;
+      }
+      const completionEpoch = operationEpochRef.current;
+      finalizeResolvedSubmit(
+        startFence,
+        versionForSubmit,
+        response.etag,
+        completionEpoch,
       );
     } catch (error) {
       if (
@@ -1182,14 +1475,13 @@ export function WorksheetHintAuthorPage() {
                 versionForSubmit,
               ));
           if (submitted) {
-            clearPendingMutationKeys("submit", { force: true });
-            setAuthorPhaseSync("READY");
-            setStatusMessage(
-              "Submitted for independent review. Approval and publishing remain separate steps.",
+            const completionEpoch = operationEpochRef.current;
+            finalizeResolvedSubmit(
+              startFence,
+              versionForSubmit,
+              contentResponse.etag ?? null,
+              completionEpoch,
             );
-            if (contentResponse.etag) {
-              setCreatedContentEtag(contentResponse.etag);
-            }
             return;
           }
         } catch {
@@ -1436,7 +1728,8 @@ export function WorksheetHintAuthorPage() {
               disabled={
                 busySubmitReview ||
                 !createdVersionId ||
-                authorPhase !== "READY"
+                authorPhase !== "READY" ||
+                submitCompletedVersionId === createdVersionId
               }
               onClick={() => void onSubmitForReview()}
             >

@@ -38,6 +38,25 @@ const authoringWorksheetPayload = {
 
 const CREATED_HINT_VERSION = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
+function appendVersionResponse(
+  versionId: string,
+  versionNumber = 2,
+): Record<string, unknown> {
+  return {
+    content_id: CONTENT_ID,
+    version_id: versionId,
+    version_number: versionNumber,
+    schema_id: "education.worksheet",
+    schema_version: 2,
+    created_at: "2026-11-20T12:00:00Z",
+    origin: "test",
+    parent_version_id: VERSION_ID,
+    payload: {},
+    payload_sha256:
+      "0000000000000000000000000000000000000000000000000000000000000000",
+  };
+}
+
 const libraryVersion = {
   content_id: CONTENT_ID,
   version_id: VERSION_ID,
@@ -87,14 +106,10 @@ function stubAuthoringFlow(
         expect(headers.get("Idempotency-Key")).toMatch(/^[0-9a-f-]{36}$/i);
         authoritativeVersionId = CREATED_HINT_VERSION;
         contentEtag = '"r5"';
-        return mockJsonResponse(
-          {
-            content_id: CONTENT_ID,
-            version_id: CREATED_HINT_VERSION,
-            version_number: 2,
-          },
-          { etag: contentEtag, status: 201 },
-        );
+        return mockJsonResponse(appendVersionResponse(CREATED_HINT_VERSION), {
+          etag: contentEtag,
+          status: 201,
+        });
       }
       return mockJsonResponse({ title: "Not Found", status: 404 }, { status: 404 });
     }),
@@ -304,11 +319,7 @@ describe("WorksheetHintAuthorPage", () => {
 
     resolveAppend(
       mockJsonResponse(
-        {
-          content_id: CONTENT_ID,
-          version_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-          version_number: 2,
-        },
+        appendVersionResponse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
         { etag: '"r5"', status: 201 },
       ),
     );
@@ -382,11 +393,7 @@ describe("WorksheetHintAuthorPage", () => {
 
     resolveAppend(
       mockJsonResponse(
-        {
-          content_id: CONTENT_ID,
-          version_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-          version_number: 2,
-        },
+        appendVersionResponse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
         { etag: '"r5"', status: 201 },
       ),
     );
@@ -782,14 +789,10 @@ describe("WorksheetHintAuthorPage", () => {
             { status: 503 },
           );
         }
-        return mockJsonResponse(
-          {
-            content_id: CONTENT_ID,
-            version_id: CREATED_V2,
-            version_number: 2,
-          },
-          { etag: '"r5-after-recovery"', status: 201 },
-        );
+        return mockJsonResponse(appendVersionResponse(CREATED_V2), {
+          etag: '"r5-after-recovery"',
+          status: 201,
+        });
       }
       if (url.endsWith(`/api/v1/contents/${CONTENT_ID}`) && init?.method !== "POST") {
         return mockJsonResponse(
@@ -1075,5 +1078,521 @@ describe("WorksheetHintAuthorPage", () => {
       expect(submitKeys).toHaveLength(1);
     });
     expect(screen.getByRole("status")).toHaveTextContent(/Submitted for independent review/i);
+  });
+
+  it("disables submit until deferred content GET confirms current version", async () => {
+    let resolveContentGet!: (value: Response) => void;
+    const contentGetPromise = new Promise<Response>((resolve) => {
+      resolveContentGet = resolve;
+    });
+    let submitPosts = 0;
+    let contentGets = 0;
+
+    stubAuthoringFlow((url, init) => {
+      if (url.endsWith(`/api/v1/contents/${CONTENT_ID}`) && init?.method !== "POST") {
+        contentGets += 1;
+        if (contentGets >= 2) {
+          return contentGetPromise;
+        }
+      }
+      if (url.includes("/actions/submit-for-review") && init?.method === "POST") {
+        submitPosts += 1;
+        return mockJsonResponse(
+          {
+            content_id: CONTENT_ID,
+            version_id: CREATED_HINT_VERSION,
+            stewardship_state: "IN_REVIEW",
+          },
+          { etag: '"r6"', status: 201 },
+        );
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.type(
+      document.getElementById("hint-q-1") as HTMLTextAreaElement,
+      "Deferred verify hint.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        document.querySelector("[data-author-phase='APPEND_CURRENT_VERIFY_REQUIRED']"),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByRole("button", { name: /Submit for independent review/i }),
+    ).toBeDisabled();
+    expect(submitPosts).toBe(0);
+
+    resolveContentGet(
+      mockJsonResponse(
+        {
+          content_id: CONTENT_ID,
+          current_version_id: CREATED_HINT_VERSION,
+          stewardship_state: "APPROVED",
+        },
+        { etag: '"r5"' },
+      ),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Submit for independent review/i }),
+      ).toBeEnabled();
+    });
+    expect(
+      document.querySelector("[data-author-phase='READY']"),
+    ).toBeInTheDocument();
+  });
+
+  it("blocks submit when post-append GET has null current version", async () => {
+    let contentGets = 0;
+    stubAuthoringFlow((url, init) => {
+      if (url.endsWith(`/api/v1/contents/${CONTENT_ID}`) && init?.method !== "POST") {
+        contentGets += 1;
+        if (contentGets >= 2) {
+          return mockJsonResponse({
+            content_id: CONTENT_ID,
+            current_version_id: null,
+            stewardship_state: "APPROVED",
+          });
+        }
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.type(
+      document.getElementById("hint-q-1") as HTMLTextAreaElement,
+      "Hint with null current.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Submit for independent review/i }),
+      ).toBeDisabled();
+    });
+    expect(
+      document.querySelector("[data-author-phase='AUTHORITY_UNAVAILABLE']"),
+    ).toBeInTheDocument();
+    expect(
+      vi.mocked(fetch).mock.calls.filter((call) =>
+        String(call[0]).includes("/actions/submit-for-review"),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("does not enable stale V2 submit after reconcile when V3 is current", async () => {
+    const V2 = CREATED_HINT_VERSION;
+    const V3 = "33333333-3333-3333-3333-333333333333";
+    let contentGets = 0;
+    let submitPosts = 0;
+
+    stubAuthoringFlow((url, init) => {
+      if (url.endsWith(`/api/v1/contents/${CONTENT_ID}`) && init?.method !== "POST") {
+        contentGets += 1;
+        if (contentGets === 1) {
+          return mockJsonResponse(
+            {
+              content_id: CONTENT_ID,
+              current_version_id: VERSION_ID,
+              stewardship_state: "APPROVED",
+            },
+            { etag: '"r4"' },
+          );
+        }
+        return mockJsonResponse(
+          {
+            content_id: CONTENT_ID,
+            current_version_id: V3,
+            stewardship_state: "APPROVED",
+          },
+          { etag: '"r7"' },
+        );
+      }
+      if (url.includes(`/library/${CONTENT_ID}/versions/${V3}`)) {
+        return mockJsonResponse({
+          ...libraryVersion,
+          version_id: V3,
+          version_number: 3,
+          schema_version: 2,
+          payload: {
+            ...authoringWorksheetPayload,
+            questions: authoringWorksheetPayload.questions.map((q, i) =>
+              i === 0
+                ? { ...q, prompt: "Superseding question on V3.", answer: "42" }
+                : q,
+            ),
+          },
+        });
+      }
+      if (url.includes("/actions/submit-for-review") && init?.method === "POST") {
+        submitPosts += 1;
+        return mockJsonResponse(
+          {
+            content_id: CONTENT_ID,
+            version_id: V2,
+            stewardship_state: "IN_REVIEW",
+          },
+          { etag: '"r6"', status: 201 },
+        );
+      }
+      if (url.includes("/worksheet-learner-hint-versions") && init?.method === "POST") {
+        return mockJsonResponse(appendVersionResponse(V2), {
+          etag: '"r5"',
+          status: 201,
+        });
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.type(
+      document.getElementById("hint-q-1") as HTMLTextAreaElement,
+      "Hint on V2 path.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        document.querySelector("[data-author-phase='RECONCILIATION_REQUIRED']"),
+      ).toBeInTheDocument();
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: /I reviewed the updated questions/i }),
+    );
+    expect(
+      screen.getByRole("button", { name: /Submit for independent review/i }),
+    ).toBeDisabled();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Submit for independent review/i }),
+    );
+    expect(submitPosts).toBe(0);
+  });
+
+  it("preserves append receipt after recovery 412", async () => {
+    const keys: string[] = [];
+    let appendAttempts = 0;
+
+    stubAuthoringFlow((url, init) => {
+      if (
+        url.includes("/worksheet-learner-hint-versions") &&
+        init?.method === "POST"
+      ) {
+        appendAttempts += 1;
+        const key = new Headers(init.headers).get("Idempotency-Key");
+        if (key) keys.push(key);
+        if (appendAttempts === 1) {
+          return mockJsonResponse({ title: "unavailable", status: 503 }, { status: 503 });
+        }
+        return mockJsonResponse(
+          { title: "Precondition failed", status: 412, detail: {} },
+          { status: 412 },
+        );
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.type(
+      document.getElementById("hint-q-1") as HTMLTextAreaElement,
+      "Uncertain then 412.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+    await waitFor(() => screen.getByTestId("recover-original-append"));
+    await userEvent.click(screen.getByTestId("recover-original-append"));
+    await waitFor(() => expect(appendAttempts).toBe(2));
+    expect(keys[0]).toBe(keys[1]);
+    expect(
+      document.querySelector("[data-author-phase='APPEND_OUTCOME_UNCERTAIN']"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    ).toBeDisabled();
+    expect(appendAttempts).toBe(2);
+  });
+
+  it("rejects delayed recovery status after session swap", async () => {
+    let resolveRecovery!: (value: Response) => void;
+    const recoveryPromise = new Promise<Response>((resolve) => {
+      resolveRecovery = resolve;
+    });
+    let appendAttempts = 0;
+
+    stubAuthoringFlow((url, init) => {
+      if (
+        url.includes("/worksheet-learner-hint-versions") &&
+        init?.method === "POST"
+      ) {
+        appendAttempts += 1;
+        if (appendAttempts === 1) {
+          return mockJsonResponse({ title: "unavailable", status: 503 }, { status: 503 });
+        }
+        return recoveryPromise;
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.type(
+      document.getElementById("hint-q-1") as HTMLTextAreaElement,
+      "Session A hint private.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+    await waitFor(() => screen.getByTestId("recover-original-append"));
+    await userEvent.click(screen.getByTestId("recover-original-append"));
+
+    devSessionConnector?.connect({
+      ...DEV_SESSION,
+      bearerToken: "session-b-token",
+    });
+    await screen.findByTestId("hint-editor");
+
+    resolveRecovery(
+      mockJsonResponse(appendVersionResponse(CREATED_HINT_VERSION), {
+        etag: '"r5"',
+        status: 201,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Created hint-bearing/i)).toBeNull();
+    });
+    expect(
+      screen.queryByText(/Session A hint private/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not resurrect uncertain after reload resolves last when recover succeeds first", async () => {
+    let resolveReloadContent!: (value: Response) => void;
+    const reloadContentPromise = new Promise<Response>((resolve) => {
+      resolveReloadContent = resolve;
+    });
+    let appendAttempts = 0;
+    let deferReloadContentGet = false;
+    const CREATED_V2 = CREATED_HINT_VERSION;
+
+    stubAuthoringFlow((url, init) => {
+      if (
+        url.includes("/worksheet-learner-hint-versions") &&
+        init?.method === "POST"
+      ) {
+        appendAttempts += 1;
+        if (appendAttempts === 1) {
+          return mockJsonResponse({ title: "unavailable", status: 503 }, { status: 503 });
+        }
+        return mockJsonResponse(appendVersionResponse(CREATED_V2), {
+          etag: '"r5-after-recovery"',
+          status: 201,
+        });
+      }
+      if (url.endsWith(`/api/v1/contents/${CONTENT_ID}`) && init?.method !== "POST") {
+        if (deferReloadContentGet) {
+          deferReloadContentGet = false;
+          return reloadContentPromise;
+        }
+        return mockJsonResponse(
+          {
+            content_id: CONTENT_ID,
+            current_version_id:
+              appendAttempts >= 2 ? CREATED_V2 : VERSION_ID,
+            stewardship_state: "APPROVED",
+          },
+          { etag: appendAttempts >= 2 ? '"r5-after-recovery"' : '"r4"' },
+        );
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.type(
+      document.getElementById("hint-q-1") as HTMLTextAreaElement,
+      "Epoch interleave hint.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+    await waitFor(() => screen.getByTestId("recover-original-append"));
+    deferReloadContentGet = true;
+    await userEvent.click(screen.getByTestId("reload-authoritative-worksheet"));
+    await userEvent.click(screen.getByTestId("recover-original-append"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent(/Created hint-bearing/i);
+    });
+    expect(document.querySelector("[data-author-phase='READY']")).toBeInTheDocument();
+
+    resolveReloadContent(
+      mockJsonResponse(
+        {
+          content_id: CONTENT_ID,
+          current_version_id: VERSION_ID,
+          stewardship_state: "APPROVED",
+        },
+        { etag: '"r4"' },
+      ),
+    );
+
+    await waitFor(() => {
+      expect(
+        document.querySelector("[data-author-phase='APPEND_OUTCOME_UNCERTAIN']"),
+      ).toBeNull();
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(/Created hint-bearing/i);
+  });
+
+  it("prevents duplicate submit with a new idempotency key after success", async () => {
+    const submitKeys: string[] = [];
+    stubAuthoringFlow((url, init) => {
+      if (url.includes("/actions/submit-for-review") && init?.method === "POST") {
+        const key = new Headers(init.headers).get("Idempotency-Key");
+        if (key) submitKeys.push(key);
+        return mockJsonResponse(
+          {
+            content_id: CONTENT_ID,
+            version_id: CREATED_HINT_VERSION,
+            stewardship_state: "IN_REVIEW",
+          },
+          { etag: '"r6"', status: 201 },
+        );
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.type(
+      document.getElementById("hint-q-1") as HTMLTextAreaElement,
+      "Single submit only.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+    const submitButton = await screen.findByRole("button", {
+      name: /Submit for independent review/i,
+    });
+    await waitFor(() => expect(submitButton).toBeEnabled());
+    await userEvent.click(submitButton);
+    await waitFor(() => expect(submitKeys).toHaveLength(1));
+    expect(submitButton).toBeDisabled();
+    await userEvent.click(submitButton);
+    expect(submitKeys).toHaveLength(1);
   });
 });

@@ -46,6 +46,11 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
   receipt/phase reset, explicit Recover original append/submit replay POST, and
   adversarial tests (no OpenAPI pin change).
 
+- PK-V1-HINT-T0-F-I01R6: Append current-authority verify phase, recovery-epoch
+  fencing, fail-closed recovery 412/409/403 with receipt retention, validated
+  submit replay, and interleaving adversarial tests on Draft PR #51 (no OpenAPI pin
+  change).
+
 - PK-V1-HINT-F-I01: Optional in-attempt learner hints on Student OS
   `AttemptPage` / `ResponseEditor` via
   `GET /api/v1/learning/attempts/{attempt_id}/learner-hints`
