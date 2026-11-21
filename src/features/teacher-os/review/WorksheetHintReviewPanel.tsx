@@ -30,11 +30,11 @@ type WorksheetHintReviewPanelProps = {
   contentEtag: string | null;
   session: DevSession | null;
   resourceGeneration: number;
-  onAttestationRecorded: () => void;
+  onAttestationRecorded: (identity: HintReviewResourceIdentity) => void;
   disabled?: boolean;
 };
 
-type ResourceIdentity = {
+export type HintReviewResourceIdentity = {
   contentId: string;
   versionId: string;
   contentEtag: string | null;
@@ -42,6 +42,21 @@ type ResourceIdentity = {
   session: DevSession | null;
   resourceGeneration: number;
 };
+
+export function hintReviewResourceIdentityLive(
+  captured: HintReviewResourceIdentity,
+  current: HintReviewResourceIdentity | null,
+): boolean {
+  if (!current) return false;
+  return (
+    captured.contentId === current.contentId &&
+    captured.versionId === current.versionId &&
+    captured.contentEtag === current.contentEtag &&
+    captured.payloadRef === current.payloadRef &&
+    captured.session === current.session &&
+    captured.resourceGeneration === current.resourceGeneration
+  );
+}
 
 export function worksheetHintReviewRequired(
   schemaId: string | null | undefined,
@@ -82,14 +97,14 @@ export function WorksheetHintReviewPanel({
   const bindRef = useRef<string | null>(null);
   const sessionRef = useRef(session);
   const resourceGenerationRef = useRef(resourceGeneration);
-  const resourceIdentityRef = useRef<ResourceIdentity | null>(null);
+  const resourceIdentityRef = useRef<HintReviewResourceIdentity | null>(null);
 
   useEffect(() => {
     sessionRef.current = session;
     resourceGenerationRef.current = resourceGeneration;
   }, [session, resourceGeneration]);
 
-  const resourceIdentity: ResourceIdentity = useMemo(
+  const resourceIdentity: HintReviewResourceIdentity = useMemo(
     () => ({
       contentId,
       versionId,
@@ -106,8 +121,6 @@ export function WorksheetHintReviewPanel({
     session,
     resourceGeneration,
   ]);
-
-  const identityBindKey = `${contentId}:${versionId}:${contentEtag ?? ""}:${resourceGeneration}`;
 
   const resetPanelState = useCallback(() => {
     setChecks({});
@@ -165,11 +178,15 @@ export function WorksheetHintReviewPanel({
       return;
     }
 
-    const startSession = sessionRef.current;
-    const startGeneration = resourceGenerationRef.current;
-    const startIdentity = identityBindKey;
+    const currentIdentity = resourceIdentityRef.current;
+    if (!currentIdentity?.contentEtag) {
+      setStatusMessage("This review page is out of date. Reload and try again.");
+      return;
+    }
 
-    const bind = `${contentId}:${versionId}:${contentEtag}`;
+    const startIdentity: HintReviewResourceIdentity = { ...currentIdentity };
+
+    const bind = `${startIdentity.contentId}:${startIdentity.versionId}:${startIdentity.contentEtag}`;
     if (bindRef.current !== bind || !idempotencyKeyRef.current) {
       idempotencyKeyRef.current = crypto.randomUUID();
       bindRef.current = bind;
@@ -190,29 +207,21 @@ export function WorksheetHintReviewPanel({
     setStatusMessage("");
     try {
       await postWorksheetLearnerHintAttestation(
-        contentId,
-        versionId,
+        startIdentity.contentId,
+        startIdentity.versionId,
         { per_question_outcomes },
-        contentEtag,
-        idempotencyKeyRef.current,
+        startIdentity.contentEtag!,
+        idempotencyKeyRef.current!,
       );
-      if (
-        startSession !== sessionRef.current ||
-        startGeneration !== resourceGenerationRef.current ||
-        startIdentity !== identityBindKey
-      ) {
+      if (!hintReviewResourceIdentityLive(startIdentity, resourceIdentityRef.current)) {
         return;
       }
       setStatusMessage(
         "Attestation recorded. You can now approve if you are an authorized reviewer.",
       );
-      onAttestationRecorded();
+      onAttestationRecorded(startIdentity);
     } catch (error) {
-      if (
-        startSession !== sessionRef.current ||
-        startGeneration !== resourceGenerationRef.current ||
-        startIdentity !== identityBindKey
-      ) {
+      if (!hintReviewResourceIdentityLive(startIdentity, resourceIdentityRef.current)) {
         return;
       }
       if (error instanceof ApiError && error.status === 409) {
@@ -229,11 +238,7 @@ export function WorksheetHintReviewPanel({
       }
       setStatusMessage(userMessageForApiError(error));
     } finally {
-      if (
-        startSession === sessionRef.current &&
-        startGeneration === resourceGenerationRef.current &&
-        startIdentity === identityBindKey
-      ) {
+      if (hintReviewResourceIdentityLive(startIdentity, resourceIdentityRef.current)) {
         setBusy(false);
       }
     }

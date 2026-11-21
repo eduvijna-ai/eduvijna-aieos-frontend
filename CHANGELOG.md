@@ -24,6 +24,12 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ReviewSubmissionResponse` typing, and discriminating unit tests (no OpenAPI
   pin change).
 
+- PK-V1-HINT-T0-F-I01R2: Version-binding and review-identity correction on Draft
+  PR #51 — `RECONCILIATION_REQUIRED` authoring gate after source drift, live
+  attestation resource-identity epoch, in-flight ref reset on session swap,
+  submit ambiguous revalidation, and strict worksheet authoring source parse (no
+  OpenAPI pin change).
+
 - PK-V1-HINT-F-I01: Optional in-attempt learner hints on Student OS
   `AttemptPage` / `ResponseEditor` via
   `GET /api/v1/learning/attempts/{attempt_id}/learner-hints`

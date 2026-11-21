@@ -180,6 +180,77 @@ describe("WorksheetHintAuthorPage", () => {
     expect(textarea.value).toBe(draftText);
   });
 
+  it("blocks append after 412 until explicit reconciliation when q-1 prompt changes", async () => {
+    const draftText = "Fractions hint from version 1.";
+  const alteredPayload = {
+      ...authoringWorksheetPayload,
+      questions: authoringWorksheetPayload.questions.map((question, index) =>
+        index === 0
+          ? { ...question, prompt: "Different fraction question on version 2." }
+          : question,
+      ),
+    };
+    let servedAltered = false;
+
+    stubAuthoringFlow((url, init) => {
+      if (
+        url.includes("/worksheet-learner-hint-versions") &&
+        init?.method === "POST"
+      ) {
+        servedAltered = true;
+        return mockJsonResponse(
+          { title: "Precondition failed", status: 412, detail: {} },
+          { status: 412 },
+        );
+      }
+      if (url.includes(`/library/${CONTENT_ID}/versions/`) && servedAltered) {
+        return mockJsonResponse({
+          ...libraryVersion,
+          payload: alteredPayload,
+        });
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    const textarea = document.getElementById("hint-q-1") as HTMLTextAreaElement;
+    await userEvent.type(textarea, draftText);
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("unassigned-hint-drafts")).toBeInTheDocument();
+    });
+    expect(textarea.value).toBe("");
+    expect(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    ).toBeDisabled();
+    await userEvent.click(
+      screen.getByRole("button", { name: /I reviewed the updated questions/i }),
+    );
+    await userEvent.type(textarea, draftText);
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    expect(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    ).toBeEnabled();
+  });
+
   it("does not apply a delayed append success after session swap", async () => {
     let resolveAppend!: (value: Response) => void;
     const appendPromise = new Promise<Response>((resolve) => {
@@ -242,5 +313,79 @@ describe("WorksheetHintAuthorPage", () => {
       ).toBeDisabled();
     });
     expect(screen.queryByText(/Created hint-bearing worksheet version/i)).toBeNull();
+  });
+
+  it("lets a new session start actions after a prior session left in-flight refs set", async () => {
+    let resolveAppend!: (value: Response) => void;
+    const appendPromise = new Promise<Response>((resolve) => {
+      resolveAppend = resolve;
+    });
+
+    stubAuthoringFlow((url, init) => {
+      if (
+        url.includes("/worksheet-learner-hint-versions") &&
+        init?.method === "POST"
+      ) {
+        return appendPromise;
+      }
+      return undefined as unknown as Response;
+    });
+
+    connectDevSession(DEV_SESSION);
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/teacher-os/library/:contentId/learner-hints"
+          element={<WorksheetHintAuthorPage />}
+        />
+      </Routes>,
+      { route: AUTHOR_ROUTE },
+    );
+    await screen.findByTestId("hint-editor");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.type(
+      document.getElementById("hint-q-1") as HTMLTextAreaElement,
+      "Think about equal parts.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Create hint-bearing version/i }),
+    );
+
+    devSessionConnector?.connect({
+      ...DEV_SESSION,
+      bearerToken: "session-b-token",
+    });
+    await screen.findByTestId("hint-editor");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Authoring class/i),
+      "class-ref-5b",
+    );
+    await userEvent.type(
+      document.getElementById("hint-q-1") as HTMLTextAreaElement,
+      "Fresh hint for session B.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Preview new version/i }));
+    const createButton = screen.getByRole("button", {
+      name: /Create hint-bearing version/i,
+    });
+    expect(createButton).not.toBeDisabled();
+
+    resolveAppend(
+      mockJsonResponse(
+        {
+          content_id: CONTENT_ID,
+          version_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+          version_number: 2,
+        },
+        { etag: '"r5"', status: 201 },
+      ),
+    );
+    await waitFor(() => {
+      expect(screen.queryByText(/Created hint-bearing worksheet version/i)).toBeNull();
+    });
   });
 });

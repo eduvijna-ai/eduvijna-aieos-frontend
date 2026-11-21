@@ -15,6 +15,8 @@ import {
 import {
   WorksheetHintReviewPanel,
   worksheetHintReviewRequired,
+  hintReviewResourceIdentityLive,
+  type HintReviewResourceIdentity,
 } from "./WorksheetHintReviewPanel";
 import type { TeacherReviewQueueDetail } from "@/services/api/generated/reviewTypes";
 import type { DevSession } from "@/services/session/DevSessionConnector";
@@ -214,6 +216,7 @@ export function ReviewDetailPage() {
         }
 
         if (loadFenceStale(fence)) return;
+        setAttestationRecorded(false);
         setDetail(reviewDetail);
         setEtag(response.etag);
         setContentEtag(aggregateEtag);
@@ -429,8 +432,19 @@ export function ReviewDetailPage() {
             session={session}
             resourceGeneration={loadGeneration}
             disabled={busy}
-            onAttestationRecorded={() => {
-              if (viewFence && !loadFenceStale(viewFence)) {
+            onAttestationRecorded={(identity: HintReviewResourceIdentity) => {
+              if (!detail || viewFence === null || loadFenceStale(viewFence)) {
+                return;
+              }
+              const live: HintReviewResourceIdentity = {
+                contentId,
+                versionId,
+                contentEtag,
+                payloadRef: detail.payload,
+                session,
+                resourceGeneration: loadGeneration,
+              };
+              if (hintReviewResourceIdentityLive(identity, live)) {
                 setAttestationRecorded(true);
               }
             }}

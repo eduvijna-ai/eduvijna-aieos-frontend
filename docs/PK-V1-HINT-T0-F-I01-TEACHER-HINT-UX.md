@@ -32,6 +32,16 @@ Operations: `content_worksheet_hint_version_append`,
 - Attestation checklists reset on version/payload/session change; invalid
   `learner_hint` keys fail closed in review.
 
+## I01R2 version and review identity
+
+- After 412 or authoritative source drift, authoring keeps in-memory drafts but
+  requires explicit reconciliation before create/submit; unassigned text is
+  preserved when question bindings change.
+- Attestation POST captures a live resource identity snapshot (session, ETag,
+  payload reference, generation) and ignores late success after payload refresh.
+- Session invalidation clears stale append/submit in-flight refs so a new
+  teacher can act without a permanent busy lock.
+
 ## Out of scope
 
 Production grants, Backend edits, Student hint GET changes, full Hint E2E,

@@ -3,13 +3,16 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
   CONTENT_ID,
+  DEV_SESSION,
   mockJsonResponse,
   renderApp,
+  renderWithProviders,
   sampleDetail,
   sampleQueueItem,
   VERSION_ID,
 } from "@/test/test-utils";
 import { worksheetPayload } from "@/features/teacher-os/artifacts/artifactFixtures";
+import { WorksheetHintReviewPanel } from "./WorksheetHintReviewPanel";
 
 const detailPath = `/teacher-os/review/${CONTENT_ID}/versions/${VERSION_ID}`;
 
@@ -178,6 +181,97 @@ describe("Worksheet hint attestation review", () => {
     unmount();
     renderApp(detailPath);
     await screen.findByTestId("worksheet-hint-review");
+    expect(
+      screen.getByRole("button", { name: /Record structured attestation/i }),
+    ).toBeDisabled();
+  });
+
+  it("does not treat a stale deferred attestation POST as success after payload refresh on same mount", async () => {
+    let resolveAttestation!: (value: Response) => void;
+    const attestationPromise = new Promise<Response>((resolve) => {
+      resolveAttestation = resolve;
+    });
+    const onRecorded = vi.fn();
+
+    const payloadA = {
+      ...hintPayload,
+      questions: hintPayload.questions.map((question, index) =>
+        index === 0
+          ? { ...question, learner_hint: "Payload A hint." }
+          : question,
+      ),
+    };
+    const payloadB = {
+      ...hintPayload,
+      questions: hintPayload.questions.map((question, index) =>
+        index === 0
+          ? { ...question, learner_hint: "Payload B hint." }
+          : question,
+      ),
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("record-worksheet-hint-attestation")) {
+          return attestationPromise;
+        }
+        return mockJsonResponse({ items: [] });
+      }),
+    );
+
+    const { rerender } = renderWithProviders(
+      <WorksheetHintReviewPanel
+        contentId={CONTENT_ID}
+        versionId={VERSION_ID}
+        schemaId="education.worksheet"
+        schemaVersion={2}
+        payload={payloadA}
+        contentEtag='"etag-a"'
+        session={DEV_SESSION}
+        resourceGeneration={1}
+        onAttestationRecorded={onRecorded}
+      />,
+    );
+
+    await screen.findByTestId("worksheet-hint-review");
+    for (const checkbox of screen.getAllByRole("checkbox")) {
+      await userEvent.click(checkbox);
+    }
+    await userEvent.click(
+      screen.getByRole("button", { name: /Record structured attestation/i }),
+    );
+
+    rerender(
+      <WorksheetHintReviewPanel
+        contentId={CONTENT_ID}
+        versionId={VERSION_ID}
+        schemaId="education.worksheet"
+        schemaVersion={2}
+        payload={payloadB}
+        contentEtag='"etag-b"'
+        session={DEV_SESSION}
+        resourceGeneration={1}
+        onAttestationRecorded={onRecorded}
+      />,
+    );
+
+    resolveAttestation(
+      mockJsonResponse(
+        {
+          attestation_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+          content_id: CONTENT_ID,
+          version_id: VERSION_ID,
+        },
+        { etag: '"etag-c"', status: 201 },
+      ),
+    );
+
+    await waitFor(() => {
+      expect(onRecorded).not.toHaveBeenCalled();
+    });
+    expect(screen.queryByText(/Attestation recorded/i)).toBeNull();
     expect(
       screen.getByRole("button", { name: /Record structured attestation/i }),
     ).toBeDisabled();

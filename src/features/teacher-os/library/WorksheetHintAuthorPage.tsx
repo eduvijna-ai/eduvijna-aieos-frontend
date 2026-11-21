@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getLibraryItem, getLibraryVersion } from "@/services/api/libraryApi";
+import type { TeacherLibraryDetail } from "@/services/api/generated/libraryTypes";
 import { getContent } from "@/services/api/contentApi";
 import {
   listAssignableClasses,
@@ -28,10 +29,10 @@ import {
   countAppendableHints,
   hintIssueMessage,
   libraryItemEligibleForHintAuthoring,
-  parseWorksheetHintSource,
+  parseWorksheetHintSourceForAuthoring,
   validateDraftHintText,
   WORKSHEET_HINT_SCHEMA_VERSION,
-  worksheetQuestionCountEligibleForHintAuthoring,
+  worksheetQuestionBindingSignature,
 } from "./worksheetHintAuthorPolicy";
 import "./library.css";
 
@@ -47,6 +48,13 @@ type MutationFence = {
   contentId: string;
   sourceVersionId: string | null;
 };
+
+function reviewNavigationMatchesVersion(
+  detail: TeacherLibraryDetail,
+  versionId: string,
+): boolean {
+  return detail.review_navigation?.version_id === versionId;
+}
 
 function mutationFenceStale(
   fence: MutationFence,
@@ -65,6 +73,16 @@ const OUT_OF_DATE_MESSAGE =
   "This worksheet changed elsewhere. Reload the latest source and reconcile your unsaved hints before trying again.";
 const AMBIGUOUS_APPEND_MESSAGE =
   "The save result is uncertain. Your draft is still here — reload or retry only after checking the latest version.";
+const AMBIGUOUS_SUBMIT_MESSAGE =
+  "The submit result is uncertain. Your worksheet and drafts are unchanged — reload or retry only after checking the server state.";
+const RECONCILIATION_MESSAGE =
+  "The worksheet source changed. Review the updated questions, reapply any saved hint text, then preview again before creating a version.";
+
+type SourceBinding = {
+  versionId: string;
+  signature: string;
+  questionsById: Record<string, Record<string, unknown>>;
+};
 
 export function WorksheetHintAuthorPage() {
   const { contentId = "" } = useParams();
@@ -110,7 +128,12 @@ export function WorksheetHintAuthorPage() {
   const [createdContentEtag, setCreatedContentEtag] = useState<string | null>(
     null,
   );
+  const [reconciliationRequired, setReconciliationRequired] = useState(false);
+  const [unassignedDrafts, setUnassignedDrafts] = useState<
+    Record<string, string>
+  >({});
 
+  const boundSourceRef = useRef<SourceBinding | null>(null);
   const appendKeyRef = useRef<string | null>(null);
   const appendMaterialRef = useRef<string | null>(null);
   const submitKeyRef = useRef<string | null>(null);
@@ -154,6 +177,15 @@ export function WorksheetHintAuthorPage() {
     appendMaterialRef.current = null;
     submitKeyRef.current = null;
     submitVersionRef.current = null;
+    submitMaterialRef.current = null;
+    appendInFlightRef.current = false;
+    submitInFlightRef.current = false;
+    setBusyAppend(false);
+    setBusySubmitReview(false);
+    createdMaterialRef.current = null;
+    boundSourceRef.current = null;
+    setReconciliationRequired(false);
+    setUnassignedDrafts({});
   }, []);
 
   const invalidateAuthorSync = useCallback(() => {
@@ -182,6 +214,93 @@ export function WorksheetHintAuthorPage() {
     }
   }, [contentId, invalidateAuthorSync, isConnected, isProduction]);
 
+  const applyAuthoringSource = useCallback(
+    (
+      parsed: {
+        payload: Record<string, unknown>;
+        questionIds: string[];
+      },
+      versionId: string,
+      contentEtagValue: string,
+      preservedDrafts: Record<string, string>,
+      requireReconciliationOnDrift: boolean,
+    ): boolean => {
+      const questionMap: Record<string, Record<string, unknown>> = {};
+      const ids: string[] = [];
+      for (const entry of parsed.payload.questions as unknown[]) {
+        if (typeof entry === "object" && entry !== null && !Array.isArray(entry)) {
+          const record = entry as Record<string, unknown>;
+          const id = typeof record.id === "string" ? record.id : "";
+          if (id) {
+            questionMap[id] = record;
+            ids.push(id);
+          }
+        }
+      }
+      const signature = worksheetQuestionBindingSignature(ids, questionMap);
+      const prior = boundSourceRef.current;
+      const drifted =
+        requireReconciliationOnDrift &&
+        prior !== null &&
+        (prior.versionId !== versionId || prior.signature !== signature);
+
+      const nextDrafts: Record<string, string> = {};
+      const orphans: Record<string, string> = {};
+      for (const id of ids) {
+        nextDrafts[id] = preservedDrafts[id] ?? "";
+      }
+      for (const [id, text] of Object.entries(preservedDrafts)) {
+        if (!ids.includes(id) && text.trim()) {
+          orphans[id] = text;
+        }
+      }
+
+      if (drifted && prior) {
+        for (const id of ids) {
+          const draft = preservedDrafts[id];
+          if (!draft?.trim()) continue;
+          const oldQuestion = prior.questionsById[id];
+          const newQuestion = questionMap[id];
+          if (!oldQuestion) continue;
+          const sameBinding =
+            typeof oldQuestion.prompt === "string" &&
+            oldQuestion.prompt === newQuestion?.prompt &&
+            String(oldQuestion.answer ?? "") === String(newQuestion?.answer ?? "");
+          if (!sameBinding) {
+            orphans[`${id} (previous source)`] = draft;
+            nextDrafts[id] = "";
+          }
+        }
+        setReconciliationRequired(true);
+        setShowPreview(false);
+        setCreatedVersionId(null);
+        setCreatedContentEtag(null);
+        createdMaterialRef.current = null;
+        appendKeyRef.current = null;
+        appendMaterialRef.current = null;
+        submitKeyRef.current = null;
+        submitVersionRef.current = null;
+        submitMaterialRef.current = null;
+        setFieldIssues({});
+      }
+
+      setContentEtag(contentEtagValue);
+      setCurrentVersionId(versionId);
+      setSourcePayload(parsed.payload);
+      setQuestionIds(ids);
+      setQuestionsById(questionMap);
+      setHintDrafts(nextDrafts);
+      setUnassignedDrafts((prev) => ({ ...prev, ...orphans }));
+      boundSourceRef.current = {
+        versionId,
+        signature,
+        questionsById: questionMap,
+      };
+      return drifted;
+    },
+    [],
+  );
+
   const reloadMetadataPreservingDrafts = useCallback(
     async (draftSnapshot: Record<string, string>) => {
       const fence: LoadFence = {
@@ -203,20 +322,34 @@ export function WorksheetHintAuthorPage() {
         if (version.content_id !== contentId || version.version_id !== versionId) {
           return;
         }
-        setContentEtag(contentResponse.etag);
-        setCurrentVersionId(versionId);
-        const reparsed = parseWorksheetHintSource(version.payload);
-        if (reparsed.ok) {
-          setSourcePayload(reparsed.payload);
+        const reparsed = parseWorksheetHintSourceForAuthoring(version.payload);
+        if (!reparsed.ok) {
+          setStatusMessage(reparsed.reason);
+          setHintDrafts(draftSnapshot);
+          return;
         }
-        setHintDrafts(draftSnapshot);
+        if (!contentResponse.etag) {
+          setStatusMessage(OUT_OF_DATE_MESSAGE);
+          setHintDrafts(draftSnapshot);
+          return;
+        }
+        const needsReconcile = applyAuthoringSource(
+          reparsed,
+          versionId,
+          contentResponse.etag,
+          draftSnapshot,
+          true,
+        );
+        setStatusMessage(
+          needsReconcile ? RECONCILIATION_MESSAGE : OUT_OF_DATE_MESSAGE,
+        );
       } catch {
         if (!loadFenceStale(fence)) {
           setStatusMessage(OUT_OF_DATE_MESSAGE);
         }
       }
     },
-    [contentId, loadFenceStale],
+    [applyAuthoringSource, contentId, loadFenceStale],
   );
 
   const load = useCallback(async (options?: { preserveDrafts?: Record<string, string> }) => {
@@ -280,37 +413,27 @@ export function WorksheetHintAuthorPage() {
         return;
       }
 
-      const parsed = parseWorksheetHintSource(version.payload);
+      const parsed = parseWorksheetHintSourceForAuthoring(version.payload);
       if (!parsed.ok) {
         setStatus("error");
         setErrorMessage(parsed.reason);
         return;
       }
-      if (!worksheetQuestionCountEligibleForHintAuthoring(parsed.questionIds.length)) {
-        setStatus("error");
-        setErrorMessage(
-          "This worksheet must have between 6 and 12 questions to author learner hints.",
-        );
-        return;
-      }
-
-      const questionMap: Record<string, Record<string, unknown>> = {};
-      const ids: string[] = [];
-      for (const entry of parsed.payload.questions as unknown[]) {
-        if (typeof entry === "object" && entry !== null && !Array.isArray(entry)) {
-          const record = entry as Record<string, unknown>;
-          const id = typeof record.id === "string" ? record.id : "";
-          if (id) {
-            questionMap[id] = record;
-            ids.push(id);
-          }
-        }
-      }
 
       const preserved = options?.preserveDrafts;
       const drafts: Record<string, string> = preserved ? { ...preserved } : {};
       if (!preserved) {
-        for (const id of ids) {
+        const questionMap: Record<string, Record<string, unknown>> = {};
+        for (const entry of parsed.payload.questions as unknown[]) {
+          if (typeof entry === "object" && entry !== null && !Array.isArray(entry)) {
+            const record = entry as Record<string, unknown>;
+            const id = typeof record.id === "string" ? record.id : "";
+            if (id) {
+              questionMap[id] = record;
+            }
+          }
+        }
+        for (const id of parsed.questionIds) {
           const existing = questionMap[id]?.learner_hint;
           if (typeof existing === "string" && existing.trim()) {
             drafts[id] = existing.trim();
@@ -318,21 +441,24 @@ export function WorksheetHintAuthorPage() {
             drafts[id] = "";
           }
         }
-      } else {
-        for (const id of ids) {
-          if (!(id in drafts)) {
-            drafts[id] = "";
-          }
-        }
+      }
+
+      if (!contentResponse.etag) {
+        setStatus("error");
+        setErrorMessage("Content revision is missing; cannot author hints.");
+        return;
       }
 
       setTitle(detail.title);
-      setCurrentVersionId(versionId);
-      setContentEtag(contentResponse.etag);
-      setSourcePayload(parsed.payload);
-      setQuestionIds(ids);
-      setQuestionsById(questionMap);
-      setHintDrafts(drafts);
+      setReconciliationRequired(false);
+      setUnassignedDrafts({});
+      applyAuthoringSource(
+        parsed,
+        versionId,
+        contentResponse.etag,
+        drafts,
+        false,
+      );
       setCreatedVersionId(null);
       setCreatedContentEtag(null);
       createdMaterialRef.current = null;
@@ -343,7 +469,7 @@ export function WorksheetHintAuthorPage() {
       setErrorMessage(userMessageForApiError(error));
       setStatus("error");
     }
-  }, [contentId, isConnected, isProduction, loadFenceStale]);
+  }, [applyAuthoringSource, contentId, isConnected, isProduction, loadFenceStale]);
 
   useEffect(() => {
     void load();
@@ -394,7 +520,16 @@ export function WorksheetHintAuthorPage() {
       : 0;
   const hasBlockingIssues = Object.keys(fieldIssues).length > 0;
   const canPreview =
-    validHintCount >= 1 && Boolean(classRef.trim()) && !hasBlockingIssues;
+    validHintCount >= 1 &&
+    Boolean(classRef.trim()) &&
+    !hasBlockingIssues &&
+    !reconciliationRequired;
+
+  function onConfirmReconciliation() {
+    setReconciliationRequired(false);
+    setShowPreview(false);
+    setStatusMessage("");
+  }
 
   async function onCreateHintVersion() {
     if (appendInFlightRef.current) return;
@@ -605,6 +740,60 @@ export function WorksheetHintAuthorPage() {
         await reloadMetadataPreservingDrafts(draftSnapshot);
         return;
       }
+      const isTransport =
+        error instanceof ApiError &&
+        (error.status === 0 ||
+          error.code === "network" ||
+          (error.status !== null && error.status >= 500));
+      if (isTransport || !(error instanceof ApiError)) {
+        try {
+          const [contentResponse, versionResponse, libraryResponse] =
+            await Promise.all([
+              getContent(contentId),
+              getLibraryVersion(contentId, versionForSubmit),
+              getLibraryItem(contentId),
+            ]);
+          if (
+            mutationFenceStale(
+              startFence,
+              loadGenerationRef.current,
+              sessionRef.current,
+              contentIdRef.current,
+            )
+          ) {
+            return;
+          }
+          const submitted =
+            versionResponse.data.version_id === versionForSubmit &&
+            (versionResponse.data.stewardship_state === "IN_REVIEW" ||
+              reviewNavigationMatchesVersion(
+                libraryResponse.data,
+                versionForSubmit,
+              ));
+          if (submitted) {
+            setStatusMessage(
+              "Submitted for independent review. Approval and publishing remain separate steps.",
+            );
+            if (contentResponse.etag) {
+              setCreatedContentEtag(contentResponse.etag);
+            }
+            return;
+          }
+        } catch {
+          if (
+            mutationFenceStale(
+              startFence,
+              loadGenerationRef.current,
+              sessionRef.current,
+              contentIdRef.current,
+            )
+          ) {
+            return;
+          }
+        }
+        setStatusMessage(AMBIGUOUS_SUBMIT_MESSAGE);
+        return;
+      }
       setStatusMessage(userMessageForApiError(error));
     } finally {
       if (
@@ -663,6 +852,39 @@ export function WorksheetHintAuthorPage() {
             <code>{currentVersionId}</code>. Answers and teacher notes stay
             private to this screen.
           </p>
+
+          {reconciliationRequired ? (
+            <div className="library-reconcile-banner" role="alert">
+              <p>{RECONCILIATION_MESSAGE}</p>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={onConfirmReconciliation}
+              >
+                I reviewed the updated questions
+              </button>
+            </div>
+          ) : null}
+
+          {Object.keys(unassignedDrafts).length > 0 ? (
+            <div
+              className="library-unassigned-drafts"
+              data-testid="unassigned-hint-drafts"
+            >
+              <h2>Unassigned hint text</h2>
+              <p className="muted">
+                These hints are preserved from an earlier source binding. Copy
+                them onto the correct questions manually.
+              </p>
+              <ul>
+                {Object.entries(unassignedDrafts).map(([key, text]) => (
+                  <li key={key}>
+                    <strong>{key}</strong>: {text}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           <label htmlFor="authoring-class-ref">
             Authoring class
@@ -739,7 +961,9 @@ export function WorksheetHintAuthorPage() {
             <button
               type="button"
               className="btn btn-secondary"
-              disabled={busySubmitReview || !createdVersionId}
+              disabled={
+                busySubmitReview || !createdVersionId || reconciliationRequired
+              }
               onClick={() => void onSubmitForReview()}
             >
               Submit for independent review

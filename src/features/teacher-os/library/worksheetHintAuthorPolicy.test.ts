@@ -6,6 +6,7 @@ import {
   countAppendableHints,
   listHintedWorksheetQuestions,
   parseWorksheetHintSource,
+  parseWorksheetHintSourceForAuthoring,
   validateDraftHintText,
   worksheetHintPayloadHasInvalidLearnerHintKey,
   worksheetQuestionCountEligibleForHintAuthoring,
@@ -61,6 +62,36 @@ describe("worksheetHintAuthorPolicy", () => {
     expect(worksheetHintPayloadHasInvalidLearnerHintKey(invalid)).toMatch(
       /invalid learner_hint/i,
     );
+  });
+
+  it("rejects malformed worksheet source for authoring", () => {
+    const invalid = { title: "Only title", questions: [] };
+    expect(parseWorksheetHintSourceForAuthoring(invalid).ok).toBe(false);
+    const missingFields = {
+      ...worksheetPayload,
+      questions: Array.from({ length: 6 }, (_, index) => ({
+        ...worksheetPayload.questions[0],
+        id: `q-${index + 1}`,
+      })),
+    };
+    delete (missingFields as { teacher_summary?: string }).teacher_summary;
+    expect(parseWorksheetHintSourceForAuthoring(missingFields).ok).toBe(false);
+  });
+
+  it("accepts governed worksheet source with required fields for authoring", () => {
+    const source = {
+      ...worksheetPayload,
+      questions: Array.from({ length: 6 }, (_, index) => ({
+        ...worksheetPayload.questions[0],
+        id: `q-${index + 1}`,
+        prompt: `Prompt ${index + 1}`,
+      })),
+    };
+    const parsed = parseWorksheetHintSourceForAuthoring(source);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.payload.teacher_notes).toBe(worksheetPayload.teacher_notes);
+    }
   });
 
   it("requires between six and twelve questions for authoring eligibility", () => {

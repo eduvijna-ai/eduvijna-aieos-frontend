@@ -126,6 +126,142 @@ export function parseWorksheetHintSource(payload: unknown): WorksheetHintSource 
   return { ok: true, payload: structuredClone(payload), questionIds };
 }
 
+const AUTHORING_STRING_FIELDS = [
+  "title",
+  "teacher_summary",
+  "instructions",
+] as const;
+
+function learningObjectivesValid(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  return value.every((entry) => {
+    if (!isRecord(entry)) return false;
+    return asTrimmedString(entry.id) !== null && asTrimmedString(entry.text) !== null;
+  });
+}
+
+function questionOptionsValid(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  return value.every((option) => typeof option === "string");
+}
+
+function objectiveIdsValid(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  return value.every((entry) => typeof entry === "string" && entry.trim().length > 0);
+}
+
+/**
+ * Narrow authoring gate: required governed worksheet fields before hint editing.
+ * Does not rewrite or strip source payload.
+ */
+export function parseWorksheetHintSourceForAuthoring(
+  payload: unknown,
+): WorksheetHintSource {
+  const base = parseWorksheetHintSource(payload);
+  if (!base.ok) return base;
+  const record = base.payload;
+  for (const field of AUTHORING_STRING_FIELDS) {
+    if (asTrimmedString(record[field]) === null) {
+      return {
+        ok: false,
+        reason: `Worksheet is missing required field "${field}".`,
+      };
+    }
+  }
+  if (!learningObjectivesValid(record.learning_objectives)) {
+    return {
+      ok: false,
+      reason: "Worksheet learning_objectives must be a non-empty valid list.",
+    };
+  }
+  if (!worksheetQuestionCountEligibleForHintAuthoring(base.questionIds.length)) {
+    return {
+      ok: false,
+      reason: "This worksheet must have between 6 and 12 questions to author learner hints.",
+    };
+  }
+  const questions = record.questions as unknown[];
+  for (const question of questions) {
+    if (!isRecord(question)) {
+      return { ok: false, reason: "A worksheet question is malformed." };
+    }
+    const id = asTrimmedString(question.id);
+    if (!id) {
+      return { ok: false, reason: "Every worksheet question needs a stable id." };
+    }
+    if (asTrimmedString(question.prompt) === null) {
+      return {
+        ok: false,
+        reason: `Question ${id} is missing a prompt.`,
+      };
+    }
+    if (asTrimmedString(question.question_type) === null) {
+      return {
+        ok: false,
+        reason: `Question ${id} is missing question_type.`,
+      };
+    }
+    if (!questionOptionsValid(question.options)) {
+      return {
+        ok: false,
+        reason: `Question ${id} has invalid options.`,
+      };
+    }
+    if (!("answer" in question)) {
+      return {
+        ok: false,
+        reason: `Question ${id} is missing answer.`,
+      };
+    }
+    if (!("explanation" in question) || typeof question.explanation !== "string") {
+      return {
+        ok: false,
+        reason: `Question ${id} is missing explanation.`,
+      };
+    }
+    if (!objectiveIdsValid(question.objective_ids)) {
+      return {
+        ok: false,
+        reason: `Question ${id} is missing objective_ids.`,
+      };
+    }
+    if ("learner_hint" in question) {
+      if (question.learner_hint === null) {
+        return {
+          ok: false,
+          reason: `Question ${id} has forbidden null learner_hint.`,
+        };
+      }
+      if (question.learner_hint !== undefined) {
+        const hintText = normalizeStoredHintText(question.learner_hint);
+        if (!hintText) {
+          return {
+            ok: false,
+            reason: `Question ${id} has an invalid learner_hint value.`,
+          };
+        }
+      }
+    }
+  }
+  return base;
+}
+
+export function worksheetQuestionBindingSignature(
+  questionIds: string[],
+  questionsById: Record<string, Record<string, unknown>>,
+): string {
+  return JSON.stringify(
+    questionIds.map((id) => {
+      const question = questionsById[id];
+      return {
+        id,
+        prompt: typeof question?.prompt === "string" ? question.prompt : "",
+        answer: question?.answer !== undefined ? String(question.answer) : "",
+      };
+    }),
+  );
+}
+
 export function worksheetSchemaEligible(
   schemaId: string | null | undefined,
   schemaVersion: number | null | undefined,
