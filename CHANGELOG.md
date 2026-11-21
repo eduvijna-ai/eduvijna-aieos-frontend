@@ -35,6 +35,12 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
   silent-refresh parent fencing, and discriminating adversarial tests (no OpenAPI
   pin change).
 
+- PK-V1-HINT-T0-F-I01R4: Authoring authority finite-state machine on Draft PR
+  #51 — `AuthorPhase` transitions (no teacher override from failed re-read),
+  pending mutation receipt/idempotency across uncertain append, explicit Reload
+  latest authoritative worksheet, and adversarial page tests (no OpenAPI pin
+  change).
+
 - PK-V1-HINT-F-I01: Optional in-attempt learner hints on Student OS
   `AttemptPage` / `ResponseEditor` via
   `GET /api/v1/learning/attempts/{attempt_id}/learner-hints`

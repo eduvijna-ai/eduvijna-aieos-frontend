@@ -49,6 +49,26 @@ type MutationFence = {
   sourceVersionId: string | null;
 };
 
+/** Governed recovery / mutation-authority phases (mutually exclusive). */
+export type AuthorPhase =
+  | "READY"
+  | "REVALIDATING"
+  | "AUTHORITY_UNAVAILABLE"
+  | "RECONCILIATION_REQUIRED"
+  | "APPEND_OUTCOME_UNCERTAIN"
+  | "SUBMIT_OUTCOME_UNCERTAIN";
+
+type PendingMutationReceipt = {
+  kind: "append" | "submit";
+  generation: number;
+  session: DevSession | null;
+  contentId: string;
+  sourceVersionId: string;
+  etag: string;
+  materialFingerprint: string;
+  idempotencyKey: string;
+};
+
 function reviewNavigationMatchesVersion(
   detail: TeacherLibraryDetail,
   versionId: string,
@@ -72,9 +92,9 @@ function mutationFenceStale(
 const OUT_OF_DATE_MESSAGE =
   "This worksheet changed elsewhere. Reload the latest source and reconcile your unsaved hints before trying again.";
 const AMBIGUOUS_APPEND_MESSAGE =
-  "The save result is uncertain. Your draft is still here — reload or retry only after checking the latest version.";
+  "The save result is uncertain. Your draft is still here — use Reload latest worksheet to verify the server state before creating another version.";
 const AMBIGUOUS_SUBMIT_MESSAGE =
-  "The submit result is uncertain. Your worksheet and drafts are unchanged — reload or retry only after checking the server state.";
+  "The submit result is uncertain. Your worksheet and drafts are unchanged — reload to verify server state before retrying.";
 const RECONCILIATION_MESSAGE =
   "The worksheet source changed. Review the updated questions, reapply any saved hint text, then preview again before creating a version.";
 
@@ -86,7 +106,7 @@ type SourceBinding = {
 };
 
 const REVALIDATION_BLOCKED_MESSAGE =
-  "Cannot refresh worksheet authority right now. Your unsaved hints are preserved — use Reload when the source is available.";
+  "Cannot refresh worksheet authority right now. Your unsaved hints are preserved — use Reload latest worksheet when the source is available.";
 
 export function WorksheetHintAuthorPage() {
   const { contentId = "" } = useParams();
@@ -132,8 +152,12 @@ export function WorksheetHintAuthorPage() {
   const [createdContentEtag, setCreatedContentEtag] = useState<string | null>(
     null,
   );
-  const [reconciliationRequired, setReconciliationRequired] = useState(false);
-  const [sourceAuthorityBlocked, setSourceAuthorityBlocked] = useState(false);
+  const [authorPhase, setAuthorPhase] = useState<AuthorPhase>("REVALIDATING");
+  const authorPhaseRef = useRef<AuthorPhase>("REVALIDATING");
+  const setAuthorPhaseSync = useCallback((phase: AuthorPhase) => {
+    authorPhaseRef.current = phase;
+    setAuthorPhase(phase);
+  }, []);
   const [unassignedDrafts, setUnassignedDrafts] = useState<
     Record<string, string>
   >({});
@@ -147,6 +171,7 @@ export function WorksheetHintAuthorPage() {
   const appendInFlightRef = useRef(false);
   const submitInFlightRef = useRef(false);
   const createdMaterialRef = useRef<string | null>(null);
+  const pendingMutationReceiptRef = useRef<PendingMutationReceipt | null>(null);
 
   const appendMaterialFingerprint = useMemo(
     () =>
@@ -166,6 +191,24 @@ export function WorksheetHintAuthorPage() {
     [],
   );
 
+  const clearPendingMutationKeys = useCallback((kind?: "append" | "submit") => {
+    if (!kind || kind === "append") {
+      appendKeyRef.current = null;
+      appendMaterialRef.current = null;
+      if (pendingMutationReceiptRef.current?.kind === "append") {
+        pendingMutationReceiptRef.current = null;
+      }
+    }
+    if (!kind || kind === "submit") {
+      submitKeyRef.current = null;
+      submitVersionRef.current = null;
+      submitMaterialRef.current = null;
+      if (pendingMutationReceiptRef.current?.kind === "submit") {
+        pendingMutationReceiptRef.current = null;
+      }
+    }
+  }, []);
+
   const purgeAuthorState = useCallback(() => {
     setSourcePayload(null);
     setQuestionIds([]);
@@ -178,35 +221,26 @@ export function WorksheetHintAuthorPage() {
     setCreatedContentEtag(null);
     setContentEtag(null);
     setCurrentVersionId(null);
-    appendKeyRef.current = null;
-    appendMaterialRef.current = null;
-    submitKeyRef.current = null;
-    submitVersionRef.current = null;
-    submitMaterialRef.current = null;
+    clearPendingMutationKeys();
     appendInFlightRef.current = false;
     submitInFlightRef.current = false;
     setBusyAppend(false);
     setBusySubmitReview(false);
     createdMaterialRef.current = null;
     boundSourceRef.current = null;
-    setReconciliationRequired(false);
-    setSourceAuthorityBlocked(false);
+    pendingMutationReceiptRef.current = null;
+    setAuthorPhaseSync("REVALIDATING");
     setUnassignedDrafts({});
-  }, []);
+  }, [clearPendingMutationKeys, setAuthorPhaseSync]);
 
-  const enterFailClosedRevalidation = useCallback(() => {
-    setSourceAuthorityBlocked(true);
-    setReconciliationRequired(true);
+  const beginRevalidation = useCallback(() => {
+    setAuthorPhaseSync("REVALIDATING");
     setShowPreview(false);
     setCreatedVersionId(null);
     setCreatedContentEtag(null);
     createdMaterialRef.current = null;
-    appendKeyRef.current = null;
-    appendMaterialRef.current = null;
-    submitKeyRef.current = null;
-    submitVersionRef.current = null;
-    submitMaterialRef.current = null;
-  }, []);
+    clearPendingMutationKeys("submit");
+  }, [clearPendingMutationKeys, setAuthorPhaseSync]);
 
   const invalidateAuthorSync = useCallback(() => {
     bumpLoadGeneration();
@@ -306,16 +340,11 @@ export function WorksheetHintAuthorPage() {
             nextDrafts[id] = "";
           }
         }
-        setReconciliationRequired(true);
         setShowPreview(false);
         setCreatedVersionId(null);
         setCreatedContentEtag(null);
         createdMaterialRef.current = null;
-        appendKeyRef.current = null;
-        appendMaterialRef.current = null;
-        submitKeyRef.current = null;
-        submitVersionRef.current = null;
-        submitMaterialRef.current = null;
+        clearPendingMutationKeys();
         setFieldIssues({});
       }
 
@@ -332,17 +361,14 @@ export function WorksheetHintAuthorPage() {
         contentEtag: contentEtagValue,
         questionsById: questionMap,
       };
-      if (drifted) {
-        setSourceAuthorityBlocked(true);
-      }
       return drifted;
     },
-    [],
+    [clearPendingMutationKeys],
   );
 
   const reloadMetadataPreservingDrafts = useCallback(
     async (draftSnapshot: Record<string, string>) => {
-      enterFailClosedRevalidation();
+      beginRevalidation();
       const fence: LoadFence = {
         generation: loadGenerationRef.current,
         session: sessionRef.current,
@@ -350,8 +376,9 @@ export function WorksheetHintAuthorPage() {
       };
       const failClosed = (message: string) => {
         if (loadFenceStale(fence)) return;
-        enterFailClosedRevalidation();
+        setAuthorPhaseSync("AUTHORITY_UNAVAILABLE");
         setHintDrafts(draftSnapshot);
+        setShowPreview(false);
         setStatusMessage(message);
       };
       try {
@@ -423,9 +450,8 @@ export function WorksheetHintAuthorPage() {
           true,
         );
         if (loadFenceStale(fence)) return;
-        enterFailClosedRevalidation();
-        setSourceAuthorityBlocked(true);
-        setReconciliationRequired(true);
+        setAuthorPhaseSync("RECONCILIATION_REQUIRED");
+        setShowPreview(false);
         setStatusMessage(
           needsReconcile ? RECONCILIATION_MESSAGE : OUT_OF_DATE_MESSAGE,
         );
@@ -435,10 +461,12 @@ export function WorksheetHintAuthorPage() {
     },
     [
       applyAuthoringSource,
+      beginRevalidation,
       classRef,
+      clearPendingMutationKeys,
       contentId,
-      enterFailClosedRevalidation,
       loadFenceStale,
+      setAuthorPhaseSync,
     ],
   );
 
@@ -540,8 +568,6 @@ export function WorksheetHintAuthorPage() {
       }
 
       setTitle(detail.title);
-      setReconciliationRequired(false);
-      setSourceAuthorityBlocked(false);
       setUnassignedDrafts({});
       applyAuthoringSource(
         parsed,
@@ -553,14 +579,24 @@ export function WorksheetHintAuthorPage() {
       setCreatedVersionId(null);
       setCreatedContentEtag(null);
       createdMaterialRef.current = null;
+      clearPendingMutationKeys();
       setClasses(classesResponse.data.items);
+      setAuthorPhaseSync("READY");
       setStatus("ready");
     } catch (error) {
       if (loadFenceStale(fence)) return;
       setErrorMessage(userMessageForApiError(error));
       setStatus("error");
     }
-  }, [applyAuthoringSource, contentId, isConnected, isProduction, loadFenceStale]);
+  }, [
+    applyAuthoringSource,
+    clearPendingMutationKeys,
+    contentId,
+    isConnected,
+    isProduction,
+    loadFenceStale,
+    setAuthorPhaseSync,
+  ]);
 
   useEffect(() => {
     void load();
@@ -583,7 +619,11 @@ export function WorksheetHintAuthorPage() {
     }
   }, [appendMaterialFingerprint]);
 
+  const hintsEditable =
+    authorPhase === "READY" || authorPhase === "RECONCILIATION_REQUIRED";
+
   function onHintChange(questionId: string, value: string) {
+    if (!hintsEditable) return;
     setHintDrafts((prev) => ({ ...prev, [questionId]: value }));
     const question = questionsById[questionId];
     const issue = validateDraftHintText(value, {
@@ -611,21 +651,21 @@ export function WorksheetHintAuthorPage() {
       : 0;
   const hasBlockingIssues = Object.keys(fieldIssues).length > 0;
   const canPreview =
+    authorPhase === "READY" &&
     validHintCount >= 1 &&
     Boolean(classRef.trim()) &&
-    !hasBlockingIssues &&
-    !reconciliationRequired &&
-    !sourceAuthorityBlocked;
+    !hasBlockingIssues;
 
   function onConfirmReconciliation() {
-    setReconciliationRequired(false);
-    setSourceAuthorityBlocked(false);
+    if (authorPhaseRef.current !== "RECONCILIATION_REQUIRED") return;
+    setAuthorPhaseSync("READY");
     setShowPreview(false);
     setStatusMessage("");
   }
 
   async function onCreateHintVersion() {
     if (appendInFlightRef.current) return;
+    if (authorPhaseRef.current !== "READY") return;
     if (!sourcePayload || !contentEtag || !classRef.trim() || !currentVersionId) {
       setStatusMessage("Select a class and add at least one valid hint.");
       return;
@@ -642,7 +682,16 @@ export function WorksheetHintAuthorPage() {
     const draftSnapshot = { ...hintDrafts };
     const bodyPayload = buildWorksheetHintAppendPayload(sourcePayload, hintDrafts);
     const material = appendMaterialFingerprint;
+    const pending = pendingMutationReceiptRef.current;
     if (
+      pending?.kind === "append" &&
+      pending.materialFingerprint === material &&
+      pending.session === sessionRef.current &&
+      pending.contentId === contentIdRef.current
+    ) {
+      appendKeyRef.current = pending.idempotencyKey;
+      appendMaterialRef.current = material;
+    } else if (
       appendMaterialRef.current !== material ||
       !appendKeyRef.current
     ) {
@@ -682,9 +731,11 @@ export function WorksheetHintAuthorPage() {
       ) {
         return;
       }
+      pendingMutationReceiptRef.current = null;
       createdMaterialRef.current = material;
       setCreatedVersionId(response.data.version_id);
       setCreatedContentEtag(response.etag);
+      setAuthorPhaseSync("READY");
       setStatusMessage(
         `Created hint-bearing worksheet version ${response.data.version_number}. Submit it for independent review when ready.`,
       );
@@ -700,6 +751,8 @@ export function WorksheetHintAuthorPage() {
         return;
       }
       if (error instanceof ApiError && error.code === "precondition_failed") {
+        clearPendingMutationKeys("append");
+        pendingMutationReceiptRef.current = null;
         setStatusMessage(OUT_OF_DATE_MESSAGE);
         await reloadMetadataPreservingDrafts(draftSnapshot);
         return;
@@ -710,6 +763,18 @@ export function WorksheetHintAuthorPage() {
           error.code === "network" ||
           (error.status !== null && error.status >= 500));
       if (isTransport || !(error instanceof ApiError)) {
+        setAuthorPhaseSync("APPEND_OUTCOME_UNCERTAIN");
+        setShowPreview(false);
+        pendingMutationReceiptRef.current = {
+          kind: "append",
+          generation: loadGenerationRef.current,
+          session: sessionRef.current,
+          contentId,
+          sourceVersionId: currentVersionId,
+          etag: etagAtStart,
+          materialFingerprint: material,
+          idempotencyKey,
+        };
         try {
           const contentResponse = await getContent(contentId);
           if (
@@ -725,7 +790,7 @@ export function WorksheetHintAuthorPage() {
           const nextVersionId = contentResponse.data.current_version_id;
           if (nextVersionId && nextVersionId !== startFence.sourceVersionId) {
             setStatusMessage(
-              "A new worksheet version may exist. Review the latest source before creating another version.",
+              "A new worksheet version may exist. Reload latest worksheet to verify before any new save.",
             );
             await reloadMetadataPreservingDrafts(draftSnapshot);
             return;
@@ -764,6 +829,9 @@ export function WorksheetHintAuthorPage() {
 
   async function onSubmitForReview() {
     if (submitInFlightRef.current) return;
+    const phase = authorPhaseRef.current;
+    if (phase !== "READY" && phase !== "APPEND_OUTCOME_UNCERTAIN") return;
+    if (phase === "APPEND_OUTCOME_UNCERTAIN") return;
     if (!createdVersionId || !createdContentEtag || !createdMaterialRef.current) {
       setStatusMessage("Create the hint-bearing version before submitting.");
       return;
@@ -814,6 +882,7 @@ export function WorksheetHintAuthorPage() {
       ) {
         return;
       }
+      pendingMutationReceiptRef.current = null;
       setStatusMessage(
         "Submitted for independent review. Approval and publishing remain separate steps.",
       );
@@ -829,6 +898,7 @@ export function WorksheetHintAuthorPage() {
         return;
       }
       if (error instanceof ApiError && error.code === "precondition_failed") {
+        clearPendingMutationKeys("submit");
         setStatusMessage(OUT_OF_DATE_MESSAGE);
         await reloadMetadataPreservingDrafts(draftSnapshot);
         return;
@@ -839,6 +909,17 @@ export function WorksheetHintAuthorPage() {
           error.code === "network" ||
           (error.status !== null && error.status >= 500));
       if (isTransport || !(error instanceof ApiError)) {
+        setAuthorPhaseSync("SUBMIT_OUTCOME_UNCERTAIN");
+        pendingMutationReceiptRef.current = {
+          kind: "submit",
+          generation: loadGenerationRef.current,
+          session: sessionRef.current,
+          contentId,
+          sourceVersionId: versionForSubmit,
+          etag: etagForSubmit,
+          materialFingerprint: appendMaterialFingerprint,
+          idempotencyKey: submitKey,
+        };
         try {
           const [contentResponse, versionResponse, libraryResponse] =
             await Promise.all([
@@ -864,6 +945,8 @@ export function WorksheetHintAuthorPage() {
                 versionForSubmit,
               ));
           if (submitted) {
+            pendingMutationReceiptRef.current = null;
+            setAuthorPhaseSync("READY");
             setStatusMessage(
               "Submitted for independent review. Approval and publishing remain separate steps.",
             );
@@ -903,6 +986,12 @@ export function WorksheetHintAuthorPage() {
     }
   }
 
+  const showReconcileConfirm = authorPhase === "RECONCILIATION_REQUIRED";
+  const showAuthorityReload = authorPhase === "AUTHORITY_UNAVAILABLE";
+  const showUncertainReload =
+    authorPhase === "APPEND_OUTCOME_UNCERTAIN" ||
+    authorPhase === "SUBMIT_OUTCOME_UNCERTAIN";
+
   return (
     <article className="stack library-page">
       <header>
@@ -939,14 +1028,17 @@ export function WorksheetHintAuthorPage() {
       </div>
 
       {status === "ready" && sourcePayload ? (
-        <section className="panel stack library-detail">
+        <section
+          className="panel stack library-detail"
+          data-author-phase={authorPhase}
+        >
           <p className="muted">
             Authoring from current version{" "}
             <code>{currentVersionId}</code>. Answers and teacher notes stay
             private to this screen.
           </p>
 
-          {reconciliationRequired || sourceAuthorityBlocked ? (
+          {showReconcileConfirm ? (
             <div className="library-reconcile-banner" role="alert">
               <p>{RECONCILIATION_MESSAGE}</p>
               <button
@@ -955,6 +1047,27 @@ export function WorksheetHintAuthorPage() {
                 onClick={onConfirmReconciliation}
               >
                 I reviewed the updated questions
+              </button>
+            </div>
+          ) : null}
+
+          {showAuthorityReload || showUncertainReload ? (
+            <div className="library-reconcile-banner" role="alert">
+              <p>
+                {showAuthorityReload
+                  ? REVALIDATION_BLOCKED_MESSAGE
+                  : authorPhase === "APPEND_OUTCOME_UNCERTAIN"
+                    ? AMBIGUOUS_APPEND_MESSAGE
+                    : AMBIGUOUS_SUBMIT_MESSAGE}
+              </p>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                data-testid="reload-authoritative-worksheet"
+                disabled={busyAppend || busySubmitReview}
+                onClick={() => void reloadMetadataPreservingDrafts({ ...hintDrafts })}
+              >
+                Reload latest authoritative worksheet
               </button>
             </div>
           ) : null}
@@ -988,6 +1101,7 @@ export function WorksheetHintAuthorPage() {
             <select
               id="authoring-class-ref"
               value={classRef}
+              disabled={!hintsEditable}
               onChange={(event) => setClassRef(event.target.value)}
             >
               <option value="">Select a class…</option>
@@ -1014,6 +1128,7 @@ export function WorksheetHintAuthorPage() {
                     <textarea
                       id={`hint-${questionId}`}
                       rows={3}
+                      disabled={!hintsEditable}
                       value={hintDrafts[questionId] ?? ""}
                       onChange={(event) =>
                         onHintChange(questionId, event.target.value)
@@ -1046,7 +1161,12 @@ export function WorksheetHintAuthorPage() {
             <button
               type="button"
               className="btn"
-              disabled={busyAppend || !canPreview || !showPreview}
+              disabled={
+                busyAppend ||
+                authorPhase !== "READY" ||
+                !canPreview ||
+                !showPreview
+              }
               onClick={() => void onCreateHintVersion()}
             >
               Create hint-bearing version
@@ -1057,8 +1177,7 @@ export function WorksheetHintAuthorPage() {
               disabled={
                 busySubmitReview ||
                 !createdVersionId ||
-                reconciliationRequired ||
-                sourceAuthorityBlocked
+                authorPhase !== "READY"
               }
               onClick={() => void onSubmitForReview()}
             >
