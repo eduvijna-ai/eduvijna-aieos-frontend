@@ -7,6 +7,8 @@ from pathlib import Path
 
 _LEDGER_ROW = re.compile(r"^\| (S\d{2}) \|")
 
+DEFERRED_BY_ADR_SCENARIOS = frozenset({"S30", "S31"})
+
 
 def repo_ledger_doc(repo_root: Path) -> Path:
     return repo_root / "docs" / "PK-V1-HINT-E2E-I01-REAL-STACK-PROOF.md"
@@ -50,3 +52,10 @@ def parse_sp02a_ledger_doc(ledger_path: Path) -> tuple[list[dict[str, str]], dic
 
     rows.sort(key=lambda item: item["scenario_id"])
     return rows, tier_counts
+
+
+def assert_deferred_scenarios(rows: list[dict[str, str]]) -> None:
+    by_id = {row["scenario_id"]: row["evidence_tier"] for row in rows}
+    for scenario_id in DEFERRED_BY_ADR_SCENARIOS:
+        if by_id.get(scenario_id) != "DEFERRED_BY_ADR":
+            raise ValueError(f"NON_DEFERRED_SCENARIO:{scenario_id}")

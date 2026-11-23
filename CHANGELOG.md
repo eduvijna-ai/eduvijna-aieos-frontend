@@ -9,6 +9,12 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-E2E-I01R7: Strict E2E_PASS proof binding (mandatory pins, full
+  artifact JSON validation, S30/S31 deferred checks, CI run-id binding),
+  isolated verifier tests (no repo `tmp` mutation), governed webserver port
+  release before owned PG teardown, CI upload audit for green+red sanitized
+  evidence, and fail-closed missing-attempt detection after E2E step.
+
 - PK-V1-HINT-E2E-I01R6: Strict executed-evidence verifier contract (67-row
   SP02A ledger binding, artifact presence, governed pin SHA/OpenAPI/migration,
   no green on empty/forged proof), observed-only child `close` for PG teardown,

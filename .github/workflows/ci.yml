@@ -789,6 +789,8 @@ jobs:
           node scripts/pk-v1-hint-e2e/lifecycle.selftest.mjs
           node scripts/pk-v1-hint-e2e/managed_child_lifecycle.selftest.mjs
           node scripts/pk-v1-hint-e2e/managed_lifecycle_export_fail.selftest.mjs
+          python3 scripts/pk-v1-hint-e2e/audit_sanitized_artifacts_test.py
+          node scripts/pk-v1-hint-e2e/managed_webserver_lifecycle.selftest.mjs
 
       - name: PK-V1-HINT real-stack E2E
         run: pnpm test:e2e:pk-v1-hint
@@ -797,10 +799,16 @@ jobs:
         if: always()
         env:
           PK_V1_HINT_E2E_REQUIRE_EVIDENCE: "1"
+          PK_V1_HINT_E2E_E2E_STEP_INVOKED: "1"
         run: python3 scripts/pk-v1-hint-e2e/verify_sanitized_evidence.py --require-e2e-evidence
 
+      - name: Audit PK-V1-HINT sanitized evidence for upload
+        id: audit_pk_v1_hint_sanitized
+        if: always()
+        run: python3 scripts/pk-v1-hint-e2e/audit_sanitized_artifacts.py --upload-audit
+
       - name: Upload PK-V1-HINT sanitized evidence
-        if: failure()
+        if: always() && steps.audit_pk_v1_hint_sanitized.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: pk-v1-hint-e2e-sanitized-evidence

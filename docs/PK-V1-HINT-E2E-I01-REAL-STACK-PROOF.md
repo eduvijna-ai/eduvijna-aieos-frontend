@@ -32,6 +32,17 @@ pnpm test:e2e:pk-v1-hint
 - Backend pytest `postgres18` destructive fixtures run only on the isolated probe substrate (`bootstrap_probe_database.py`).
 - Governed Docker binds `127.0.0.1:hostPort:5432` only; owned lifecycle cleanup on partial bootstrap failure.
 
+## Pre-CI safety (I01R7)
+
+- `E2E_PASS` requires strict lifecycle proof (`child_exit===0`, export/teardown ok, no
+  unsafe `skip_container_teardown`) plus complete sanitized artifact JSON (not `{}` or
+  missing pins); S30/S31 must remain `DEFERRED_BY_ADR` in the committed ledger.
+- Governed webserver ports `8028/8029/5191/5192` must be released after Playwright
+  `close` before owned local PG removal (foreign listeners block teardown).
+- CI uploads sanitized bundles on green **and** red after `audit_sanitized_artifacts.py`;
+  upload safety is separate from `E2E_PASS`.
+- Verifier self-tests use `TemporaryDirectory` only; they never write/unlink repo `tmp/`.
+
 ## Pre-CI safety (I01R6)
 
 - Post-run verifier enforces evidence contract v1: 67-row committed SP02A ledger,

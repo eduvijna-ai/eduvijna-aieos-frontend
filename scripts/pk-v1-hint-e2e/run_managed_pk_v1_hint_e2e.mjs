@@ -13,6 +13,10 @@ import {
   allowOwnedDatabaseTeardown,
   waitForChildShutdown,
 } from "./managed_child_lifecycle.mjs";
+import {
+  allowDatabaseTeardownAfterWebservers,
+  verifyGovernedWebserversReleased,
+} from "./managed_webserver_lifecycle.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "../..");
@@ -50,6 +54,15 @@ let child = null;
 let shuttingDown = false;
 let skipContainerTeardown = false;
 
+function buildAttemptRunId() {
+  const runId = process.env.GITHUB_RUN_ID;
+  const runAttempt = process.env.GITHUB_RUN_ATTEMPT || "1";
+  if (runId) {
+    return `${runId}-${runAttempt}`;
+  }
+  return `local-${Date.now()}`;
+}
+
 function writeAttemptStatus(patch) {
   mkdirSync(join(repoRoot, "tmp"), { recursive: true });
   let prior = {};
@@ -67,10 +80,7 @@ function writeAttemptStatus(patch) {
   );
 }
 
-const attemptRunId =
-  process.env.GITHUB_RUN_ID ||
-  process.env.GITHUB_RUN_ATTEMPT ||
-  `local-${Date.now()}`;
+const attemptRunId = buildAttemptRunId();
 
 writeAttemptStatus({
   attempted: true,
@@ -88,11 +98,26 @@ function runTeardown() {
   return cleanupFullPkV1HintE2e({ ciExternal, skipContainerTeardown });
 }
 
-function shutdownAndExit(childExitCode) {
+async function gateWebserversBeforeTeardown(childState) {
+  if (!allowOwnedDatabaseTeardown(childState)) {
+    skipContainerTeardown = true;
+    return { released: false, skipped: true, reason: "CHILD_NOT_CLOSED" };
+  }
+  const webState = await verifyGovernedWebserversReleased();
+  if (!allowDatabaseTeardownAfterWebservers(webState)) {
+    skipContainerTeardown = true;
+    return { ...webState, skipped: false, reason: "PORTS_STILL_LISTENING" };
+  }
+  return { ...webState, skipped: false, reason: null };
+}
+
+async function shutdownAndExit(childExitCode, childState = { closed: true, timedOut: false }) {
   if (shuttingDown) {
     return;
   }
   shuttingDown = true;
+
+  const webGate = await gateWebserversBeforeTeardown(childState);
 
   const teardown = runTeardown();
   const exitCode = combineManagedExitCode(childExitCode, teardown.ok === true);
@@ -102,6 +127,8 @@ function shutdownAndExit(childExitCode) {
     lifecycle_teardown_ok: teardown.ok === true,
     lifecycle_code: teardown.code || null,
     skip_container_teardown: skipContainerTeardown,
+    webserver_release_ok: webGate.released === true,
+    webserver_occupied_ports: webGate.occupiedPorts || [],
     sanitized_export_ok:
       teardown.sanitized?.ok !== false && teardown.sanitized?.skipped !== true
         ? teardown.sanitized?.ok === true
@@ -115,6 +142,8 @@ function shutdownAndExit(childExitCode) {
     lifecycle_teardown_ok: teardown.ok === true,
     lifecycle_code: teardown.code || null,
     skip_container_teardown: skipContainerTeardown,
+    webserver_release_ok: webGate.released === true,
+    webserver_occupied_ports: webGate.occupiedPorts || [],
   };
   console.log(JSON.stringify(summary));
   process.exit(exitCode);
@@ -122,18 +151,12 @@ function shutdownAndExit(childExitCode) {
 
 process.on("SIGINT", async () => {
   const state = await waitForChildShutdown(child, "SIGINT");
-  if (!allowOwnedDatabaseTeardown(state)) {
-    skipContainerTeardown = true;
-  }
-  shutdownAndExit(state.exitCode ?? 130);
+  await shutdownAndExit(state.exitCode ?? 130, state);
 });
 
 process.on("SIGTERM", async () => {
   const state = await waitForChildShutdown(child, "SIGTERM");
-  if (!allowOwnedDatabaseTeardown(state)) {
-    skipContainerTeardown = true;
-  }
-  shutdownAndExit(state.exitCode ?? 143);
+  await shutdownAndExit(state.exitCode ?? 143, state);
 });
 
 child = spawn(
@@ -150,5 +173,12 @@ child = spawn(
   },
 );
 
-child.on("error", () => shutdownAndExit(1));
-child.on("close", (code) => shutdownAndExit(code ?? 1));
+child.on("error", async () => {
+  skipContainerTeardown = true;
+  const state = await waitForChildShutdown(child, "SIGTERM", 5_000);
+  await shutdownAndExit(1, state);
+});
+
+child.on("close", async (code) => {
+  await shutdownAndExit(code ?? 1, { closed: true, timedOut: false });
+});

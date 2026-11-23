@@ -12,10 +12,17 @@ from typing import Any
 
 from export_sanitize import (
     ALLOWED_EVIDENCE_TIERS,
+    ALLOWLIST_DB_REPORT,
+    ALLOWLIST_FIXTURE,
+    ALLOWLIST_SUMMARY,
     EVIDENCE_CONTRACT_VERSION,
     PACKAGE_SCENARIO_ID,
 )
-from sp02a_ledger import parse_sp02a_ledger_doc, repo_ledger_doc
+from sp02a_ledger import (
+    assert_deferred_scenarios,
+    parse_sp02a_ledger_doc,
+    repo_ledger_doc,
+)
 
 EXPECTED_BACKEND_PIN_SHA = "5bbc09bc895407b71a61f9ba86a7209ff9c10ffa"
 EXPECTED_OPENAPI_AUTHORITY_SHA = (
@@ -40,11 +47,6 @@ _REQUIRED_SUMMARY_KEYS = frozenset(
         "evidence_contract_version",
         "generated_at_ms",
         "attempt_run_id",
-    }
-)
-
-_OPTIONAL_SUMMARY_KEYS = frozenset(
-    {
         "github_sha",
         "backend_pin_sha",
         "openapi_authority_sha",
@@ -57,6 +59,31 @@ _SANITIZED_ARTIFACTS = {
     "db_report": "db-report-sanitized.json",
     "probe_db_report": "probe-db-report-sanitized.json",
 }
+
+_REQUIRED_FIXTURE_KEYS = frozenset(
+    {
+        "package_scenario_id",
+        "scenario_id",
+        "backend_pin_sha",
+        "migration_head",
+        "openapi_authority_sha",
+        "seed_ok",
+        "content_id",
+        "version_id",
+        "class_ref",
+    }
+)
+
+_REQUIRED_DB_KEYS = frozenset(
+    {
+        "package_scenario_id",
+        "role",
+        "postgres_major",
+        "migration_head",
+        "backend_pin_sha",
+        "bootstrap_ok",
+    }
+)
 
 
 def _repo_root() -> Path:
@@ -77,11 +104,24 @@ def _sanitized_dir() -> Path:
 
 
 def _attempt_status_path() -> Path:
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        override = os.environ.get("PK_V1_HINT_E2E_ATTEMPT_STATUS_PATH")
+        if override:
+            return Path(override)
+        return _repo_tmp() / "pk-v1-hint-e2e-attempt-status.json"
     if os.environ.get("PK_V1_HINT_E2E_VERIFIER_TEST_INJECT") == "1":
         override = os.environ.get("PK_V1_HINT_E2E_ATTEMPT_STATUS_PATH")
         if override:
             return Path(override)
     return _repo_tmp() / "pk-v1-hint-e2e-attempt-status.json"
+
+
+def _expected_attempt_run_id() -> str | None:
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT") or "1"
+    if not run_id:
+        return None
+    return f"{run_id}-{run_attempt}"
 
 
 def _scan_for_credential_leaks(out_dir: Path) -> list[str]:
@@ -104,6 +144,9 @@ def _load_summary(summary_path: Path) -> dict[str, Any]:
         raise ValueError(f"INCOMPLETE_EVIDENCE_SUMMARY:{sorted(missing)}")
     if summary.get("evidence_contract_version") != EVIDENCE_CONTRACT_VERSION:
         raise ValueError("UNSUPPORTED_EVIDENCE_CONTRACT_VERSION")
+    extra = set(summary) - ALLOWLIST_SUMMARY
+    if extra:
+        raise ValueError(f"UNALLOWED_SUMMARY_KEYS:{sorted(extra)}")
     return summary
 
 
@@ -122,15 +165,18 @@ def _validate_tier_counts(tier_counts: object, ledger_row_count: int) -> None:
 
 
 def _validate_ledger_against_doc(summary: dict[str, Any]) -> None:
-    _, doc_tiers = parse_sp02a_ledger_doc(repo_ledger_doc(_repo_root()))
+    rows, doc_tiers = parse_sp02a_ledger_doc(repo_ledger_doc(_repo_root()))
+    assert_deferred_scenarios(rows)
     summary_tiers = summary.get("tier_counts")
     if summary_tiers != doc_tiers:
         raise ValueError("LEDGER_TIER_COUNTS_MISMATCH_COMMITTED_DOC")
-    fabricated = int(summary_tiers.get("REAL_STACK_EXECUTED_PASS", 0)) + int(
+
+    runtime = int(summary_tiers.get("REAL_STACK_EXECUTED_PASS", 0)) + int(
         summary_tiers.get("CURRENT_BACKEND_PG_HTTP_PROOF", 0)
     )
-    if fabricated > 0:
-        raise ValueError("FABRICATED_RUNTIME_PASS_BEFORE_CI")
+    receipt = _repo_root() / "tmp" / "pk-v1-hint-e2e-runtime-receipts.json"
+    if runtime > 0 and not receipt.is_file():
+        raise ValueError("RUNTIME_PASS_REQUIRES_RECEIPT")
 
 
 def _artifact_presence(out_dir: Path, summary: dict[str, Any]) -> None:
@@ -149,55 +195,131 @@ def _artifact_presence(out_dir: Path, summary: dict[str, Any]) -> None:
 
 
 def _read_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"MALFORMED_ARTIFACT_JSON:{path.name}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"ARTIFACT_NOT_OBJECT:{path.name}")
+    if not payload:
+        raise ValueError(f"EMPTY_ARTIFACT:{path.name}")
+    return payload
+
+
+def _assert_allowlisted_only(payload: dict[str, Any], allowlist: frozenset[str], label: str) -> None:
+    extra = set(payload) - allowlist
+    if extra:
+        raise ValueError(f"UNALLOWED_{label}_KEYS:{sorted(extra)}")
+
+
+def _validate_executed_db_report(payload: dict[str, Any], *, role: str) -> None:
+    _assert_allowlisted_only(payload, ALLOWLIST_DB_REPORT, "DB_REPORT")
+    missing = _REQUIRED_DB_KEYS - set(payload)
+    if missing:
+        raise ValueError(f"INCOMPLETE_DB_REPORT:{sorted(missing)}")
+    if payload.get("package_scenario_id") != PACKAGE_SCENARIO_ID:
+        raise ValueError("WRONG_PACKAGE_IN_DB_REPORT")
+    if payload.get("role") != role:
+        raise ValueError(f"WRONG_DB_ROLE:{role}")
+    if payload.get("postgres_major") != 18:
+        raise ValueError("WRONG_POSTGRES_MAJOR")
+    if payload.get("bootstrap_ok") is not True:
+        raise ValueError("DB_BOOTSTRAP_NOT_OK")
+    if payload.get("backend_pin_sha") != EXPECTED_BACKEND_PIN_SHA:
+        raise ValueError("WRONG_BACKEND_PIN_IN_DB_REPORT")
+    if payload.get("migration_head") != EXPECTED_MIGRATION_HEAD:
+        raise ValueError("WRONG_MIGRATION_IN_DB_REPORT")
+
+
+def _validate_executed_fixture(payload: dict[str, Any]) -> None:
+    _assert_allowlisted_only(payload, ALLOWLIST_FIXTURE, "FIXTURE")
+    missing = _REQUIRED_FIXTURE_KEYS - set(payload)
+    if missing:
+        raise ValueError(f"INCOMPLETE_FIXTURE:{sorted(missing)}")
+    if payload.get("package_scenario_id") != PACKAGE_SCENARIO_ID:
+        raise ValueError("WRONG_PACKAGE_IN_FIXTURE")
+    if payload.get("seed_ok") is not True:
+        raise ValueError("FIXTURE_SEED_NOT_OK")
+    if payload.get("backend_pin_sha") != EXPECTED_BACKEND_PIN_SHA:
+        raise ValueError("WRONG_BACKEND_PIN_IN_FIXTURE")
+    if payload.get("migration_head") != EXPECTED_MIGRATION_HEAD:
+        raise ValueError("WRONG_MIGRATION_IN_FIXTURE")
+    if payload.get("openapi_authority_sha") != EXPECTED_OPENAPI_AUTHORITY_SHA:
+        raise ValueError("WRONG_OPENAPI_IN_FIXTURE")
+    for key in ("content_id", "version_id", "class_ref"):
+        value = payload.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"EMPTY_FIXTURE_BINDING:{key}")
 
 
 def _validate_source_pins(out_dir: Path, summary: dict[str, Any]) -> None:
-    if summary.get("backend_pin_sha") and summary["backend_pin_sha"] != EXPECTED_BACKEND_PIN_SHA:
+    if summary.get("backend_pin_sha") != EXPECTED_BACKEND_PIN_SHA:
         raise ValueError("WRONG_BACKEND_PIN_SHA")
-    if summary.get("migration_head") and summary["migration_head"] != EXPECTED_MIGRATION_HEAD:
+    if summary.get("migration_head") != EXPECTED_MIGRATION_HEAD:
         raise ValueError("WRONG_MIGRATION_HEAD")
-    if summary.get("openapi_authority_sha") and summary[
-        "openapi_authority_sha"
-    ] != EXPECTED_OPENAPI_AUTHORITY_SHA:
+    if summary.get("openapi_authority_sha") != EXPECTED_OPENAPI_AUTHORITY_SHA:
         raise ValueError("WRONG_OPENAPI_SHA")
+    if summary.get("package_scenario_id") != PACKAGE_SCENARIO_ID:
+        raise ValueError("WRONG_PACKAGE_SCENARIO_ID")
 
     db_path = out_dir / _SANITIZED_ARTIFACTS["db_report"]
     if db_path.is_file():
-        db = _read_json(db_path)
-        pin = db.get("backend_pin_sha")
-        if pin and pin != EXPECTED_BACKEND_PIN_SHA:
-            raise ValueError("WRONG_BACKEND_PIN_IN_DB_REPORT")
-        head = db.get("migration_head")
-        if head and head != EXPECTED_MIGRATION_HEAD:
-            raise ValueError("WRONG_MIGRATION_IN_DB_REPORT")
+        _validate_executed_db_report(_read_json(db_path), role="primary")
+
+    probe_path = out_dir / _SANITIZED_ARTIFACTS["probe_db_report"]
+    if probe_path.is_file():
+        _validate_executed_db_report(_read_json(probe_path), role="probe")
 
     fixture_path = out_dir / _SANITIZED_ARTIFACTS["fixture"]
     if fixture_path.is_file():
-        fixture = _read_json(fixture_path)
-        openapi = fixture.get("openapi_authority_sha")
-        if openapi and openapi != EXPECTED_OPENAPI_AUTHORITY_SHA:
-            raise ValueError("WRONG_OPENAPI_IN_FIXTURE")
-
-    if summary.get("package_scenario_id") != PACKAGE_SCENARIO_ID:
-        raise ValueError("WRONG_PACKAGE_SCENARIO_ID")
+        _validate_executed_fixture(_read_json(fixture_path))
 
 
 def _validate_attempt_binding(attempt: dict[str, Any], summary: dict[str, Any]) -> None:
     attempt_id = attempt.get("attempt_run_id")
     summary_id = summary.get("attempt_run_id")
-    if attempt_id and summary_id and attempt_id != summary_id:
+    if not isinstance(attempt_id, str) or not attempt_id.strip():
+        raise ValueError("MISSING_ATTEMPT_RUN_ID")
+    if not isinstance(summary_id, str) or not summary_id.strip():
+        raise ValueError("MISSING_SUMMARY_ATTEMPT_RUN_ID")
+    if attempt_id != summary_id:
         raise ValueError("STALE_ATTEMPT_RUN_ID_MISMATCH")
+
+    expected_ci = _expected_attempt_run_id()
+    if expected_ci is not None and attempt_id != expected_ci:
+        raise ValueError("STALE_GITHUB_RUN_ATTEMPT")
 
     started = attempt.get("started_at_ms")
     generated = summary.get("generated_at_ms")
-    if isinstance(started, int) and isinstance(generated, int) and generated < started:
+    if not isinstance(started, int) or started <= 0:
+        raise ValueError("MISSING_STARTED_AT_MS")
+    if not isinstance(generated, int) or generated <= 0:
+        raise ValueError("MISSING_GENERATED_AT_MS")
+    if generated < started:
         raise ValueError("STALE_EVIDENCE_GENERATED_BEFORE_ATTEMPT")
 
+    github_env = os.environ.get("GITHUB_SHA")
     github_attempt = attempt.get("github_sha")
     github_summary = summary.get("github_sha")
-    if github_attempt and github_summary and github_attempt != github_summary:
+    if not isinstance(github_summary, str) or not github_summary.strip():
+        raise ValueError("MISSING_GITHUB_SHA")
+    if not isinstance(github_attempt, str) or not github_attempt.strip():
+        raise ValueError("MISSING_ATTEMPT_GITHUB_SHA")
+    if github_attempt != github_summary:
         raise ValueError("GITHUB_SHA_MISMATCH")
+    if github_env and github_summary != github_env:
+        raise ValueError("GITHUB_SHA_ENV_MISMATCH")
+
+
+def _validate_lifecycle_success(attempt: dict[str, Any]) -> None:
+    if attempt.get("child_exit") != 0:
+        raise ValueError("CHILD_EXIT_NOT_ZERO")
+    if attempt.get("lifecycle_teardown_ok") is not True:
+        raise ValueError("LIFECYCLE_TEARDOWN_NOT_OK")
+    if attempt.get("sanitized_export_ok") is not True:
+        raise ValueError("SANITIZED_EXPORT_NOT_OK")
+    if attempt.get("skip_container_teardown") is True:
+        raise ValueError("UNSAFE_SKIP_CONTAINER_TEARDOWN")
 
 
 def evaluate_require_e2e_evidence(
@@ -215,15 +337,15 @@ def evaluate_require_e2e_evidence(
     try:
         summary = _load_summary(summary_path)
     except FileNotFoundError:
-        return False, "MISSING_EVIDENCE_SUMMARY", {"sanitized_verify_ok": False, "child_exit": child_exit}
+        return False, "MISSING_EVIDENCE_SUMMARY", {
+            "sanitized_verify_ok": False,
+            "child_exit": child_exit,
+        }
     except ValueError as exc:
         return False, str(exc), {"sanitized_verify_ok": False, "child_exit": child_exit}
 
     if summary.get("sanitized_evidence_ok") is not True:
         return False, "EVIDENCE_NOT_OK", {"sanitized_verify_ok": False, "child_exit": child_exit}
-
-    if attempt.get("sanitized_export_ok") is not True:
-        return False, "SANITIZED_EXPORT_NOT_OK", {"sanitized_verify_ok": False, "child_exit": child_exit}
 
     leaks = _scan_for_credential_leaks(out_dir)
     if leaks:
@@ -233,7 +355,12 @@ def evaluate_require_e2e_evidence(
             {"sanitized_verify_ok": False, "paths": leaks, "child_exit": child_exit},
         )
 
-    if child_exit not in (0, None):
+    if child_exit is None:
+        return False, "CHILD_EXIT_NOT_ZERO", {
+            "sanitized_verify_ok": False,
+            "child_exit": child_exit,
+        }
+    if child_exit != 0:
         return False, "E2E_FAILED", {
             "sanitized_verify_ok": False,
             "child_exit": child_exit,
@@ -247,6 +374,7 @@ def evaluate_require_e2e_evidence(
         _artifact_presence(out_dir, summary)
         _validate_attempt_binding(attempt, summary)
         _validate_source_pins(out_dir, summary)
+        _validate_lifecycle_success(attempt)
     except ValueError as exc:
         return False, str(exc), {
             "sanitized_verify_ok": False,
@@ -261,9 +389,6 @@ def evaluate_require_e2e_evidence(
                 "child_exit": child_exit,
                 "missing": flag,
             }
-
-    if attempt.get("lifecycle_teardown_ok") is False:
-        return False, "LIFECYCLE_TEARDOWN_FAILED", {"sanitized_verify_ok": False, "child_exit": child_exit}
 
     return True, "E2E_PASS", {
         "sanitized_verify_ok": True,
@@ -286,6 +411,7 @@ def run_preflight_schema() -> int:
         return 1
     try:
         rows, tiers = parse_sp02a_ledger_doc(ledger)
+        assert_deferred_scenarios(rows)
     except (ValueError, FileNotFoundError) as exc:
         print(json.dumps({"preflight_ok": False, "code": str(exc)}))
         return 1
@@ -306,7 +432,20 @@ def run_preflight_schema() -> int:
 
 def run_require_e2e_evidence() -> int:
     attempt_path = _attempt_status_path()
+    e2e_step_invoked = os.environ.get("PK_V1_HINT_E2E_E2E_STEP_INVOKED") == "1"
+
     if not attempt_path.is_file():
+        if e2e_step_invoked and os.environ.get("GITHUB_ACTIONS") == "true":
+            print(
+                json.dumps(
+                    {
+                        "sanitized_verify_ok": False,
+                        "code": "E2E_ATTEMPT_MISSING",
+                        "mode": "require_e2e_evidence",
+                    }
+                )
+            )
+            return 1
         print(
             json.dumps(
                 {
@@ -361,27 +500,8 @@ def main() -> int:
             return 0
         return 0 if ok else 1
 
-    summary_path = out_dir / "evidence-summary.json"
-    if not summary_path.is_file():
-        print(json.dumps({"sanitized_verify_ok": False, "code": "MISSING_EVIDENCE_SUMMARY"}))
-        return 1
-
-    summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    if summary.get("sanitized_evidence_ok") is not True:
-        print(json.dumps({"sanitized_verify_ok": False, "code": "EVIDENCE_NOT_OK"}))
-        return 1
-
-    print(
-        json.dumps(
-            {
-                "sanitized_verify_ok": True,
-                "ledger_row_count": summary.get("ledger_row_count"),
-                "has_fixture": summary.get("has_fixture"),
-                "has_db_report": summary.get("has_db_report"),
-            }
-        )
-    )
-    return 0
+    print(json.dumps({"sanitized_verify_ok": False, "code": "MISSING_ATTEMPT_STATUS"}))
+    return 1
 
 
 if __name__ == "__main__":
