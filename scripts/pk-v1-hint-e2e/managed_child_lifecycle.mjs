@@ -1,5 +1,6 @@
 /**
  * Pure + injectable child shutdown decisions for managed pk-v1-hint wrapper.
+ * PG teardown is allowed only after an observed ChildProcess `close` event.
  */
 
 export const CHILD_TERM_MS = 120_000;
@@ -16,7 +17,7 @@ export const CHILD_TERM_MS = 120_000;
  * Plan whether owned PG teardown is safe after a shutdown attempt.
  */
 export function allowOwnedDatabaseTeardown({ closed, timedOut }) {
-  if (timedOut === true && closed !== true) {
+  if (timedOut === true) {
     return false;
   }
   return closed === true;
@@ -30,7 +31,7 @@ export function timeoutShutdownExitCode(signal) {
 }
 
 /**
- * Wait for child `close`, sending `signal` once. Does not treat `killed` as exit proof.
+ * Wait for child `close`, sending `signal` once. Never treats `exitCode` alone as close.
  * @param {import("node:child_process").ChildProcess|null} child
  * @param {string} signal
  * @param {number} timeoutMs
@@ -45,18 +46,11 @@ export function waitForChildShutdown(child, signal, timeoutMs = CHILD_TERM_MS) {
       signalSent: false,
     });
   }
-  if (child.exitCode !== null) {
-    return Promise.resolve({
-      closed: true,
-      exitCode: child.exitCode,
-      timedOut: false,
-      signalSent: false,
-    });
-  }
 
   return new Promise((resolve) => {
     let settled = false;
     let signalSent = false;
+    let resolvedExit = null;
 
     const finish = (state) => {
       if (settled) {
@@ -67,22 +61,26 @@ export function waitForChildShutdown(child, signal, timeoutMs = CHILD_TERM_MS) {
       resolve(state);
     };
 
-    const onClose = (code) => {
+    child.once("close", (code) => {
+      resolvedExit = code ?? 1;
       finish({
         closed: true,
-        exitCode: code ?? 1,
+        exitCode: resolvedExit,
         timedOut: false,
         signalSent,
       });
-    };
+    });
 
-    child.once("close", onClose);
+    child.once("error", () => {
+      finish({
+        closed: false,
+        exitCode: 1,
+        timedOut: false,
+        signalSent,
+      });
+    });
 
     const timer = setTimeout(() => {
-      if (child.exitCode !== null) {
-        onClose(child.exitCode);
-        return;
-      }
       finish({
         closed: false,
         exitCode: timeoutShutdownExitCode(signal),
@@ -95,6 +93,7 @@ export function waitForChildShutdown(child, signal, timeoutMs = CHILD_TERM_MS) {
       child.kill(signal);
       signalSent = true;
     } catch {
+      clearTimeout(timer);
       finish({
         closed: false,
         exitCode: 1,

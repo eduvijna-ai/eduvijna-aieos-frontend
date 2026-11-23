@@ -9,13 +9,18 @@ import {
 
 assert.equal(allowOwnedDatabaseTeardown({ closed: true, timedOut: false }), true);
 assert.equal(allowOwnedDatabaseTeardown({ closed: false, timedOut: true }), false);
+assert.equal(allowOwnedDatabaseTeardown({ closed: true, timedOut: true }), false);
 
-function fakeChild({ closeAfterMs = 10, exitCode = 0, ignoreSignal = false } = {}) {
+function fakeChild({ closeAfterMs = 10, exitCode = 0, ignoreSignal = false, preExitCode = null } = {}) {
   const child = new EventEmitter();
-  child.exitCode = null;
+  child.exitCode = preExitCode;
   child.pid = 99999;
   child.kill = () => {
     if (ignoreSignal) {
+      return true;
+    }
+    if (preExitCode !== null && closeAfterMs < 0) {
+      child.exitCode = preExitCode;
       return true;
     }
     setTimeout(() => {
@@ -30,6 +35,7 @@ function fakeChild({ closeAfterMs = 10, exitCode = 0, ignoreSignal = false } = {
 const closed = await waitForChildShutdown(fakeChild(), "SIGTERM", 500);
 assert.equal(closed.closed, true);
 assert.equal(closed.exitCode, 0);
+assert.equal(allowOwnedDatabaseTeardown(closed), true);
 
 const stalled = await waitForChildShutdown(
   fakeChild({ ignoreSignal: true }),
@@ -40,5 +46,17 @@ assert.equal(stalled.timedOut, true);
 assert.equal(stalled.closed, false);
 assert.equal(stalled.exitCode, timeoutShutdownExitCode("SIGTERM"));
 assert.equal(allowOwnedDatabaseTeardown(stalled), false);
+
+const exitCodeWithoutClose = await waitForChildShutdown(
+  fakeChild({ preExitCode: 0, closeAfterMs: -1, ignoreSignal: true }),
+  "SIGTERM",
+  40,
+);
+assert.equal(exitCodeWithoutClose.closed, false);
+assert.equal(exitCodeWithoutClose.timedOut, true);
+assert.equal(allowOwnedDatabaseTeardown(exitCodeWithoutClose), false);
+
+const delayed = await waitForChildShutdown(fakeChild({ closeAfterMs: 20, exitCode: 0 }), "SIGTERM", 500);
+assert.equal(delayed.closed, true);
 
 console.log(JSON.stringify({ managed_child_lifecycle_selftest: "ok" }));

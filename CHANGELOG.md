@@ -9,6 +9,12 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-E2E-I01R6: Strict executed-evidence verifier contract (67-row
+  SP02A ledger binding, artifact presence, governed pin SHA/OpenAPI/migration,
+  no green on empty/forged proof), observed-only child `close` for PG teardown,
+  temp-root isolated verifier self-tests, and versioned sanitized summary
+  metadata (`attempt_run_id`, `generated_at_ms`).
+
 - PK-V1-HINT-E2E-I01R5: Fail-closed full teardown on sanitized export failure,
   strict CI post-test evidence verification (`--require-e2e-evidence`),
   child shutdown-before-PG-destruction lifecycle, governed CI-external

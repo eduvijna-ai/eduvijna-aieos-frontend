@@ -6,7 +6,8 @@ import json
 import os
 from pathlib import Path
 
-from export_sanitize import write_sanitized_json
+from export_sanitize import EVIDENCE_CONTRACT_VERSION, write_sanitized_json
+from sp02a_ledger import parse_sp02a_ledger_doc, repo_ledger_doc
 
 
 def main() -> int:
@@ -31,11 +32,9 @@ def main() -> int:
     )
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    scenario_rows: list[dict[str, object]] = []
-    tier_counts: dict[str, int] = {}
-
-    def bump(tier: str) -> None:
-        tier_counts[tier] = tier_counts.get(tier, 0) + 1
+    scenario_rows, tier_counts = parse_sp02a_ledger_doc(
+        repo_ledger_doc(Path(__file__).resolve().parents[2])
+    )
 
     probe_path = Path(
         os.environ.get(
@@ -63,21 +62,29 @@ def main() -> int:
             fixture,
         )
 
-    ledger_path = Path(__file__).resolve().parents[2] / "docs" / "PK-V1-HINT-E2E-I01-REAL-STACK-PROOF.md"
-    if ledger_path.is_file():
-        for line in ledger_path.read_text(encoding="utf-8").splitlines():
-            if not (line.startswith("| S") and len(line) > 4 and line[3].isdigit()):
-                continue
-            parts = [part.strip() for part in line.strip("|").split("|")]
-            if len(parts) < 3:
-                continue
-            scenario_rows.append(
-                {
-                    "scenario_id": parts[0],
-                    "evidence_tier": parts[2],
-                }
-            )
-            bump(parts[2])
+    backend_pin_sha = None
+    migration_head = None
+    openapi_authority_sha = None
+    if db_path.is_file():
+        db_raw = json.loads(db_path.read_text(encoding="utf-8"))
+        backend_pin_sha = db_raw.get("backend_pin_sha")
+        migration_head = db_raw.get("migration_head")
+    if fixture_path.is_file():
+        fixture_raw = json.loads(fixture_path.read_text(encoding="utf-8"))
+        openapi_authority_sha = fixture_raw.get("openapi_authority_sha")
+        backend_pin_sha = backend_pin_sha or fixture_raw.get("backend_pin_sha")
+        migration_head = migration_head or fixture_raw.get("migration_head")
+
+    attempt_status_path = repo_tmp / "pk-v1-hint-e2e-attempt-status.json"
+    attempt_run_id = None
+    github_sha = os.environ.get("GITHUB_SHA")
+    if attempt_status_path.is_file():
+        try:
+            attempt = json.loads(attempt_status_path.read_text(encoding="utf-8"))
+            attempt_run_id = attempt.get("attempt_run_id")
+            github_sha = github_sha or attempt.get("github_sha")
+        except json.JSONDecodeError:
+            attempt_run_id = None
 
     summary = {
         "package_scenario_id": "pk-v1-hint-e2e-learner-hint-vertical",
@@ -87,6 +94,13 @@ def main() -> int:
         "has_fixture": fixture_path.is_file(),
         "has_db_report": db_path.is_file(),
         "has_probe_db_report": probe_path.is_file(),
+        "evidence_contract_version": EVIDENCE_CONTRACT_VERSION,
+        "generated_at_ms": int(__import__("time").time() * 1000),
+        "attempt_run_id": attempt_run_id,
+        "github_sha": github_sha,
+        "backend_pin_sha": backend_pin_sha,
+        "openapi_authority_sha": openapi_authority_sha,
+        "migration_head": migration_head,
     }
     write_sanitized_json(str(out_dir / "evidence-summary.json"), summary)
     print(json.dumps(summary))

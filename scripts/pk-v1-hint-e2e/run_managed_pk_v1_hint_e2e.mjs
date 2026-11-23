@@ -67,8 +67,15 @@ function writeAttemptStatus(patch) {
   );
 }
 
+const attemptRunId =
+  process.env.GITHUB_RUN_ID ||
+  process.env.GITHUB_RUN_ATTEMPT ||
+  `local-${Date.now()}`;
+
 writeAttemptStatus({
   attempted: true,
+  attempt_run_id: String(attemptRunId),
+  github_sha: process.env.GITHUB_SHA || null,
   started_at_ms: Date.now(),
   finished: false,
 });

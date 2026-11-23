@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 PACKAGE_SCENARIO_ID = "pk-v1-hint-e2e-learner-hint-vertical"
+EVIDENCE_CONTRACT_VERSION = 1
 
 ALLOWED_EVIDENCE_TIERS = frozenset(
     {
@@ -71,6 +72,13 @@ ALLOWLIST_SUMMARY = frozenset(
         "has_fixture",
         "has_db_report",
         "has_probe_db_report",
+        "evidence_contract_version",
+        "generated_at_ms",
+        "attempt_run_id",
+        "github_sha",
+        "backend_pin_sha",
+        "openapi_authority_sha",
+        "migration_head",
     }
 )
 

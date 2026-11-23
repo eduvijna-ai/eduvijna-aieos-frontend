@@ -32,6 +32,14 @@ pnpm test:e2e:pk-v1-hint
 - Backend pytest `postgres18` destructive fixtures run only on the isolated probe substrate (`bootstrap_probe_database.py`).
 - Governed Docker binds `127.0.0.1:hostPort:5432` only; owned lifecycle cleanup on partial bootstrap failure.
 
+## Pre-CI safety (I01R6)
+
+- Post-run verifier enforces evidence contract v1: 67-row committed SP02A ledger,
+  artifact files must match `has_*` flags, governed Backend/OpenAPI/migration pins,
+  and `attempt_run_id` binding; no green on empty or forged proof.
+- Child PG teardown requires an observed Playwright child `close` (not `exitCode` alone).
+- Verifier self-tests use injected temp paths only; they do not mutate live `tmp/` receipts.
+
 ## Pre-CI safety (I01R5)
 
 - Sanitized export failure no longer skips owned-container removal or raw credential
