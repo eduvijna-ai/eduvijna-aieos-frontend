@@ -9,6 +9,8 @@ import {
   ownedRoleCleanupSucceeded,
   rawArtifactMayBeDeleted,
   ownershipFileNamesForRole,
+  combineFullTeardownOk,
+  primaryTeardownFailureCode,
 } from "./lifecycle_logic.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -97,7 +99,10 @@ export function cleanupPartialProbeStart() {
   return cleanupOwnedRole("probe");
 }
 
-export function cleanupRawTmpArtifacts({ preserveOwnership = false } = {}) {
+export function cleanupRawTmpArtifacts({
+  preserveOwnership = false,
+  tmpRoot = tmpDir,
+} = {}) {
   const preservedNames = new Set();
   if (preserveOwnership) {
     for (const name of ownershipFileNamesForRole("primary")) {
@@ -109,10 +114,10 @@ export function cleanupRawTmpArtifacts({ preserveOwnership = false } = {}) {
   }
 
   const outcomes = [];
-  if (!existsSync(tmpDir)) {
+  if (!existsSync(tmpRoot)) {
     return { ok: true, removed: [], skipped: true };
   }
-  for (const name of readdirSync(tmpDir)) {
+  for (const name of readdirSync(tmpRoot)) {
     if (!name.startsWith(RAW_TMP_PREFIX)) {
       continue;
     }
@@ -130,7 +135,7 @@ export function cleanupRawTmpArtifacts({ preserveOwnership = false } = {}) {
         continue;
       }
     }
-    const path = join(tmpDir, name);
+    const path = join(tmpRoot, name);
     try {
       unlinkSync(path);
       outcomes.push(name);
@@ -141,20 +146,25 @@ export function cleanupRawTmpArtifacts({ preserveOwnership = false } = {}) {
   return { ok: true, removed: outcomes };
 }
 
-export function cleanupFullPkV1HintE2e({ ciExternal = false, skipSanitizedExport = false } = {}) {
+export function cleanupFullPkV1HintE2e({
+  ciExternal = false,
+  skipSanitizedExport = false,
+  skipContainerTeardown = false,
+  exportFn = exportSanitizedEvidence,
+  cleanupRoleFn = cleanupOwnedRole,
+  rawCleanupFn = cleanupRawTmpArtifacts,
+} = {}) {
   let sanitized = { ok: true, skipped: true };
   if (!skipSanitizedExport) {
-    sanitized = exportSanitizedEvidence();
-    if (!sanitized.ok) {
-      return { ok: false, code: sanitized.code, sanitized, containerResults: [], raw: null };
-    }
+    sanitized = exportFn();
   }
 
   const containerResults = [];
-  if (!ciExternal) {
-    containerResults.push(cleanupOwnedRole("primary"));
-    containerResults.push(cleanupOwnedRole("probe"));
-  } else {
+  const skippedContainers = ciExternal || skipContainerTeardown;
+  if (!skippedContainers) {
+    containerResults.push(cleanupRoleFn("primary"));
+    containerResults.push(cleanupRoleFn("probe"));
+  } else if (ciExternal) {
     containerResults.push({
       ok: true,
       role: "primary",
@@ -165,17 +175,45 @@ export function cleanupFullPkV1HintE2e({ ciExternal = false, skipSanitizedExport
       role: "probe",
       containerOutcome: { removed: false, skipped: true, reason: "CI_EXTERNAL_PG" },
     });
+  } else {
+    containerResults.push({
+      ok: true,
+      role: "primary",
+      containerOutcome: {
+        removed: false,
+        skipped: true,
+        reason: "UNCERTAIN_CHILD_PROCESSES",
+      },
+    });
+    containerResults.push({
+      ok: true,
+      role: "probe",
+      containerOutcome: {
+        removed: false,
+        skipped: true,
+        reason: "UNCERTAIN_CHILD_PROCESSES",
+      },
+    });
   }
 
-  const preserveOwnership = !rawArtifactMayBeDeleted({ containerResults, ciExternal });
-  const raw = cleanupRawTmpArtifacts({ preserveOwnership });
+  const preserveOwnership =
+    skipContainerTeardown ||
+    !rawArtifactMayBeDeleted({ containerResults, ciExternal });
+  const raw = rawCleanupFn({ preserveOwnership });
 
-  const containerDenied = containerResults.find((r) => r.ok === false);
-  if (containerDenied) {
-    return { ok: false, code: containerDenied.code, sanitized, containerResults, raw };
-  }
-  if (!raw.ok) {
-    return { ok: false, code: raw.code, sanitized, containerResults, raw };
-  }
-  return { ok: true, sanitized, containerResults, raw };
+  const ok = combineFullTeardownOk({
+    sanitized,
+    containerResults,
+    raw,
+  });
+  const code = ok ? null : primaryTeardownFailureCode({ sanitized, containerResults, raw });
+  return {
+    ok,
+    code,
+    sanitized,
+    containerResults,
+    raw,
+    skipContainerTeardown,
+    ownershipPreserved: preserveOwnership,
+  };
 }

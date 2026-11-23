@@ -111,6 +111,24 @@ class ProbeDsnGuardTest(unittest.TestCase):
         self.assertNotIn("PK_V1_HINT_E2E_RUNTIME_DATABASE_URL", scrubbed)
         self.assertEqual(scrubbed["PATH"], "/usr/bin")
 
+    def test_does_not_forward_unlisted_secret_env(self) -> None:
+        probe = {
+            "bootstrap": "postgresql+psycopg://aieos_bootstrap:aieos_test@127.0.0.1:5432/aieos_hint_probe",
+            "migrator": "postgresql+psycopg://aieos_migrator:aieos_test@127.0.0.1:5432/aieos_hint_probe",
+            "runtime": "postgresql+psycopg://aieos_runtime:aieos_test@127.0.0.1:5432/aieos_hint_probe",
+        }
+        inherited = {
+            "PATH": "/usr/bin",
+            "AWS_SECRET_ACCESS_KEY": "fake-secret",
+            "GITHUB_TOKEN": "fake-token",
+            "RANDOM_PROVIDER_KEY": "should-not-forward",
+        }
+        scrubbed = self.mod.build_safe_probe_subprocess_env(inherited, probe, self.journey)
+        self.assertEqual(scrubbed["PATH"], "/usr/bin")
+        self.assertNotIn("AWS_SECRET_ACCESS_KEY", scrubbed)
+        self.assertNotIn("GITHUB_TOKEN", scrubbed)
+        self.assertNotIn("RANDOM_PROVIDER_KEY", scrubbed)
+
     def test_scrub_pytest_env_uses_probe_only(self) -> None:
         probe = {
             "bootstrap": "postgresql+psycopg://aieos_bootstrap:aieos_test@127.0.0.1:5432/aieos_hint_probe",

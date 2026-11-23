@@ -32,6 +32,17 @@ pnpm test:e2e:pk-v1-hint
 - Backend pytest `postgres18` destructive fixtures run only on the isolated probe substrate (`bootstrap_probe_database.py`).
 - Governed Docker binds `127.0.0.1:hostPort:5432` only; owned lifecycle cleanup on partial bootstrap failure.
 
+## Pre-CI safety (I01R5)
+
+- Sanitized export failure no longer skips owned-container removal or raw credential
+  file scrub; teardown reports distinct export/cleanup/raw failure codes.
+- CI post-test verification uses `--require-e2e-evidence` (not child-only `PK_V1_HINT_E2E_RAN`).
+- Managed wrapper writes `tmp/pk-v1-hint-e2e-attempt-status.json` and skips local PG
+  teardown when the Playwright child does not close before timeout.
+- CI-external mode requires `PK_V1_HINT_E2E_CI_EXTERNAL_PG=1` plus governed loopback DSNs
+  (`ci_external_guard.py`); arbitrary inherited DSNs do not enable external skip.
+- Probe pytest subprocess env uses a positive allowlist (no provider token passthrough).
+
 ## Pre-CI safety (I01R4)
 
 - Backend pytest subprocess env is built by `build_safe_probe_subprocess_env`

@@ -9,6 +9,12 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-E2E-I01R5: Fail-closed full teardown on sanitized export failure,
+  strict CI post-test evidence verification (`--require-e2e-evidence`),
+  child shutdown-before-PG-destruction lifecycle, governed CI-external
+  classification, positive probe subprocess env allowlist, and injected
+  export-fail / verifier / child-timeout self-tests.
+
 - PK-V1-HINT-E2E-I01R4: Full probe pytest subprocess env scrub (no inherited
   journey DSNs), loopback alias normalization in physical target guard,
   fail-closed owned-container teardown with ownership-record preservation,

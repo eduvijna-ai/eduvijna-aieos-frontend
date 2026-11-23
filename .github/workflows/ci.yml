@@ -782,16 +782,22 @@ jobs:
           python3 scripts/pk-v1-hint-e2e/probe_dsn_guard_test.py
           python3 scripts/pk-v1-hint-e2e/export_sanitize_test.py
           python3 scripts/pk-v1-hint-e2e/emit_sanitized_evidence_test.py
-          python3 scripts/pk-v1-hint-e2e/verify_sanitized_evidence.py
+          python3 scripts/pk-v1-hint-e2e/verify_sanitized_evidence_test.py
+          python3 scripts/pk-v1-hint-e2e/verify_sanitized_evidence.py --preflight-schema
+          python3 scripts/pk-v1-hint-e2e/ci_external_guard_test.py
           node scripts/pk-v1-hint-e2e/docker_ownership.selftest.mjs
           node scripts/pk-v1-hint-e2e/lifecycle.selftest.mjs
+          node scripts/pk-v1-hint-e2e/managed_child_lifecycle.selftest.mjs
+          node scripts/pk-v1-hint-e2e/managed_lifecycle_export_fail.selftest.mjs
 
       - name: PK-V1-HINT real-stack E2E
         run: pnpm test:e2e:pk-v1-hint
 
       - name: Verify PK-V1-HINT sanitized evidence
         if: always()
-        run: python3 scripts/pk-v1-hint-e2e/verify_sanitized_evidence.py
+        env:
+          PK_V1_HINT_E2E_REQUIRE_EVIDENCE: "1"
+        run: python3 scripts/pk-v1-hint-e2e/verify_sanitized_evidence.py --require-e2e-evidence
 
       - name: Upload PK-V1-HINT sanitized evidence
         if: failure()

@@ -6,6 +6,13 @@ import {
   combineManagedExitCode,
   rawArtifactMayBeDeleted,
 } from "./lifecycle_logic.mjs";
+import { mkdtempSync, writeFileSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  combineFullTeardownOk,
+  primaryTeardownFailureCode,
+} from "./lifecycle_logic.mjs";
 import { cleanupRawTmpArtifacts } from "./managed_lifecycle.mjs";
 
 assert.equal(shouldDeleteOwnershipRecord({ removed: true }), true);
@@ -31,7 +38,34 @@ assert.equal(
 );
 assert.equal(rawArtifactMayBeDeleted({ containerResults: [], ciExternal: true }), true);
 
-const raw = cleanupRawTmpArtifacts({ preserveOwnership: true });
-assert.equal(raw.ok, true);
+assert.equal(
+  combineFullTeardownOk({
+    sanitized: { ok: false, code: "SANITIZED_EXPORT_FAILED" },
+    containerResults: [{ ok: true }],
+    raw: { ok: true },
+  }),
+  false,
+);
+assert.equal(
+  primaryTeardownFailureCode({
+    sanitized: { ok: false, code: "SANITIZED_EXPORT_FAILED" },
+    containerResults: [],
+    raw: { ok: true },
+  }),
+  "SANITIZED_EXPORT_FAILED",
+);
 
-console.log(JSON.stringify({ lifecycle_selftest: "ok" }));
+const isolatedTmp = mkdtempSync(join(tmpdir(), "pk-v1-hint-raw-artifact-"));
+writeFileSync(
+  join(isolatedTmp, "pk-v1-hint-e2e-env.json"),
+  JSON.stringify({ marker: true }),
+  "utf8",
+);
+const raw = cleanupRawTmpArtifacts({
+  preserveOwnership: true,
+  tmpRoot: isolatedTmp,
+});
+assert.equal(raw.ok, true);
+assert.equal(existsSync(join(isolatedTmp, "pk-v1-hint-e2e-env.json")), false);
+
+console.log(JSON.stringify({ lifecycle_selftest: "ok", tmp_root: isolatedTmp }));

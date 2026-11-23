@@ -148,20 +148,12 @@ def build_safe_probe_subprocess_env(
     probe_urls: dict[str, str],
     journey_urls: dict[str, str],
 ) -> dict[str, str]:
-    """Return a full subprocess env with zero inherited journey database routes."""
+    """Return a probe-only subprocess env (positive allowlist + probe DSNs only)."""
     assert_probe_urls_isolated_from_journey(journey_urls=journey_urls, probe_urls=probe_urls)
 
     out: dict[str, str] = {}
-    for key, value in inherited.items():
-        if _is_database_routing_env_key(key):
-            continue
-        if key.startswith("AIEOS_TEST_") and "DATABASE" in key:
-            continue
-        out[key] = value
-
-    # Always keep governed non-DB essentials when present in inherited.
     for key in _SAFE_NON_DB_ENV_KEYS:
-        if key in inherited and key not in out:
+        if key in inherited:
             out[key] = inherited[key]
 
     probe_env = {

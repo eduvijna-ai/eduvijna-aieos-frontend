@@ -56,3 +56,35 @@ export function ownershipFileNamesForRole(role) {
     ? ["pk-v1-hint-e2e-probe-docker-ownership.json"]
     : ["pk-v1-hint-e2e-docker-ownership.json"];
 }
+
+/**
+ * Fail-closed: export failure still requires container/raw stages to have run;
+ * any stage failure yields teardown not-ok.
+ */
+export function combineFullTeardownOk({ sanitized, containerResults, raw }) {
+  const containerDenied = (containerResults || []).some((r) => r.ok === false);
+  if (containerDenied) {
+    return false;
+  }
+  if (raw && raw.ok === false) {
+    return false;
+  }
+  if (sanitized && sanitized.skipped !== true && sanitized.ok === false) {
+    return false;
+  }
+  return true;
+}
+
+export function primaryTeardownFailureCode({ sanitized, containerResults, raw }) {
+  if (sanitized && sanitized.skipped !== true && sanitized.ok === false) {
+    return sanitized.code || "EXPORT_FAILED";
+  }
+  const containerDenied = (containerResults || []).find((r) => r.ok === false);
+  if (containerDenied) {
+    return containerDenied.code || "CLEANUP_FAILED";
+  }
+  if (raw && raw.ok === false) {
+    return raw.code || "RAW_CREDENTIAL_ERASE_FAILED";
+  }
+  return null;
+}
