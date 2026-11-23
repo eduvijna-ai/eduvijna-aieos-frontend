@@ -32,6 +32,17 @@ pnpm test:e2e:pk-v1-hint
 - Backend pytest `postgres18` destructive fixtures run only on the isolated probe substrate (`bootstrap_probe_database.py`).
 - Governed Docker binds `127.0.0.1:hostPort:5432` only; owned lifecycle cleanup on partial bootstrap failure.
 
+## Pre-CI safety (I01R4)
+
+- Backend pytest subprocess env is built by `build_safe_probe_subprocess_env`
+  (strips every inherited `*DATABASE_URL*` route; re-injects probe-only URLs).
+- `localhost` and `127.0.0.1` canonicalize to the same physical DB target.
+- Teardown exports `tmp/pk-v1-hint-e2e-sanitized/` before deleting raw reports;
+  CI verifies existing sanitized output (no post-teardown regeneration).
+- Owned Docker containers are removed only after live ID/label verification;
+  inspection or removal failure preserves non-secret ownership records.
+- Managed wrapper exits non-zero when teardown fails even if Playwright passed.
+
 ## Pre-CI safety (I01R3)
 
 - CI probe database `aieos_hint_probe` is created via existing journey admin DSN

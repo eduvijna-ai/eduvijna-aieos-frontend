@@ -781,15 +781,17 @@ jobs:
           python3 scripts/pk-v1-hint-e2e/ci_probe_creation_plan_test.py
           python3 scripts/pk-v1-hint-e2e/probe_dsn_guard_test.py
           python3 scripts/pk-v1-hint-e2e/export_sanitize_test.py
+          python3 scripts/pk-v1-hint-e2e/emit_sanitized_evidence_test.py
+          python3 scripts/pk-v1-hint-e2e/verify_sanitized_evidence.py
           node scripts/pk-v1-hint-e2e/docker_ownership.selftest.mjs
           node scripts/pk-v1-hint-e2e/lifecycle.selftest.mjs
 
       - name: PK-V1-HINT real-stack E2E
         run: pnpm test:e2e:pk-v1-hint
 
-      - name: Export PK-V1-HINT sanitized evidence
+      - name: Verify PK-V1-HINT sanitized evidence
         if: always()
-        run: python3 scripts/pk-v1-hint-e2e/emit_sanitized_evidence.py
+        run: python3 scripts/pk-v1-hint-e2e/verify_sanitized_evidence.py
 
       - name: Upload PK-V1-HINT sanitized evidence
         if: failure()

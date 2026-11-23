@@ -8,14 +8,98 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
+# Keys that route subprocesses to a database — every inherited copy is removed.
+_DATABASE_ROUTING_ENV_PREFIXES = ("DATABASE",)
+_DATABASE_ROUTING_ENV_KEYS = frozenset(
+    {
+        "DATABASE_URL",
+        "AIEOS_DATABASE_URL",
+        "AIEOS_TEST_DATABASE_URL",
+        "AIEOS_TEST_BOOTSTRAP_DATABASE_URL",
+        "AIEOS_TEST_RUNTIME_DATABASE_URL",
+        "AIEOS_TEST_MIGRATION_RUNTIME_DATABASE_URL",
+        "AIEOS_TEST_WORKFLOW_DISPATCHER_DATABASE_URL",
+        "AIEOS_TEST_EVENT_DISPATCHER_DATABASE_URL",
+        "PK_V1_HINT_E2E_RUNTIME_DATABASE_URL",
+        "PK_V1_HINT_E2E_PROBE_BOOTSTRAP_DATABASE_URL",
+        "PK_V1_HINT_E2E_PROBE_DATABASE_URL",
+        "PK_V1_HINT_E2E_PROBE_RUNTIME_DATABASE_URL",
+    }
+)
+
+_SAFE_NON_DB_ENV_KEYS = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "USER",
+        "LANG",
+        "LC_ALL",
+        "TZ",
+        "CI",
+        "GITHUB_WORKSPACE",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "VIRTUAL_ENV",
+        "UV_CACHE_DIR",
+        "AIEOS_BACKEND_ROOT",
+        "AIEOS_BACKEND_PIN_SHA",
+        "PK_V1_HINT_E2E_CI_EXTERNAL_PG",
+        "PK_V1_HINT_E2E_PROBE_CI_EXTERNAL_PG",
+        "PK_V1_HINT_E2E_DB_REPORT",
+        "PK_V1_HINT_E2E_PROBE_DB_REPORT",
+        "PK_V1_HINT_E2E_FIXTURE_PATH",
+        "PK_V1_HINT_E2E_SANITIZED_DIR",
+        "PK_V1_HINT_E2E_MANAGED_WRAPPER",
+        "PK_V1_HINT_E2E_TEACHER_BACKEND_PORT",
+        "PK_V1_HINT_E2E_STUDENT_BACKEND_PORT",
+        "PK_V1_HINT_E2E_TEACHER_FRONTEND_PORT",
+        "PK_V1_HINT_E2E_STUDENT_FRONTEND_PORT",
+    }
+)
+
+_PROBE_ONLY_DB_KEYS = (
+    "AIEOS_DATABASE_URL",
+    "AIEOS_TEST_DATABASE_URL",
+    "AIEOS_TEST_RUNTIME_DATABASE_URL",
+    "AIEOS_TEST_BOOTSTRAP_DATABASE_URL",
+)
+
+
+def _canonical_loopback_host(host: str) -> str:
+    lowered = (host or "").lower()
+    if lowered == "localhost":
+        return "127.0.0.1"
+    return lowered
+
+
+def _canonical_database_name(name: str) -> str:
+    return name.lower()
+
 
 def _physical_target(url: str) -> tuple[str, int, str]:
-    """Canonical DB identity = host + port + database (role-independent)."""
+    """Canonical DB identity = loopback host + port + database (role-independent)."""
     from dsn_contract import parse_db_url, reject_connection_routing_overrides
 
     reject_connection_routing_overrides(url, label="probe DSN")
     parsed = parse_db_url(url)
-    return (parsed.host, parsed.port, parsed.database)
+    return (
+        _canonical_loopback_host(parsed.host),
+        parsed.port,
+        _canonical_database_name(parsed.database),
+    )
+
+
+def _is_database_routing_env_key(key: str) -> bool:
+    if key in _DATABASE_ROUTING_ENV_KEYS:
+        return True
+    if "DATABASE_URL" in key:
+        return True
+    if key.startswith("AIEOS_") and any(part in key for part in _DATABASE_ROUTING_ENV_PREFIXES):
+        if "URL" in key or "DSN" in key:
+            return True
+    if key.startswith("PK_V1_HINT_E2E_") and ("DATABASE" in key or "DSN" in key):
+        return True
+    return False
 
 
 def assert_probe_urls_isolated_from_journey(
@@ -59,15 +143,62 @@ def load_probe_urls_from_report(report_path: Path) -> dict[str, str]:
     }
 
 
+def build_safe_probe_subprocess_env(
+    inherited: dict[str, str],
+    probe_urls: dict[str, str],
+    journey_urls: dict[str, str],
+) -> dict[str, str]:
+    """Return a full subprocess env with zero inherited journey database routes."""
+    assert_probe_urls_isolated_from_journey(journey_urls=journey_urls, probe_urls=probe_urls)
+
+    out: dict[str, str] = {}
+    for key, value in inherited.items():
+        if _is_database_routing_env_key(key):
+            continue
+        if key.startswith("AIEOS_TEST_") and "DATABASE" in key:
+            continue
+        out[key] = value
+
+    # Always keep governed non-DB essentials when present in inherited.
+    for key in _SAFE_NON_DB_ENV_KEYS:
+        if key in inherited and key not in out:
+            out[key] = inherited[key]
+
+    probe_env = {
+        "AIEOS_DATABASE_URL": probe_urls["migrator"],
+        "AIEOS_TEST_DATABASE_URL": probe_urls["migrator"],
+        "AIEOS_TEST_RUNTIME_DATABASE_URL": probe_urls["runtime"],
+        "AIEOS_TEST_BOOTSTRAP_DATABASE_URL": probe_urls["bootstrap"],
+    }
+    out.update(probe_env)
+
+    journey_targets = {_physical_target(url) for url in journey_urls.values() if url}
+    for key, url in probe_env.items():
+        if _physical_target(url) in journey_targets:
+            raise ValueError(
+                f"PROBE_SUBPROCESS_ENV_FORBIDDEN: {key} would target journey database"
+            )
+
+    for key, value in out.items():
+        if not _is_database_routing_env_key(key):
+            continue
+        if key in probe_env:
+            continue
+        raise ValueError(f"PROBE_SUBPROCESS_ENV_LEAK: unexpected database route {key}")
+
+    return out
+
+
 def assert_env_before_backend_pytest(
     *,
     journey_report_path: Path,
     probe_report_path: Path,
+    inherited: dict[str, str] | None = None,
 ) -> dict[str, str]:
     journey = load_journey_urls_from_report(journey_report_path)
     probe = load_probe_urls_from_report(probe_report_path)
-    assert_probe_urls_isolated_from_journey(journey_urls=journey, probe_urls=probe)
-    return scrub_probe_pytest_environ(probe, dict(os.environ))
+    source = dict(os.environ) if inherited is None else inherited
+    return build_safe_probe_subprocess_env(source, probe, journey)
 
 
 def assert_forbidden_identical_dsn_pair(active_url: str, probe_url: str) -> None:
@@ -90,26 +221,22 @@ def scrub_probe_pytest_environ(
     probe_urls: dict[str, str],
     inherited: dict[str, str],
 ) -> dict[str, str]:
-    """Probe-only DSNs for Backend pytest; scrub journey-routing inherited vars."""
-    out = {
-        "AIEOS_DATABASE_URL": probe_urls["migrator"],
-        "AIEOS_TEST_DATABASE_URL": probe_urls["migrator"],
-        "AIEOS_TEST_RUNTIME_DATABASE_URL": probe_urls["runtime"],
-        "AIEOS_TEST_BOOTSTRAP_DATABASE_URL": probe_urls["bootstrap"],
+    """Backward-compatible entry: builds full scrubbed subprocess env."""
+    journey_placeholder = {
+        "bootstrap": inherited.get(
+            "AIEOS_TEST_BOOTSTRAP_DATABASE_URL",
+            "postgresql+psycopg://aieos_bootstrap:aieos_test@127.0.0.1:5432/aieos",
+        ),
+        "migrator": inherited.get(
+            "AIEOS_TEST_DATABASE_URL",
+            "postgresql+psycopg://aieos_migrator:aieos_test@127.0.0.1:5432/aieos",
+        ),
+        "runtime": inherited.get(
+            "AIEOS_TEST_RUNTIME_DATABASE_URL",
+            "postgresql+psycopg://aieos_runtime:aieos_test@127.0.0.1:5432/aieos",
+        ),
     }
-    journey_keys = (
-        "AIEOS_TEST_DATABASE_URL",
-        "AIEOS_TEST_RUNTIME_DATABASE_URL",
-        "AIEOS_TEST_BOOTSTRAP_DATABASE_URL",
-        "AIEOS_DATABASE_URL",
-        "DATABASE_URL",
-    )
-    for key in inherited:
-        if key in journey_keys and key not in out:
-            continue
-        if key.startswith("AIEOS_") and "DATABASE" in key and key not in out:
-            continue
-    return out
+    return build_safe_probe_subprocess_env(inherited, probe_urls, journey_placeholder)
 
 
 _SECRET_IN_ERROR = re.compile(

@@ -8,7 +8,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from probe_dsn_guard import assert_env_before_backend_pytest
+from probe_dsn_guard import (
+    assert_env_before_backend_pytest,
+    build_safe_probe_subprocess_env,
+    load_journey_urls_from_report,
+    load_probe_urls_from_report,
+)
 
 LOCK_SCENARIOS = (
     (
@@ -66,13 +71,14 @@ def main() -> int:
         )
     )
     probe_report = _bootstrap_probe()
-    probe_env = assert_env_before_backend_pytest(
+    journey = load_journey_urls_from_report(journey_report)
+    probe = load_probe_urls_from_report(probe_report)
+    env = build_safe_probe_subprocess_env(dict(os.environ), probe, journey)
+    assert_env_before_backend_pytest(
         journey_report_path=journey_report,
         probe_report_path=probe_report,
+        inherited=env,
     )
-
-    env = os.environ.copy()
-    env.update(probe_env)
 
     suites = [
         "tests/domains/learning/test_aieos_v1_hint_b.py",

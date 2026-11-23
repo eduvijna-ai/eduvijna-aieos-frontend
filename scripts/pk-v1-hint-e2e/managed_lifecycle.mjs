@@ -2,7 +2,14 @@ import { unlinkSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
+import { spawnSync } from "node:child_process";
 import { removeOwnedContainer, ownershipFilePath, defaultContainerNameForRole } from "./docker_ownership.mjs";
+import {
+  shouldDeleteOwnershipRecord,
+  ownedRoleCleanupSucceeded,
+  rawArtifactMayBeDeleted,
+  ownershipFileNamesForRole,
+} from "./lifecycle_logic.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "../..");
@@ -20,32 +27,65 @@ const RAW_TMP_EXACT = new Set([
   "pk-v1-hint-e2e-probe-db-sanitized.json",
 ]);
 
+export function exportSanitizedEvidence() {
+  const proc = spawnSync(
+    "python3",
+    [join(__dirname, "emit_sanitized_evidence.py")],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: process.env,
+    },
+  );
+  if (proc.status !== 0) {
+    return { ok: false, code: "SANITIZED_EXPORT_FAILED" };
+  }
+  return { ok: true };
+}
+
 export function cleanupOwnedRole(role, { removeContainer = true } = {}) {
   const containerName = defaultContainerNameForRole(role);
   let containerOutcome = { removed: false, skipped: true };
   if (removeContainer) {
     containerOutcome = removeOwnedContainer(containerName, role);
-    if (
-      !containerOutcome.removed &&
-      !containerOutcome.missing &&
-      !containerOutcome.inspection_error
-    ) {
+    if (!ownedRoleCleanupSucceeded(containerOutcome)) {
       return {
         ok: false,
         role,
         code: containerOutcome.code || "OWNED_CONTAINER_CLEANUP_DENIED",
         containerOutcome,
+        ownershipPreserved: true,
       };
     }
   }
+
   const ownershipPath = ownershipFilePath(role);
-  if (existsSync(ownershipPath)) {
+  if (existsSync(ownershipPath) && shouldDeleteOwnershipRecord(containerOutcome)) {
     try {
       unlinkSync(ownershipPath);
     } catch {
-      return { ok: false, role, code: "OWNERSHIP_FILE_CLEANUP_FAILED", containerOutcome };
+      return {
+        ok: false,
+        role,
+        code: "OWNERSHIP_FILE_CLEANUP_FAILED",
+        containerOutcome,
+        ownershipPreserved: true,
+      };
     }
+  } else if (
+    existsSync(ownershipPath) &&
+    removeContainer &&
+    !shouldDeleteOwnershipRecord(containerOutcome)
+  ) {
+    return {
+      ok: false,
+      role,
+      code: containerOutcome.code || "OWNED_CONTAINER_CLEANUP_DENIED",
+      containerOutcome,
+      ownershipPreserved: true,
+    };
   }
+
   return { ok: true, role, containerOutcome };
 }
 
@@ -57,7 +97,17 @@ export function cleanupPartialProbeStart() {
   return cleanupOwnedRole("probe");
 }
 
-export function cleanupRawTmpArtifacts() {
+export function cleanupRawTmpArtifacts({ preserveOwnership = false } = {}) {
+  const preservedNames = new Set();
+  if (preserveOwnership) {
+    for (const name of ownershipFileNamesForRole("primary")) {
+      preservedNames.add(name);
+    }
+    for (const name of ownershipFileNamesForRole("probe")) {
+      preservedNames.add(name);
+    }
+  }
+
   const outcomes = [];
   if (!existsSync(tmpDir)) {
     return { ok: true, removed: [], skipped: true };
@@ -67,6 +117,9 @@ export function cleanupRawTmpArtifacts() {
       continue;
     }
     if (name.startsWith(`${RAW_TMP_PREFIX}-sanitized`)) {
+      continue;
+    }
+    if (preservedNames.has(name)) {
       continue;
     }
     if (!RAW_TMP_EXACT.has(name) && !name.endsWith("-sanitized.json")) {
@@ -88,7 +141,15 @@ export function cleanupRawTmpArtifacts() {
   return { ok: true, removed: outcomes };
 }
 
-export function cleanupFullPkV1HintE2e({ ciExternal = false } = {}) {
+export function cleanupFullPkV1HintE2e({ ciExternal = false, skipSanitizedExport = false } = {}) {
+  let sanitized = { ok: true, skipped: true };
+  if (!skipSanitizedExport) {
+    sanitized = exportSanitizedEvidence();
+    if (!sanitized.ok) {
+      return { ok: false, code: sanitized.code, sanitized, containerResults: [], raw: null };
+    }
+  }
+
   const containerResults = [];
   if (!ciExternal) {
     containerResults.push(cleanupOwnedRole("primary"));
@@ -105,13 +166,16 @@ export function cleanupFullPkV1HintE2e({ ciExternal = false } = {}) {
       containerOutcome: { removed: false, skipped: true, reason: "CI_EXTERNAL_PG" },
     });
   }
-  const raw = cleanupRawTmpArtifacts();
+
+  const preserveOwnership = !rawArtifactMayBeDeleted({ containerResults, ciExternal });
+  const raw = cleanupRawTmpArtifacts({ preserveOwnership });
+
   const containerDenied = containerResults.find((r) => r.ok === false);
   if (containerDenied) {
-    return { ok: false, code: containerDenied.code, containerResults, raw };
+    return { ok: false, code: containerDenied.code, sanitized, containerResults, raw };
   }
   if (!raw.ok) {
-    return { ok: false, code: raw.code, containerResults, raw };
+    return { ok: false, code: raw.code, sanitized, containerResults, raw };
   }
-  return { ok: true, containerResults, raw };
+  return { ok: true, sanitized, containerResults, raw };
 }

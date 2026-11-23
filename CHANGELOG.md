@@ -9,6 +9,12 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-E2E-I01R4: Full probe pytest subprocess env scrub (no inherited
+  journey DSNs), loopback alias normalization in physical target guard,
+  fail-closed owned-container teardown with ownership-record preservation,
+  sanitized evidence export before raw tmp deletion, managed-wrapper lifecycle
+  exit 124 on teardown failure, and injected lifecycle/sanitize self-tests.
+
 - PK-V1-HINT-E2E-I01R3: CI probe DB creation via journey admin `aieos`
   connection (not absent `aieos_hint_probe`), physical host/port/db DSN guard
   (role-independent), managed Playwright lifecycle teardown, stricter loopback
