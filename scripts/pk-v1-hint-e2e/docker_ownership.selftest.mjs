@@ -46,6 +46,22 @@ function testLoopbackBinding() {
     "55439",
   );
   assert.equal(wide.ok, false);
+  const dual = verifyLoopbackPortBinding(
+    [
+      {
+        HostConfig: {
+          PortBindings: {
+            "5432/tcp": [
+              { HostIp: "127.0.0.1", HostPort: "55439" },
+              { HostIp: "0.0.0.0", HostPort: "55439" },
+            ],
+          },
+        },
+      },
+    ],
+    "55439",
+  );
+  assert.equal(dual.ok, false);
 }
 
 function testForeignMutationRefused() {
@@ -79,6 +95,22 @@ function testStaleOwnerRecordRefused() {
   });
   assert.equal(permission.ok, false);
   assert.equal(permission.code, "CONTAINER_ID_MISMATCH");
+}
+
+function testMissingOwnerRunIdRefused() {
+  const inspect = classifyDockerInspectResult({
+    status: 0,
+    stdout: JSON.stringify(payloadForPort("55440")),
+    stderr: "",
+  });
+  const permission = evaluateDestructionPermission({
+    inspect,
+    record: { containerId: "abc123container", hostPort: "55440" },
+    expectedHostPort: "55440",
+    inspectPayload: payloadForPort("55440"),
+  });
+  assert.equal(permission.ok, false);
+  assert.equal(permission.code, "MISSING_OWNER_RUN_ID");
 }
 
 function testOwnedDestructionPermitted() {
@@ -122,6 +154,7 @@ function testPrimaryProbePortIsolation() {
 testLoopbackBinding();
 testForeignMutationRefused();
 testStaleOwnerRecordRefused();
+testMissingOwnerRunIdRefused();
 testOwnedDestructionPermitted();
 testNamedExistingRefusesStart();
 testPrimaryProbePortIsolation();

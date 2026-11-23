@@ -778,9 +778,11 @@ jobs:
       - name: PK-V1-HINT static DSN and sanitize guards
         run: |
           python3 scripts/pk-v1-hint-e2e/dsn_contract_test.py
+          python3 scripts/pk-v1-hint-e2e/ci_probe_creation_plan_test.py
           python3 scripts/pk-v1-hint-e2e/probe_dsn_guard_test.py
           python3 scripts/pk-v1-hint-e2e/export_sanitize_test.py
           node scripts/pk-v1-hint-e2e/docker_ownership.selftest.mjs
+          node scripts/pk-v1-hint-e2e/lifecycle.selftest.mjs
 
       - name: PK-V1-HINT real-stack E2E
         run: pnpm test:e2e:pk-v1-hint

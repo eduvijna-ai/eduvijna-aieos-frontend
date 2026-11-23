@@ -32,6 +32,16 @@ pnpm test:e2e:pk-v1-hint
 - Backend pytest `postgres18` destructive fixtures run only on the isolated probe substrate (`bootstrap_probe_database.py`).
 - Governed Docker binds `127.0.0.1:hostPort:5432` only; owned lifecycle cleanup on partial bootstrap failure.
 
+## Pre-CI safety (I01R3)
+
+- CI probe database `aieos_hint_probe` is created via existing journey admin DSN
+  (`AIEOS_TEST_BOOTSTRAP_DATABASE_URL` → `aieos`) only; probe role URLs target
+  `aieos_hint_probe` after creation.
+- Journey vs probe isolation compares physical target `(host, port, database)` only.
+- `test:e2e:pk-v1-hint` runs through `run_managed_pk_v1_hint_e2e.mjs` with global
+  teardown of owned primary+probe containers and raw tmp artifacts (CI service PG preserved).
+- `tier_counts` export keys are limited to enumerated SP02A evidence tiers.
+
 ## SP02A S01–S67 ledger (sum = 67)
 
 | Scenario | Policy (summary) | Evidence tier | Test / probe path | Run / SHA |

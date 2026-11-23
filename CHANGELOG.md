@@ -9,6 +9,12 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-E2E-I01R3: CI probe DB creation via journey admin `aieos`
+  connection (not absent `aieos_hint_probe`), physical host/port/db DSN guard
+  (role-independent), managed Playwright lifecycle teardown, stricter loopback
+  Docker destruction policy, enumerated SP02A tier export keys, and static
+  creation-order self-tests.
+
 - PK-V1-HINT-E2E-I01R2: Probe/journey DB isolation for Backend pytest,
   loopback-only Docker ownership policy, allowlisted CI exporters,
   credential-safe harness errors, and expanded static safety self-tests.

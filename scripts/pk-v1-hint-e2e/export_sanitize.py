@@ -9,6 +9,17 @@ from typing import Any
 
 PACKAGE_SCENARIO_ID = "pk-v1-hint-e2e-learner-hint-vertical"
 
+ALLOWED_EVIDENCE_TIERS = frozenset(
+    {
+        "REAL_STACK_EXECUTED_PASS",
+        "CURRENT_BACKEND_PG_HTTP_PROOF",
+        "FRONTEND_MOCK_ONLY",
+        "NOT_TESTED",
+        "DEFERRED_BY_ADR",
+        "BLOCKED",
+    }
+)
+
 ALLOWLIST_DB_REPORT = frozenset(
     {
         "package_scenario_id",
@@ -136,7 +147,13 @@ def build_summary_export(summary: dict[str, Any]) -> dict[str, Any]:
         for key, value in tier_counts.items():
             if not isinstance(key, str) or not isinstance(value, int):
                 raise ValueError("tier_counts entries must be string keys and int values")
+            if key not in ALLOWED_EVIDENCE_TIERS:
+                raise ValueError(f"tier_counts key not allowlisted: {key}")
+            if value < 0:
+                raise ValueError("tier_counts values must be non-negative integers")
             sanitized_counts[key] = value
+        if SECRET_MARKERS.search(json.dumps(tier_counts)):
+            raise ValueError("tier_counts must not contain secret markers")
         base["tier_counts"] = sanitized_counts
     return base
 

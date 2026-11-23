@@ -67,6 +67,24 @@ class ExportSanitizeTest(unittest.TestCase):
                 }
             )
 
+    def test_unknown_tier_key_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self.mod.build_summary_export(
+                {
+                    "sanitized_evidence_ok": True,
+                    "tier_counts": {"SECRET_BEARER_TIER": 1},
+                }
+            )
+
+    def test_allowlisted_tier_counts_accepted(self) -> None:
+        exported = self.mod.build_summary_export(
+            {
+                "sanitized_evidence_ok": True,
+                "tier_counts": {"NOT_TESTED": 65, "DEFERRED_BY_ADR": 2},
+            }
+        )
+        self.assertEqual(exported["tier_counts"]["NOT_TESTED"], 65)
+
 
 if __name__ == "__main__":
     raise SystemExit(unittest.main())

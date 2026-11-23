@@ -32,6 +32,7 @@ export default defineConfig({
     ],
   ],
   globalSetup: "./scripts/pk-v1-hint-e2e/global-setup.mjs",
+  globalTeardown: "./scripts/pk-v1-hint-e2e/global-teardown.mjs",
   use: {
     baseURL: TEACHER_FRONTEND_URL,
     trace: "off",

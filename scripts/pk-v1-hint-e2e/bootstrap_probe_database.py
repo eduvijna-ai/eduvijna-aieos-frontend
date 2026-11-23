@@ -9,8 +9,13 @@ import sys
 import time
 from pathlib import Path
 
+from ci_probe_creation_plan import (
+    CiProbeCreationError,
+    build_ci_probe_creation_plan,
+)
 from dsn_contract import (
     GOVERNED_PROBE_CI_DB_NAME,
+    validate_external_ci_database_targets,
     validate_local_probe_database_targets,
     validate_probe_ci_database_targets,
 )
@@ -94,30 +99,44 @@ def _restrict_permissions(path: Path) -> None:
         pass
 
 
-def _ensure_ci_probe_database(bootstrap_url: str) -> None:
+def _ensure_ci_probe_database(env: dict[str, str]) -> None:
+    """CREATE probe DB via existing journey admin connection only."""
+    validate_external_ci_database_targets(env)
+    plan = build_ci_probe_creation_plan(env)
+
     backend = _backend_root()
     sys.path.insert(0, str(backend))
     from sqlalchemy import text
     from tests.conftest import wait_for_engine
 
-    engine = wait_for_engine(bootstrap_url)
-    with engine.connect() as conn:
-        conn.execution_options(isolation_level="AUTOCOMMIT")
+    admin_engine = wait_for_engine(plan.admin_bootstrap_url)
+    with admin_engine.connect().execution_options(
+        isolation_level="AUTOCOMMIT"
+    ) as conn:
+        version = conn.execute(text("SHOW server_version")).scalar_one()
+        if not str(version).startswith("18."):
+            raise RuntimeError("PostgreSQL 18 required for probe CI admin")
         exists = conn.execute(
             text("SELECT 1 FROM pg_database WHERE datname = :name"),
             {"name": GOVERNED_PROBE_CI_DB_NAME},
         ).scalar()
-        if not exists:
-            conn.execute(text(f'CREATE DATABASE "{GOVERNED_PROBE_CI_DB_NAME}"'))
+        if exists:
+            raise CiProbeCreationError(
+                "unexpected pre-existing probe database; refusing adoption"
+            )
+        conn.execute(text(f'CREATE DATABASE "{GOVERNED_PROBE_CI_DB_NAME}"'))
 
 
 def main() -> int:
-    if os.environ.get("PK_V1_HINT_E2E_PROBE_DATABASE_URL"):
-        validate_probe_ci_database_targets(os.environ)
+    env = dict(os.environ)
+    external_probe = env.get("PK_V1_HINT_E2E_PROBE_DATABASE_URL")
+    if external_probe:
+        validate_probe_ci_database_targets(env)
     else:
-        validate_local_probe_database_targets(os.environ)
+        validate_local_probe_database_targets(env)
 
     started_container = False
+    ownership_written = False
     report_path = Path(
         os.environ.get(
             "PK_V1_HINT_E2E_PROBE_DB_REPORT",
@@ -126,19 +145,20 @@ def main() -> int:
     )
     sanitized_path = report_path.parent / "pk-v1-hint-e2e-probe-db-sanitized.json"
     try:
-        external = os.environ.get("PK_V1_HINT_E2E_PROBE_DATABASE_URL")
-        if external:
-            b_url = os.environ["PK_V1_HINT_E2E_PROBE_BOOTSTRAP_DATABASE_URL"]
-            m_url = external
-            r_url = os.environ.get(
-                "PK_V1_HINT_E2E_PROBE_RUNTIME_DATABASE_URL", external
-            )
+        if external_probe:
+            b_url = env["PK_V1_HINT_E2E_PROBE_BOOTSTRAP_DATABASE_URL"]
+            m_url = external_probe
+            r_url = env.get("PK_V1_HINT_E2E_PROBE_RUNTIME_DATABASE_URL", external_probe)
             port = "5432"
-            _ensure_ci_probe_database(b_url)
+            _ensure_ci_probe_database(env)
         else:
-            port = os.environ.get("PK_V1_HINT_E2E_PROBE_PG_PORT", DEFAULT_PROBE_PORT)
+            port = env.get("PK_V1_HINT_E2E_PROBE_PG_PORT", DEFAULT_PROBE_PORT)
             port = _start_owned_probe_postgres(port)
             started_container = True
+            ownership_path_early = (
+                _script_dir().parents[1] / "tmp" / "pk-v1-hint-e2e-probe-docker-ownership.json"
+            )
+            ownership_written = ownership_path_early.is_file()
             backend = _backend_root()
             sys.path.insert(0, str(backend))
             from tests.conftest import bootstrap_url, migrator_url, runtime_url
@@ -207,7 +227,7 @@ def main() -> int:
         print(json.dumps(public_bootstrap_summary(report) | {"role": "probe"}))
         return 0
     except Exception:
-        if started_container:
+        if started_container or ownership_written or not external_probe:
             _cleanup_probe_start()
         print(json.dumps({"probe_bootstrap_ok": False}))
         return 1

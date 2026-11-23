@@ -6,8 +6,11 @@ export const PK_V1_HINT_PACKAGE = "pk-v1-hint-e2e";
 export function verifyLoopbackPortBinding(inspectPayload, expectedHostPort) {
   const bindings =
     inspectPayload?.[0]?.HostConfig?.PortBindings?.["5432/tcp"] ?? [];
-  if (!Array.isArray(bindings) || bindings.length === 0) {
-    return { ok: false, error: "missing 5432/tcp port binding" };
+  if (!Array.isArray(bindings) || bindings.length !== 1) {
+    return {
+      ok: false,
+      error: "exactly one 5432/tcp loopback binding required",
+    };
   }
   const hostIp = bindings[0]?.HostIp;
   const hostPort = bindings[0]?.HostPort;
@@ -51,10 +54,13 @@ export function evaluateDestructionPermission({
   if (!record?.containerId) {
     return { ok: false, code: "MISSING_OWNERSHIP_RECORD" };
   }
+  if (!record.ownerRunId || String(record.ownerRunId).trim() === "") {
+    return { ok: false, code: "MISSING_OWNER_RUN_ID" };
+  }
   if (record.containerId !== inspect.containerId) {
     return { ok: false, code: "CONTAINER_ID_MISMATCH" };
   }
-  if (record.ownerRunId && inspect.ownerLabel !== record.ownerRunId) {
+  if (inspect.ownerLabel !== record.ownerRunId) {
     return { ok: false, code: "OWNER_LABEL_MISMATCH" };
   }
   if (inspect.packageLabel !== PK_V1_HINT_PACKAGE) {
