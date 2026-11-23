@@ -9,6 +9,11 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-E2E-I01R1: Security-sanitized real-stack hint harness — owned PG18
+  lifecycle (no `start_postgres` destroy), DSN allowlist + sanitize exporters,
+  q-open Phase F binding, S57 Assessment→Improve phases, lock probe mapping
+  S22/S51–S53, 67-row SP02A ledger, CI sanitized-artifacts only.
+
 - PK-V1-HINT-E2E-I01: Additive real-stack Playwright lane
   `test:e2e:pk-v1-hint`, disposable PostgreSQL 18 harness under
   `scripts/pk-v1-hint-e2e/`, three-human teacher bearer composition, and

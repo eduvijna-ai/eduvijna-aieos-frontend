@@ -34,7 +34,9 @@ export default defineConfig({
   globalSetup: "./scripts/pk-v1-hint-e2e/global-setup.mjs",
   use: {
     baseURL: TEACHER_FRONTEND_URL,
-    trace: "on-first-retry",
+    trace: "off",
+    screenshot: "off",
+    video: "off",
   },
   webServer: [
     {

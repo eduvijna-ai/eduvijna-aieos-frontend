@@ -364,9 +364,21 @@ def main() -> int:
         "shared_database": True,
         "seeded_at": datetime.now(UTC).isoformat(),
     }
+    from export_sanitize import public_seed_summary, write_sanitized_json
+
     fixture_path.parent.mkdir(parents=True, exist_ok=True)
     fixture_path.write_text(json.dumps(fixture, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(fixture, indent=2))
+    try:
+        fixture_path.chmod(0o600)
+    except OSError:
+        pass
+    sanitized_path = fixture_path.parent / "pk-v1-hint-e2e-fixture-sanitized.json"
+    write_sanitized_json(str(sanitized_path), fixture)
+    try:
+        sanitized_path.chmod(0o600)
+    except OSError:
+        pass
+    print(json.dumps(public_seed_summary(fixture)))
 
     bootstrap_engine.dispose()
     runtime_engine.dispose()

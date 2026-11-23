@@ -41,7 +41,15 @@ export type PkV1HintFixture = {
   content_id: string;
   version_id: string;
   worksheet_title: string;
+  q_correct_id: string;
+  q_incorrect_id: string;
+  q_unanswered_id: string;
   q_open_id: string;
+  obj_demonstrated_id: string;
+  obj_not_yet_id: string;
+  obj_insufficient_id: string;
+  evaluation_policy_id: string;
+  evaluation_policy_version: number;
   shared_database?: boolean;
 };
 
@@ -151,7 +159,65 @@ export function assertNoApiMocksInstalled(page: Page) {
   }
 }
 
-export function runBackendHintProbes(): { passed: number; failed: number } {
+export function calendarDateOnlyLocal(daysFromToday: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromToday);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function runPersistenceAssert(
+  mode: string,
+  args: Record<string, string | number | undefined>,
+): Record<string, unknown> {
+  const scriptDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../scripts/pk-v1-hint-e2e");
+  const scriptPath = join(scriptDir, "assert_persistence.py");
+  const backendRoot = process.env.AIEOS_BACKEND_ROOT;
+  if (!backendRoot) {
+    throw new Error("AIEOS_BACKEND_ROOT required for persistence assert");
+  }
+  const dbReportPath = resolve(process.cwd(), "tmp/pk-v1-hint-e2e-db.json");
+  const cliArgs = [scriptPath, "--mode", mode];
+  for (const [key, value] of Object.entries(args)) {
+    if (value === undefined || value === null) continue;
+    cliArgs.push(`--${key}`, String(value));
+  }
+  const { VIRTUAL_ENV: _dropVirtualEnv, ...baseEnv } = process.env;
+  void _dropVirtualEnv;
+  const result = spawnSync(
+    process.env.PK_V1_HINT_E2E_UV || "uv",
+    ["run", "python", ...cliArgs],
+    {
+      cwd: backendRoot,
+      env: {
+        ...baseEnv,
+        AIEOS_BACKEND_ROOT: backendRoot,
+        PK_V1_HINT_E2E_DB_REPORT: dbReportPath,
+        PYTHONPATH: [
+          join(backendRoot, "src"),
+          backendRoot,
+          scriptDir,
+        ].join(process.platform === "win32" ? ";" : ":"),
+      },
+      encoding: "utf8",
+      shell: process.platform === "win32",
+    },
+  );
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || `assert_persistence ${mode} failed`);
+  }
+  const lines = (result.stdout || "").trim().split(/\r?\n/);
+  const last = lines[lines.length - 1];
+  return JSON.parse(last) as Record<string, unknown>;
+}
+
+export function runBackendHintProbes(): {
+  passed: number;
+  failed: number;
+  lock_scenarios?: Array<{ scenario_id: string; ok: boolean }>;
+} {
   const backendRoot = process.env.AIEOS_BACKEND_ROOT;
   if (!backendRoot) {
     throw new Error("AIEOS_BACKEND_ROOT required for backend probes");

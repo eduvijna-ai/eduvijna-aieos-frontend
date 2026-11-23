@@ -683,6 +683,7 @@ jobs:
     permissions:
       contents: read
     env:
+      PK_V1_HINT_E2E_CI_EXTERNAL_PG: "1"
       AIEOS_BACKEND_ROOT: ${{ github.workspace }}/backend
       AIEOS_BACKEND_PIN_SHA: 5bbc09bc895407b71a61f9ba86a7209ff9c10ffa
       AIEOS_TEST_BOOTSTRAP_DATABASE_URL: postgresql+psycopg://aieos_bootstrap:aieos_test@127.0.0.1:5432/aieos
@@ -770,19 +771,25 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: PK-V1-HINT static DSN and sanitize guards
+        run: |
+          python3 scripts/pk-v1-hint-e2e/dsn_contract_test.py
+          python3 scripts/pk-v1-hint-e2e/export_sanitize_test.py
+          node scripts/pk-v1-hint-e2e/docker_ownership.selftest.mjs
+
       - name: PK-V1-HINT real-stack E2E
         run: pnpm test:e2e:pk-v1-hint
 
-      - name: Upload PK-V1-HINT Playwright report
+      - name: Export PK-V1-HINT sanitized evidence
+        if: always()
+        run: python3 scripts/pk-v1-hint-e2e/emit_sanitized_evidence.py
+
+      - name: Upload PK-V1-HINT sanitized evidence
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-pk-v1-hint-e2e-report
-          path: |
-            playwright-pk-v1-hint-e2e-report/
-            test-results/
-            tmp/pk-v1-hint-e2e-fixture.json
-            tmp/pk-v1-hint-e2e-db.json
+          name: pk-v1-hint-e2e-sanitized-evidence
+          path: tmp/pk-v1-hint-e2e-sanitized/
           retention-days: 7
 
   aieos360-cx01-i01r9-showcase:
