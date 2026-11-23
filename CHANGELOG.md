@@ -9,6 +9,12 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-E2E-I01: Additive real-stack Playwright lane
+  `test:e2e:pk-v1-hint`, disposable PostgreSQL 18 harness under
+  `scripts/pk-v1-hint-e2e/`, three-human teacher bearer composition, and
+  isolated CI job `pk-v1-hint-e2e` at Backend pin
+  `5bbc09bc895407b71a61f9ba86a7209ff9c10ffa`.
+
 - PK-V1-HINT-T0-F-I01: Teacher Library worksheet learner-hint authoring
   (`WorksheetHintAuthorPage`) and Review structured attestation
   (`WorksheetHintReviewPanel`); consumer OpenAPI pin Backend
