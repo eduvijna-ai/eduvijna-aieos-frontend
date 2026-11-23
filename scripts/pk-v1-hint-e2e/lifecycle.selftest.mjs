@@ -47,6 +47,36 @@ assert.equal(
   false,
 );
 assert.equal(
+  combineFullTeardownOk({
+    sanitized: { ok: true },
+    containerResults: [{ ok: true, containerOutcome: { skipped: true } }],
+    raw: { ok: true },
+    skipContainerTeardown: true,
+    ciExternal: false,
+  }),
+  false,
+);
+assert.equal(
+  primaryTeardownFailureCode({
+    sanitized: { ok: true },
+    containerResults: [],
+    raw: { ok: true },
+    skipContainerTeardown: true,
+    ciExternal: false,
+  }),
+  "LIFECYCLE_UNCERTAIN",
+);
+assert.equal(
+  combineFullTeardownOk({
+    sanitized: { ok: true },
+    containerResults: [{ ok: true }],
+    raw: { ok: true },
+    skipContainerTeardown: true,
+    ciExternal: true,
+  }),
+  true,
+);
+assert.equal(
   primaryTeardownFailureCode({
     sanitized: { ok: false, code: "SANITIZED_EXPORT_FAILED" },
     containerResults: [],

@@ -32,6 +32,18 @@ pnpm test:e2e:pk-v1-hint
 - Backend pytest `postgres18` destructive fixtures run only on the isolated probe substrate (`bootstrap_probe_database.py`).
 - Governed Docker binds `127.0.0.1:hostPort:5432` only; owned lifecycle cleanup on partial bootstrap failure.
 
+## Pre-CI safety (I01R8)
+
+- Governed webserver probe is tri-state: `ECONNREFUSED` ⇒ CLOSED; successful
+  connect ⇒ LISTENING; timeout / other errors ⇒ UNKNOWN (never treated as free).
+  Fixed ports `8028/8029/5191/5192` on `127.0.0.1` only — no env port override.
+- ANY LISTENING/UNKNOWN port or unobserved child `close` skips owned PG removal,
+  preserves ownership records, and forces managed wrapper `LIFECYCLE_UNCERTAIN`
+  (nonzero exit) even when Playwright child exit is 0.
+- CI artifact upload audit walks every top-level entry (reject nested dirs,
+  symlinks, forbidden types); only 1–4 flat allowlisted JSON files; structured
+  field validation is separate from `E2E_PASS`.
+
 ## Pre-CI safety (I01R7)
 
 - `E2E_PASS` requires strict lifecycle proof (`child_exit===0`, export/teardown ok, no

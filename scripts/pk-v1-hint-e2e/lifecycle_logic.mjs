@@ -61,7 +61,16 @@ export function ownershipFileNamesForRole(role) {
  * Fail-closed: export failure still requires container/raw stages to have run;
  * any stage failure yields teardown not-ok.
  */
-export function combineFullTeardownOk({ sanitized, containerResults, raw }) {
+export function combineFullTeardownOk({
+  sanitized,
+  containerResults,
+  raw,
+  skipContainerTeardown = false,
+  ciExternal = false,
+}) {
+  if (skipContainerTeardown && !ciExternal) {
+    return false;
+  }
   const containerDenied = (containerResults || []).some((r) => r.ok === false);
   if (containerDenied) {
     return false;
@@ -75,7 +84,16 @@ export function combineFullTeardownOk({ sanitized, containerResults, raw }) {
   return true;
 }
 
-export function primaryTeardownFailureCode({ sanitized, containerResults, raw }) {
+export function primaryTeardownFailureCode({
+  sanitized,
+  containerResults,
+  raw,
+  skipContainerTeardown = false,
+  ciExternal = false,
+}) {
+  if (skipContainerTeardown && !ciExternal) {
+    return "LIFECYCLE_UNCERTAIN";
+  }
   if (sanitized && sanitized.skipped !== true && sanitized.ok === false) {
     return sanitized.code || "EXPORT_FAILED";
   }

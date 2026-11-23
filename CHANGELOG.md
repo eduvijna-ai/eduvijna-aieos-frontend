@@ -9,6 +9,12 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-E2E-I01R8: Tri-state governed webserver port release
+  (`LISTENING` / `CLOSED` / `UNKNOWN`) with fail-closed
+  `LIFECYCLE_UNCERTAIN` when teardown is skipped locally; recursive flat-only
+  sanitized artifact privacy audit with structured JSON validation; adversarial
+  audit/webserver self-tests in isolated temp roots.
+
 - PK-V1-HINT-E2E-I01R7: Strict E2E_PASS proof binding (mandatory pins, full
   artifact JSON validation, S30/S31 deferred checks, CI run-id binding),
   isolated verifier tests (no repo `tmp` mutation), governed webserver port

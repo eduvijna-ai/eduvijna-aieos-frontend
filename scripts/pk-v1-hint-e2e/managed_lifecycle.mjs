@@ -205,8 +205,18 @@ export function cleanupFullPkV1HintE2e({
     sanitized,
     containerResults,
     raw,
+    skipContainerTeardown,
+    ciExternal,
   });
-  const code = ok ? null : primaryTeardownFailureCode({ sanitized, containerResults, raw });
+  const code = ok
+    ? null
+    : primaryTeardownFailureCode({
+        sanitized,
+        containerResults,
+        raw,
+        skipContainerTeardown,
+        ciExternal,
+      });
   return {
     ok,
     code,

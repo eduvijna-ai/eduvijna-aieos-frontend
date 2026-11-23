@@ -101,14 +101,25 @@ function runTeardown() {
 async function gateWebserversBeforeTeardown(childState) {
   if (!allowOwnedDatabaseTeardown(childState)) {
     skipContainerTeardown = true;
-    return { released: false, skipped: true, reason: "CHILD_NOT_CLOSED" };
+    return {
+      released: false,
+      skipped: true,
+      reason: "CHILD_NOT_CLOSED",
+      lifecycleUncertain: true,
+    };
   }
   const webState = await verifyGovernedWebserversReleased();
   if (!allowDatabaseTeardownAfterWebservers(webState)) {
     skipContainerTeardown = true;
-    return { ...webState, skipped: false, reason: "PORTS_STILL_LISTENING" };
+    const reason =
+      (webState.unknownPorts || []).length > 0
+        ? "WEBSERVER_PORT_UNKNOWN"
+        : (webState.occupiedPorts || []).length > 0
+          ? "PORTS_STILL_LISTENING"
+          : "WEBSERVER_RELEASE_UNCERTAIN";
+    return { ...webState, skipped: false, reason, lifecycleUncertain: true };
   }
-  return { ...webState, skipped: false, reason: null };
+  return { ...webState, skipped: false, reason: null, lifecycleUncertain: false };
 }
 
 async function shutdownAndExit(childExitCode, childState = { closed: true, timedOut: false }) {
@@ -127,8 +138,10 @@ async function shutdownAndExit(childExitCode, childState = { closed: true, timed
     lifecycle_teardown_ok: teardown.ok === true,
     lifecycle_code: teardown.code || null,
     skip_container_teardown: skipContainerTeardown,
-    webserver_release_ok: webGate.released === true,
+    webserver_release_ok: webGate.released === true && webGate.lifecycleUncertain !== true,
     webserver_occupied_ports: webGate.occupiedPorts || [],
+    webserver_unknown_ports: webGate.unknownPorts || [],
+    webserver_gate_reason: webGate.reason ?? null,
     sanitized_export_ok:
       teardown.sanitized?.ok !== false && teardown.sanitized?.skipped !== true
         ? teardown.sanitized?.ok === true
@@ -142,8 +155,10 @@ async function shutdownAndExit(childExitCode, childState = { closed: true, timed
     lifecycle_teardown_ok: teardown.ok === true,
     lifecycle_code: teardown.code || null,
     skip_container_teardown: skipContainerTeardown,
-    webserver_release_ok: webGate.released === true,
+    webserver_release_ok: webGate.released === true && webGate.lifecycleUncertain !== true,
     webserver_occupied_ports: webGate.occupiedPorts || [],
+    webserver_unknown_ports: webGate.unknownPorts || [],
+    webserver_gate_reason: webGate.reason ?? null,
   };
   console.log(JSON.stringify(summary));
   process.exit(exitCode);
