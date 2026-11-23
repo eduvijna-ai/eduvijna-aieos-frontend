@@ -37,10 +37,23 @@ def main() -> int:
     def bump(tier: str) -> None:
         tier_counts[tier] = tier_counts.get(tier, 0) + 1
 
+    probe_path = Path(
+        os.environ.get(
+            "PK_V1_HINT_E2E_PROBE_DB_REPORT",
+            repo_tmp / "pk-v1-hint-e2e-probe-db.json",
+        )
+    )
+
     if db_path.is_file():
         write_sanitized_json(
             str(out_dir / "db-report-sanitized.json"),
             json.loads(db_path.read_text(encoding="utf-8")),
+        )
+
+    if probe_path.is_file():
+        write_sanitized_json(
+            str(out_dir / "probe-db-report-sanitized.json"),
+            json.loads(probe_path.read_text(encoding="utf-8")),
         )
 
     if fixture_path.is_file():
@@ -73,6 +86,7 @@ def main() -> int:
         "tier_counts": tier_counts,
         "has_fixture": fixture_path.is_file(),
         "has_db_report": db_path.is_file(),
+        "has_probe_db_report": probe_path.is_file(),
     }
     write_sanitized_json(str(out_dir / "evidence-summary.json"), summary)
     print(json.dumps(summary))

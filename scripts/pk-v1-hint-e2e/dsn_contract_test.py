@@ -70,6 +70,31 @@ class DsnContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.mod.validate_local_dedicated_database_targets(env)
 
+    def test_accepts_governed_probe_ci_urls(self) -> None:
+        env = {
+            "PK_V1_HINT_E2E_PROBE_CI_EXTERNAL_PG": "1",
+            "PK_V1_HINT_E2E_PROBE_DATABASE_URL": (
+                "postgresql+psycopg://aieos_migrator:aieos_test@127.0.0.1:5432/aieos_hint_probe"
+            ),
+            "PK_V1_HINT_E2E_PROBE_BOOTSTRAP_DATABASE_URL": (
+                "postgresql+psycopg://aieos_bootstrap:aieos_test@127.0.0.1:5432/aieos_hint_probe"
+            ),
+            "PK_V1_HINT_E2E_PROBE_RUNTIME_DATABASE_URL": (
+                "postgresql+psycopg://aieos_runtime:aieos_test@127.0.0.1:5432/aieos_hint_probe"
+            ),
+        }
+        self.mod.validate_probe_ci_database_targets(env)
+
+    def test_refuses_probe_ci_wrong_database_name(self) -> None:
+        env = {
+            "PK_V1_HINT_E2E_PROBE_CI_EXTERNAL_PG": "1",
+            "PK_V1_HINT_E2E_PROBE_DATABASE_URL": (
+                "postgresql+psycopg://aieos_migrator:aieos_test@127.0.0.1:5432/aieos"
+            ),
+        }
+        with self.assertRaises(ValueError):
+            self.mod.validate_probe_ci_database_targets(env)
+
 
 if __name__ == "__main__":
     raise SystemExit(unittest.main())

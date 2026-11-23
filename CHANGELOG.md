@@ -9,6 +9,10 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-E2E-I01R2: Probe/journey DB isolation for Backend pytest,
+  loopback-only Docker ownership policy, allowlisted CI exporters,
+  credential-safe harness errors, and expanded static safety self-tests.
+
 - PK-V1-HINT-E2E-I01R1: Security-sanitized real-stack hint harness — owned PG18
   lifecycle (no `start_postgres` destroy), DSN allowlist + sanitize exporters,
   q-open Phase F binding, S57 Assessment→Improve phases, lock probe mapping

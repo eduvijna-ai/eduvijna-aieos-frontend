@@ -32,6 +32,10 @@ REVIEWER_BEARER = "pk-v1-hint-e2e-reviewer"
 PUBLISHER_BEARER = "pk-v1-hint-e2e-publisher"
 
 
+def _http_failure(label: str, status_code: int) -> RuntimeError:
+    return RuntimeError(f"{label} failed with HTTP status {status_code}")
+
+
 def _backend_root() -> Path:
     root = os.environ.get("AIEOS_BACKEND_ROOT")
     if not root:
@@ -177,7 +181,7 @@ def main() -> int:
             headers=_headers(str(tenant_id)),
         )
         if works.status_code != 200:
-            raise RuntimeError(f"works list failed: {works.status_code} {works.text}")
+            raise _http_failure("works list", works.status_code)
 
         work_id = None
         work_etag = None
@@ -205,7 +209,7 @@ def main() -> int:
                 ),
             )
             if created.status_code not in (200, 201):
-                raise RuntimeError(f"work create failed: {created.text}")
+                raise _http_failure("work create", created.status_code)
             work_id = created.json()["work_id"]
             work_etag = created.headers["ETag"]
 
@@ -214,7 +218,7 @@ def main() -> int:
             headers=_headers(str(tenant_id)),
         )
         if artifacts.status_code != 200:
-            raise RuntimeError(f"artifacts list failed: {artifacts.text}")
+            raise _http_failure("artifacts list", artifacts.status_code)
         existing_items = artifacts.json().get("items") or []
 
         if existing_items:
@@ -231,9 +235,7 @@ def main() -> int:
                 ),
             )
             if generated.status_code not in (200, 409):
-                raise RuntimeError(
-                    f"generate failed: {generated.status_code} {generated.text}"
-                )
+                raise _http_failure("generate", generated.status_code)
             if generated.status_code == 409:
                 artifacts_retry = client.get(
                     f"/api/v1/teaching/works/{work_id}/artifacts",
@@ -259,7 +261,7 @@ def main() -> int:
             headers=_headers(str(tenant_id)),
         )
         if content_get.status_code != 200:
-            raise RuntimeError(f"content get failed: {content_get.text}")
+            raise _http_failure("content get", content_get.status_code)
         content = content_get.json()
         published_version_id_before = content.get("published_version_id")
 
@@ -269,7 +271,7 @@ def main() -> int:
                 headers=_headers(str(tenant_id)),
             )
             if detail.status_code != 200:
-                raise RuntimeError(f"review detail failed: {detail.text}")
+                raise _http_failure("review detail", detail.status_code)
             approved = client.post(
                 f"/api/v1/contents/{content_id}/versions/{version_id}/actions/approve",
                 json={},
@@ -282,14 +284,14 @@ def main() -> int:
                 },
             )
             if approved.status_code != 200:
-                raise RuntimeError(f"approve failed: {approved.text}")
+                raise _http_failure("approve", approved.status_code)
 
         content_after = client.get(
             f"/api/v1/contents/{content_id}",
             headers=_headers(str(tenant_id)),
         )
         if content_after.status_code != 200:
-            raise RuntimeError(f"content reload failed: {content_after.text}")
+            raise _http_failure("content reload", content_after.status_code)
         final_content = content_after.json()
         if final_content["stewardship_state"] != "APPROVED":
             raise RuntimeError(
@@ -305,7 +307,7 @@ def main() -> int:
             headers=_headers(str(tenant_id)),
         )
         if version_get.status_code != 200:
-            raise RuntimeError(f"version get failed: {version_get.text}")
+            raise _http_failure("version get", version_get.status_code)
         version_payload = version_get.json().get("payload") or {}
         question_ids = [
             item["id"] for item in version_payload.get("questions", [])

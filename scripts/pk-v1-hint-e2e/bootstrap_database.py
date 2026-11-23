@@ -84,6 +84,20 @@ def _restrict_permissions(path: Path) -> None:
         pass
 
 
+def _cleanup_primary_start() -> None:
+    subprocess.run(
+        [
+            "node",
+            "--input-type=module",
+            "-e",
+            "import { cleanupPartialPrimaryStart } from './managed_lifecycle.mjs'; cleanupPartialPrimaryStart();",
+        ],
+        cwd=_script_dir(),
+        capture_output=True,
+        text=True,
+    )
+
+
 def main() -> int:
     validate_database_targets()
 
@@ -120,64 +134,71 @@ def main() -> int:
     external = os.environ.get("AIEOS_TEST_DATABASE_URL")
     started_container = False
     container_id = None
-    if external:
-        b_url = os.environ.get("AIEOS_TEST_BOOTSTRAP_DATABASE_URL", external)
-        m_url = external
-        r_url = os.environ.get("AIEOS_TEST_RUNTIME_DATABASE_URL", external)
-        port = "5432"
-    else:
-        port = os.environ.get("AIEOS_TEST_PG_PORT", DEFAULT_PG_PORT)
-        port = _start_owned_local_postgres(port)
-        started_container = True
-        ownership_path = _script_dir().parents[1] / "tmp" / "pk-v1-hint-e2e-docker-ownership.json"
-        if ownership_path.is_file():
-            container_id = json.loads(
-                ownership_path.read_text(encoding="utf-8")
-            ).get("containerId")
-        b_url = bootstrap_url(port)
-        m_url = migrator_url(port)
-        r_url = runtime_url(port)
+    try:
+        if external:
+            b_url = os.environ.get("AIEOS_TEST_BOOTSTRAP_DATABASE_URL", external)
+            m_url = external
+            r_url = os.environ.get("AIEOS_TEST_RUNTIME_DATABASE_URL", external)
+            port = "5432"
+        else:
+            port = os.environ.get("AIEOS_TEST_PG_PORT", DEFAULT_PG_PORT)
+            port = _start_owned_local_postgres(port)
+            started_container = True
+            ownership_path = (
+                _script_dir().parents[1] / "tmp" / "pk-v1-hint-e2e-docker-ownership.json"
+            )
+            if ownership_path.is_file():
+                container_id = json.loads(
+                    ownership_path.read_text(encoding="utf-8")
+                ).get("containerId")
+            b_url = bootstrap_url(port)
+            m_url = migrator_url(port)
+            r_url = runtime_url(port)
 
-    bootstrap = wait_for_engine(b_url)
-    with bootstrap.connect() as conn:
-        version = conn.execute(text("SHOW server_version")).scalar_one()
-        if not str(version).startswith("18."):
-            raise RuntimeError(f"PostgreSQL 18 required; got {version}")
+        bootstrap = wait_for_engine(b_url)
+        with bootstrap.connect() as conn:
+            version = conn.execute(text("SHOW server_version")).scalar_one()
+            if not str(version).startswith("18."):
+                raise RuntimeError("PostgreSQL 18 required for journey substrate")
 
-    provision_identities(bootstrap)
-    os.environ["AIEOS_DATABASE_URL"] = m_url
-    cfg = alembic_config(m_url)
-    command.upgrade(cfg, "head")
-    head = None
-    with bootstrap.connect() as conn:
-        head = conn.execute(
-            text("SELECT version_num FROM alembic_version")
-        ).scalar_one()
-    if head != EXPECTED_MIGRATION_HEAD:
-        raise RuntimeError(
-            f"Expected migration head {EXPECTED_MIGRATION_HEAD}; got {head}"
-        )
-    provision_runtime_grants(bootstrap)
+        provision_identities(bootstrap)
+        os.environ["AIEOS_DATABASE_URL"] = m_url
+        cfg = alembic_config(m_url)
+        command.upgrade(cfg, "head")
+        with bootstrap.connect() as conn:
+            head = conn.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
+        if head != EXPECTED_MIGRATION_HEAD:
+            raise RuntimeError("journey migration head mismatch")
+        provision_runtime_grants(bootstrap)
 
-    report = {
-        "postgres_major": 18,
-        "migration_head": head,
-        "runtime_database_url": r_url,
-        "bootstrap_database_url": b_url,
-        "started_container": started_container,
-        "host_port": port,
-        "backend_pin_sha": BACKEND_PIN_SHA,
-        "container_name": os.environ.get("PK_V1_HINT_E2E_PG_CONTAINER", CONTAINER_NAME),
-        "container_id": container_id,
-    }
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    _restrict_permissions(report_path)
-    write_sanitized_json(str(sanitized_path), report)
-    _restrict_permissions(sanitized_path)
+        report = {
+            "postgres_major": 18,
+            "migration_head": head,
+            "runtime_database_url": r_url,
+            "bootstrap_database_url": b_url,
+            "started_container": started_container,
+            "host_port": port,
+            "backend_pin_sha": BACKEND_PIN_SHA,
+            "container_name": os.environ.get(
+                "PK_V1_HINT_E2E_PG_CONTAINER", CONTAINER_NAME
+            ),
+            "container_id": container_id,
+        }
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        _restrict_permissions(report_path)
+        write_sanitized_json(str(sanitized_path), report)
+        _restrict_permissions(sanitized_path)
 
-    print(json.dumps(public_bootstrap_summary(report)))
-    return 0
+        print(json.dumps(public_bootstrap_summary(report)))
+        return 0
+    except Exception:
+        if started_container:
+            _cleanup_primary_start()
+        print(json.dumps({"bootstrap_ok": False}))
+        return 1
 
 
 if __name__ == "__main__":

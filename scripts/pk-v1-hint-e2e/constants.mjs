@@ -28,7 +28,9 @@ export const DEFAULT_STUDENT_BACKEND_PORT = 8029;
 export const DEFAULT_TEACHER_FRONTEND_PORT = 5191;
 export const DEFAULT_STUDENT_FRONTEND_PORT = 5192;
 export const DEFAULT_PG_PORT = 55439;
+export const DEFAULT_PROBE_PG_PORT = 55440;
 export const PK_V1_HINT_E2E_CONTAINER = "aieos-pk-v1-hint-e2e-pg";
+export const PK_V1_HINT_E2E_PROBE_CONTAINER = "aieos-pk-v1-hint-e2e-pg-probe";
 
 export function resolveBackendRoot() {
   const root = process.env.AIEOS_BACKEND_ROOT;

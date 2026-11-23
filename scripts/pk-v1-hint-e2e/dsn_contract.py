@@ -12,6 +12,7 @@ from urllib.parse import parse_qsl, urlparse
 PK_V1_HINT_E2E_CONTAINER = "aieos-pk-v1-hint-e2e-pg"
 DEDICATED_PG_HOST_PORT = 55439
 GOVERNED_DB_NAME = "aieos"
+GOVERNED_PROBE_CI_DB_NAME = "aieos_hint_probe"
 GOVERNED_TEST_PASSWORD = "aieos_test"
 GOVERNED_CI_PG_PORT = 5432
 GOVERNED_LOCAL_PG_PORT = DEDICATED_PG_HOST_PORT
@@ -110,17 +111,16 @@ def _assert_url_matches(
     label: str,
     expected_user: str,
     expected_port: int,
+    expected_database: str = GOVERNED_DB_NAME,
 ) -> ParsedDbUrl:
     reject_connection_routing_overrides(url, label=label)
     parsed = parse_db_url(url)
     _reject_host(parsed.host)
     if parsed.port != expected_port:
+        raise ValueError(f"{label} port must be {expected_port}; got {parsed.port}")
+    if parsed.database != expected_database:
         raise ValueError(
-            f"{label} port must be {expected_port}; got {parsed.port} ({url})"
-        )
-    if parsed.database != GOVERNED_DB_NAME:
-        raise ValueError(
-            f"{label} database must be {GOVERNED_DB_NAME}; got {parsed.database}"
+            f"{label} database must be {expected_database}; got {parsed.database}"
         )
     if parsed.user != expected_user:
         raise ValueError(
@@ -172,6 +172,50 @@ def validate_local_dedicated_database_targets(env: dict[str, str]) -> None:
         raise ValueError(
             f"AIEOS_TEST_PG_PORT must be {GOVERNED_LOCAL_PG_PORT}; got {port}"
         )
+
+
+def validate_probe_ci_database_targets(env: dict[str, str]) -> None:
+    if env.get("PK_V1_HINT_E2E_PROBE_CI_EXTERNAL_PG") != "1":
+        raise ValueError(
+            "probe external PostgreSQL requires PK_V1_HINT_E2E_PROBE_CI_EXTERNAL_PG=1"
+        )
+    migrator = env.get("PK_V1_HINT_E2E_PROBE_DATABASE_URL")
+    if not migrator:
+        raise ValueError("PK_V1_HINT_E2E_PROBE_DATABASE_URL is required for probe CI")
+    bootstrap = env.get("PK_V1_HINT_E2E_PROBE_BOOTSTRAP_DATABASE_URL", migrator)
+    runtime = env.get("PK_V1_HINT_E2E_PROBE_RUNTIME_DATABASE_URL", migrator)
+    _assert_url_matches(
+        bootstrap,
+        label="PK_V1_HINT_E2E_PROBE_BOOTSTRAP_DATABASE_URL",
+        expected_user=BOOTSTRAP_USER,
+        expected_port=GOVERNED_CI_PG_PORT,
+        expected_database=GOVERNED_PROBE_CI_DB_NAME,
+    )
+    _assert_url_matches(
+        migrator,
+        label="PK_V1_HINT_E2E_PROBE_DATABASE_URL",
+        expected_user=MIGRATOR_USER,
+        expected_port=GOVERNED_CI_PG_PORT,
+        expected_database=GOVERNED_PROBE_CI_DB_NAME,
+    )
+    _assert_url_matches(
+        runtime,
+        label="PK_V1_HINT_E2E_PROBE_RUNTIME_DATABASE_URL",
+        expected_user=RUNTIME_USER,
+        expected_port=GOVERNED_CI_PG_PORT,
+        expected_database=GOVERNED_PROBE_CI_DB_NAME,
+    )
+
+
+def validate_local_probe_database_targets(env: dict[str, str]) -> None:
+    container = env.get(
+        "PK_V1_HINT_E2E_PROBE_PG_CONTAINER", "aieos-pk-v1-hint-e2e-pg-probe"
+    )
+    if container != "aieos-pk-v1-hint-e2e-pg-probe":
+        raise ValueError("probe container name is not governed")
+    port = env.get("PK_V1_HINT_E2E_PROBE_PG_PORT", "55440")
+    if str(port) != "55440":
+        raise ValueError("probe port must be 55440 for local disposable substrate")
 
 
 def validate_database_targets(env: dict[str, str] | None = None) -> None:

@@ -41,11 +41,14 @@ export function classifyDockerInspectResult({ status, stdout, stderr }) {
   }
   const container = parsed[0];
   const labels = container?.Config?.Labels ?? {};
+  const portBindings = container?.HostConfig?.PortBindings ?? {};
   return {
     state: "ok",
     containerId: container.Id,
     image: container.Config?.Image,
     ownerLabel: labels[PK_V1_HINT_DOCKER_OWNER_LABEL] ?? null,
     packageLabel: labels[PK_V1_HINT_DOCKER_PACKAGE_LABEL] ?? null,
+    portBindings,
+    rawPayload: parsed,
   };
 }

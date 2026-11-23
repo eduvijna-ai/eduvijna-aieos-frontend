@@ -9,7 +9,8 @@ head `a360s010005`.
 
 ```text
 Teacher Vite :5191 ──/api──► Teacher FastAPI :8028 ──┐
-Student Vite :5192 ──/api──► Student FastAPI :8029 ──┴──► PostgreSQL 18 (ONE DATABASE)
+Student Vite :5192 ──/api──► Student FastAPI :8029 ──┴──► PostgreSQL 18 journey DB
+Phase J pytest probes ──► isolated probe DB (:55440 local / aieos_hint_probe in CI)
 ```
 
 Three opaque teacher bearer aliases map to distinct HUMAN principals (author,
@@ -23,11 +24,13 @@ export AIEOS_BACKEND_ROOT=/path/to/eduvijna-aieos-backend@5bbc09bc895407b71a61f9
 pnpm test:e2e:pk-v1-hint
 ```
 
-## Evidence confidentiality (I01R1)
+## Evidence confidentiality (I01R1 / I01R2)
 
 - Local-only raw `tmp/pk-v1-hint-e2e-*.json` files are mode `0600` and excluded from CI artifacts.
-- CI uploads only `tmp/pk-v1-hint-e2e-sanitized/` produced by `emit_sanitized_evidence.py`.
+- CI uploads only allowlisted `tmp/pk-v1-hint-e2e-sanitized/` (`export_sanitize.py` positive allowlist).
 - Playwright trace/screenshot/video are OFF for this lane.
+- Backend pytest `postgres18` destructive fixtures run only on the isolated probe substrate (`bootstrap_probe_database.py`).
+- Governed Docker binds `127.0.0.1:hostPort:5432` only; owned lifecycle cleanup on partial bootstrap failure.
 
 ## SP02A S01–S67 ledger (sum = 67)
 
@@ -54,7 +57,7 @@ pnpm test:e2e:pk-v1-hint
 | S19 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
 | S20 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
 | S21 | Learner hint disclosure control | NOT_TESTED | `e2e-pk-v1-hint/learner-hint-vertical.product.spec.ts (await CI)` | NOT_EXECUTED_LOCAL / await Chief CI |
-| S22 | Learner hint disclosure control | CURRENT_BACKEND_PG_HTTP_PROOF | `tests/domains/learning/test_aieos_v1_hint_b.py::TestLearnerHintsConcurrency` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S22 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py::TestLearnerHintsConcurrency (probe DB only)` | NOT_EXECUTED_LOCAL / await Chief CI |
 | S23 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
 | S24 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
 | S25 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
@@ -83,9 +86,9 @@ pnpm test:e2e:pk-v1-hint
 | S48 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
 | S49 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
 | S50 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
-| S51 | Learner hint disclosure control | CURRENT_BACKEND_PG_HTTP_PROOF | `tests/domains/learning/test_aieos_v1_hint_b.py::TestLearnerHintsConcurrency` | NOT_EXECUTED_LOCAL / await Chief CI |
-| S52 | Learner hint disclosure control | CURRENT_BACKEND_PG_HTTP_PROOF | `tests/domains/learning/test_aieos_v1_hint_b.py::TestLearnerHintsConcurrency` | NOT_EXECUTED_LOCAL / await Chief CI |
-| S53 | Learner hint disclosure control | CURRENT_BACKEND_PG_HTTP_PROOF | `tests/domains/learning/test_aieos_v1_hint_b.py::TestLearnerHintsConcurrency` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S51 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py::TestLearnerHintsConcurrency (probe DB only)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S52 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py::TestLearnerHintsConcurrency (probe DB only)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S53 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py::TestLearnerHintsConcurrency (probe DB only)` | NOT_EXECUTED_LOCAL / await Chief CI |
 | S54 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
 | S55 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
 | S56 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
@@ -104,9 +107,8 @@ pnpm test:e2e:pk-v1-hint
 
 ### Tier counts
 
-- CURRENT_BACKEND_PG_HTTP_PROOF: 4
 - DEFERRED_BY_ADR: 2
-- NOT_TESTED: 61
+- NOT_TESTED: 65
 - **Total**: 67
 
 ## Explicit non-claims

@@ -3,21 +3,34 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PK_V1_HINT_E2E_CONTAINER } from "./constants.mjs";
+import {
+  DEFAULT_PG_PORT,
+  DEFAULT_PROBE_PG_PORT,
+  PK_V1_HINT_E2E_CONTAINER,
+  PK_V1_HINT_E2E_PROBE_CONTAINER,
+} from "./constants.mjs";
 import {
   PK_V1_HINT_DOCKER_OWNER_LABEL,
   PK_V1_HINT_DOCKER_PACKAGE_LABEL,
   classifyDockerInspectResult,
 } from "./docker_inspect.mjs";
+import {
+  EXPECTED_POSTGRES_IMAGE,
+  PK_V1_HINT_PACKAGE,
+  evaluateDestructionPermission,
+  evaluateNamedContainerStartRefusal,
+  evaluateUnownedMutationRefusal,
+  verifyLoopbackPortBinding,
+} from "./docker_ownership_policy.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "../..");
-const ownershipPath = join(repoRoot, "tmp", "pk-v1-hint-e2e-docker-ownership.json");
 
-export const EXPECTED_POSTGRES_IMAGE = "postgres:18";
+export { EXPECTED_POSTGRES_IMAGE };
 
-export function ownershipFilePath() {
-  return ownershipPath;
+export function ownershipFilePath(role = "primary") {
+  const suffix = role === "probe" ? "probe-docker-ownership" : "docker-ownership";
+  return join(repoRoot, "tmp", `pk-v1-hint-e2e-${suffix}.json`);
 }
 
 function dockerInspect(containerName) {
@@ -27,79 +40,76 @@ function dockerInspect(containerName) {
   return classifyDockerInspectResult(result);
 }
 
-export function readOwnershipRecord() {
+export function readOwnershipRecord(role = "primary") {
+  const ownershipPath = ownershipFilePath(role);
   if (!existsSync(ownershipPath)) {
     return null;
   }
   return JSON.parse(readFileSync(ownershipPath, "utf8"));
 }
 
-export function writeOwnershipRecord(record) {
+export function writeOwnershipRecord(record, role = "primary") {
+  const ownershipPath = ownershipFilePath(role);
   writeFileSync(ownershipPath, JSON.stringify(record, null, 2) + "\n", "utf8");
 }
 
 export function removeContainerById(containerId) {
   if (!containerId || typeof containerId !== "string") {
-    return { removed: false, error: "missing container id" };
+    return { removed: false, code: "MISSING_CONTAINER_ID" };
   }
   const docker = spawnSync("docker", ["rm", "-f", containerId], {
     encoding: "utf8",
   });
   if (docker.status !== 0) {
-    return {
-      removed: false,
-      error: docker.stderr || docker.stdout || "docker rm failed",
-    };
+    return { removed: false, code: "DOCKER_RM_FAILED" };
   }
   return { removed: true, containerId };
 }
 
 export function assertNoUnownedContainerBeforeMutation(
   containerName = PK_V1_HINT_E2E_CONTAINER,
+  role = "primary",
 ) {
   const inspect = dockerInspect(containerName);
-  if (inspect.state === "error") {
-    throw new Error(`DOCKER INSPECTION BLOCKED — ${inspect.error}`);
+  const record = readOwnershipRecord(role);
+  const decision = evaluateUnownedMutationRefusal(inspect, record, PK_V1_HINT_PACKAGE);
+  if (decision.action === "refuse") {
+    throw new Error(`REFUSE: foreign container blocks mutation (${decision.code})`);
   }
-  if (inspect.state === "not_found") {
-    return;
+  if (decision.code === "DOCKER_INSPECT_ERROR") {
+    throw new Error("DOCKER INSPECTION BLOCKED");
   }
-  const record = readOwnershipRecord();
-  if (record?.containerId === inspect.containerId && record?.ownerRunId) {
-    return;
-  }
-  if (
-    inspect.ownerLabel &&
-    inspect.packageLabel === "pk-v1-hint-e2e"
-  ) {
-    return;
-  }
-  throw new Error(
-    `REFUSE: container ${containerName} exists but is not PK-V1-HINT-owned (id=${inspect.containerId})`,
-  );
 }
 
 export function verifyContainerForDestruction(
   containerName = PK_V1_HINT_E2E_CONTAINER,
+  role = "primary",
 ) {
   const inspect = dockerInspect(containerName);
-  if (inspect.state === "error") {
-    return { ok: false, inspection_error: true, error: inspect.error };
+  const record = readOwnershipRecord(role);
+  const expectedPort =
+    role === "probe"
+      ? String(process.env.PK_V1_HINT_E2E_PROBE_PG_PORT || DEFAULT_PROBE_PG_PORT)
+      : String(process.env.AIEOS_TEST_PG_PORT || DEFAULT_PG_PORT);
+  const permission = evaluateDestructionPermission({
+    inspect,
+    record,
+    expectedHostPort: expectedPort,
+    inspectPayload: inspect.rawPayload,
+  });
+  if (!permission.ok) {
+    return {
+      ok: false,
+      missing: permission.missing === true,
+      inspection_error: permission.inspection_error === true,
+      code: permission.code,
+    };
   }
-  if (inspect.state === "not_found") {
-    return { ok: false, missing: true };
+  const binding = verifyLoopbackPortBinding(inspect.rawPayload, expectedPort);
+  if (!binding.ok) {
+    return { ok: false, code: "LOOPBACK_BINDING_MISMATCH" };
   }
-  const record = readOwnershipRecord();
-  if (!record?.containerId) {
-    return { ok: false, error: "no ownership record for container" };
-  }
-  if (record.containerId !== inspect.containerId) {
-    return { ok: false, error: "container id does not match ownership record" };
-  }
-  if (!inspect.image?.includes(EXPECTED_POSTGRES_IMAGE)) {
-    return { ok: false, error: `unexpected image ${inspect.image}` };
-  }
-  return { ok: true, inspect, record };
+  return { ok: true, inspect, record, code: permission.code };
 }
 
 export function startGovernedPostgresContainer({
@@ -108,17 +118,19 @@ export function startGovernedPostgresContainer({
   bootstrapUser = "aieos_bootstrap",
   dbPassword = "aieos_test",
   dbName = "aieos",
+  role = "primary",
 }) {
-  assertNoUnownedContainerBeforeMutation(containerName);
+  assertNoUnownedContainerBeforeMutation(containerName, role);
   const ownerRunId = randomUUID();
   const existing = dockerInspect(containerName);
-  if (existing.state === "ok") {
+  const startDecision = evaluateNamedContainerStartRefusal(existing);
+  if (!startDecision.ok) {
+    if (startDecision.inspection_error) {
+      throw new Error("DOCKER INSPECTION BLOCKED");
+    }
     throw new Error(
-      `REFUSE: named container ${containerName} already exists; will not delete foreign instance`,
+      `REFUSE: named container already exists; will not delete foreign instance (${startDecision.code})`,
     );
-  }
-  if (existing.state === "error") {
-    throw new Error(`DOCKER INSPECTION BLOCKED — ${existing.error}`);
   }
   const run = spawnSync(
     "docker",
@@ -131,7 +143,7 @@ export function startGovernedPostgresContainer({
       "--label",
       `${PK_V1_HINT_DOCKER_OWNER_LABEL}=${ownerRunId}`,
       "--label",
-      `${PK_V1_HINT_DOCKER_PACKAGE_LABEL}=pk-v1-hint-e2e`,
+      `${PK_V1_HINT_DOCKER_PACKAGE_LABEL}=${PK_V1_HINT_PACKAGE}`,
       "-e",
       `POSTGRES_USER=${bootstrapUser}`,
       "-e",
@@ -139,13 +151,13 @@ export function startGovernedPostgresContainer({
       "-e",
       `POSTGRES_DB=${dbName}`,
       "-p",
-      `${hostPort}:5432`,
+      `127.0.0.1:${hostPort}:5432`,
       EXPECTED_POSTGRES_IMAGE,
     ],
     { encoding: "utf8" },
   );
   if (run.status !== 0) {
-    throw new Error(run.stderr || run.stdout || "docker run failed");
+    throw new Error("docker run failed");
   }
   const createdContainerId = (run.stdout || "").trim();
   if (!createdContainerId) {
@@ -156,28 +168,37 @@ export function startGovernedPostgresContainer({
     removeContainerById(createdContainerId);
     throw new Error("governed postgres container did not start");
   }
+  const binding = verifyLoopbackPortBinding(inspect.rawPayload, hostPort);
+  if (!binding.ok) {
+    removeContainerById(createdContainerId);
+    throw new Error("governed postgres port must bind loopback only");
+  }
   const record = {
     ownerRunId,
     containerId: inspect.containerId,
     containerName,
     image: inspect.image,
     hostPort: String(hostPort),
+    role,
     recordedAt: new Date().toISOString(),
   };
-  writeOwnershipRecord(record);
+  writeOwnershipRecord(record, role);
   return record;
 }
 
-export function removeOwnedContainer(containerName = PK_V1_HINT_E2E_CONTAINER) {
-  const verified = verifyContainerForDestruction(containerName);
+export function removeOwnedContainer(
+  containerName = PK_V1_HINT_E2E_CONTAINER,
+  role = "primary",
+) {
+  const verified = verifyContainerForDestruction(containerName, role);
   if (verified.inspection_error) {
-    return { removed: false, inspection_error: true, error: verified.error };
+    return { removed: false, inspection_error: true, code: verified.code };
   }
   if (verified.missing) {
-    return { removed: false, missing: true };
+    return { removed: false, missing: true, code: verified.code };
   }
   if (!verified.ok) {
-    return { removed: false, error: verified.error };
+    return { removed: false, code: verified.code || "DESTRUCTION_DENIED" };
   }
   const docker = spawnSync(
     "docker",
@@ -185,7 +206,11 @@ export function removeOwnedContainer(containerName = PK_V1_HINT_E2E_CONTAINER) {
     { encoding: "utf8" },
   );
   if (docker.status !== 0) {
-    return { removed: false, error: docker.stderr || docker.stdout };
+    return { removed: false, code: "DOCKER_RM_FAILED" };
   }
   return { removed: true, containerId: verified.record.containerId };
+}
+
+export function defaultContainerNameForRole(role) {
+  return role === "probe" ? PK_V1_HINT_E2E_PROBE_CONTAINER : PK_V1_HINT_E2E_CONTAINER;
 }

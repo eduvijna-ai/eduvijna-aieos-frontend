@@ -206,7 +206,9 @@ export function runPersistenceAssert(
     },
   );
   if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout || `assert_persistence ${mode} failed`);
+    throw new Error(
+      `PK_V1_HINT_PERSISTENCE_ASSERT_FAILED mode=${mode} exit=${result.status ?? "unknown"}`,
+    );
   }
   const lines = (result.stdout || "").trim().split(/\r?\n/);
   const last = lines[lines.length - 1];
@@ -246,7 +248,9 @@ export function runBackendHintProbes(): {
     },
   );
   if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout || "backend probes failed");
+    throw new Error(
+      `PK_V1_HINT_BACKEND_PROBE_FAILED exit=${result.status ?? "unknown"}`,
+    );
   }
   const lines = (result.stdout || "").trim().split(/\r?\n/);
   const last = lines[lines.length - 1];

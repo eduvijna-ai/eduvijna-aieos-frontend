@@ -684,11 +684,15 @@ jobs:
       contents: read
     env:
       PK_V1_HINT_E2E_CI_EXTERNAL_PG: "1"
+      PK_V1_HINT_E2E_PROBE_CI_EXTERNAL_PG: "1"
       AIEOS_BACKEND_ROOT: ${{ github.workspace }}/backend
       AIEOS_BACKEND_PIN_SHA: 5bbc09bc895407b71a61f9ba86a7209ff9c10ffa
       AIEOS_TEST_BOOTSTRAP_DATABASE_URL: postgresql+psycopg://aieos_bootstrap:aieos_test@127.0.0.1:5432/aieos
       AIEOS_TEST_DATABASE_URL: postgresql+psycopg://aieos_migrator:aieos_test@127.0.0.1:5432/aieos
       AIEOS_TEST_RUNTIME_DATABASE_URL: postgresql+psycopg://aieos_runtime:aieos_test@127.0.0.1:5432/aieos
+      PK_V1_HINT_E2E_PROBE_BOOTSTRAP_DATABASE_URL: postgresql+psycopg://aieos_bootstrap:aieos_test@127.0.0.1:5432/aieos_hint_probe
+      PK_V1_HINT_E2E_PROBE_DATABASE_URL: postgresql+psycopg://aieos_migrator:aieos_test@127.0.0.1:5432/aieos_hint_probe
+      PK_V1_HINT_E2E_PROBE_RUNTIME_DATABASE_URL: postgresql+psycopg://aieos_runtime:aieos_test@127.0.0.1:5432/aieos_hint_probe
       PK_V1_HINT_E2E_TEACHER_BACKEND_PORT: "8028"
       PK_V1_HINT_E2E_STUDENT_BACKEND_PORT: "8029"
       PK_V1_HINT_E2E_TEACHER_FRONTEND_PORT: "5191"
@@ -774,6 +778,7 @@ jobs:
       - name: PK-V1-HINT static DSN and sanitize guards
         run: |
           python3 scripts/pk-v1-hint-e2e/dsn_contract_test.py
+          python3 scripts/pk-v1-hint-e2e/probe_dsn_guard_test.py
           python3 scripts/pk-v1-hint-e2e/export_sanitize_test.py
           node scripts/pk-v1-hint-e2e/docker_ownership.selftest.mjs
 
