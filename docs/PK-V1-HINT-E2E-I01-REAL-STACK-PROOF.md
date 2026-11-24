@@ -42,6 +42,20 @@ pnpm test:e2e:pk-v1-hint
   `undefined` / `null` / probe throws map to `UNKNOWN` and block owned PG
   teardown via `evaluateWebserverReleaseGate`.
 
+## Pre-CI safety (I01R10)
+
+- `build_db_report_export` normalizes bootstrap string ports to governed integers
+  (`5432` CI service, `55439`/`55440` owned local) and omits
+  `container_id_prefix` when `started_container` is false (no JSON null).
+- Fixture audit requires UUID tenant/content/version/work IDs, exact `class-5a`,
+  deterministic `q-*` / `obj-*` IDs, and
+  `aieos.learner_assessment.deterministic` policy version `1`.
+- `emit_sanitized_evidence.build_evidence_summary` omits unverified authority
+  scalars so early-failure summaries pass upload-only audit without implying
+  E2E_PASS.
+- `hint_e2e_port_binding_guard` and `playwright.pk-v1-hint-e2e.config.ts` reject
+  governed port env overrides before managed Playwright starts.
+
 ## Pre-CI safety (I01R8)
 
 - Governed webserver probe is tri-state: `ECONNREFUSED` ⇒ CLOSED; successful

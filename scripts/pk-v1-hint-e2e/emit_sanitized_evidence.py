@@ -6,8 +6,59 @@ import json
 import os
 from pathlib import Path
 
-from export_sanitize import EVIDENCE_CONTRACT_VERSION, write_sanitized_json
+from artifact_semantic_validation import (
+    validate_attempt_run_id,
+    validate_backend_pin_sha,
+    validate_github_sha,
+    validate_migration_head,
+    validate_openapi_authority_sha,
+)
+from export_sanitize import EVIDENCE_CONTRACT_VERSION, PACKAGE_SCENARIO_ID, write_sanitized_json
 from sp02a_ledger import parse_sp02a_ledger_doc, repo_ledger_doc
+
+
+def build_evidence_summary(
+    *,
+    scenario_rows: list,
+    tier_counts: dict[str, int],
+    has_fixture: bool,
+    has_db_report: bool,
+    has_probe_db_report: bool,
+    attempt_run_id: str | None,
+    github_sha: str | None,
+    backend_pin_sha: str | None,
+    openapi_authority_sha: str | None,
+    migration_head: str | None,
+    generated_at_ms: int | None = None,
+) -> dict:
+    """Privacy-safe summary; omits unverified authority scalars (not an E2E_PASS claim)."""
+    summary: dict = {
+        "package_scenario_id": PACKAGE_SCENARIO_ID,
+        "sanitized_evidence_ok": True,
+        "ledger_row_count": len(scenario_rows),
+        "tier_counts": tier_counts,
+        "has_fixture": has_fixture,
+        "has_db_report": has_db_report,
+        "has_probe_db_report": has_probe_db_report,
+        "evidence_contract_version": EVIDENCE_CONTRACT_VERSION,
+        "generated_at_ms": generated_at_ms
+        if generated_at_ms is not None
+        else int(__import__("time").time() * 1000),
+    }
+    if attempt_run_id is not None and validate_attempt_run_id(attempt_run_id) is None:
+        summary["attempt_run_id"] = attempt_run_id
+    if github_sha is not None and validate_github_sha(github_sha) is None:
+        summary["github_sha"] = github_sha
+    if backend_pin_sha is not None and validate_backend_pin_sha(backend_pin_sha) is None:
+        summary["backend_pin_sha"] = backend_pin_sha
+    if (
+        openapi_authority_sha is not None
+        and validate_openapi_authority_sha(openapi_authority_sha) is None
+    ):
+        summary["openapi_authority_sha"] = openapi_authority_sha
+    if migration_head is not None and validate_migration_head(migration_head) is None:
+        summary["migration_head"] = migration_head
+    return summary
 
 
 def main() -> int:
@@ -86,22 +137,18 @@ def main() -> int:
         except json.JSONDecodeError:
             attempt_run_id = None
 
-    summary = {
-        "package_scenario_id": "pk-v1-hint-e2e-learner-hint-vertical",
-        "sanitized_evidence_ok": True,
-        "ledger_row_count": len(scenario_rows),
-        "tier_counts": tier_counts,
-        "has_fixture": fixture_path.is_file(),
-        "has_db_report": db_path.is_file(),
-        "has_probe_db_report": probe_path.is_file(),
-        "evidence_contract_version": EVIDENCE_CONTRACT_VERSION,
-        "generated_at_ms": int(__import__("time").time() * 1000),
-        "attempt_run_id": attempt_run_id,
-        "github_sha": github_sha,
-        "backend_pin_sha": backend_pin_sha,
-        "openapi_authority_sha": openapi_authority_sha,
-        "migration_head": migration_head,
-    }
+    summary = build_evidence_summary(
+        scenario_rows=scenario_rows,
+        tier_counts=tier_counts,
+        has_fixture=fixture_path.is_file(),
+        has_db_report=db_path.is_file(),
+        has_probe_db_report=probe_path.is_file(),
+        attempt_run_id=attempt_run_id,
+        github_sha=github_sha,
+        backend_pin_sha=backend_pin_sha,
+        openapi_authority_sha=openapi_authority_sha,
+        migration_head=migration_head,
+    )
     write_sanitized_json(str(out_dir / "evidence-summary.json"), summary)
     print(json.dumps(summary))
     return 0

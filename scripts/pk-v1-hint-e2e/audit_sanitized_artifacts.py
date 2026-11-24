@@ -23,7 +23,6 @@ from export_sanitize import (
     PACKAGE_SCENARIO_ID,
     SECRET_MARKERS,
     assert_export_has_no_secrets,
-    build_db_report_export,
     build_fixture_export,
     build_summary_export,
 )
@@ -85,10 +84,6 @@ def _validate_db_payload(obj: dict[str, Any], *, role: str) -> str | None:
     semantic = validate_db_fields(obj, role=role)
     if semantic:
         return semantic
-    try:
-        build_db_report_export({**obj, "role": role})
-    except ValueError:
-        return "DB_EXPORT_SHAPE"
     return None
 
 

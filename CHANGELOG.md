@@ -9,6 +9,12 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-E2E-I01R10: Governed DB report boundary normalization
+  (`host_port` int in sanitized export, omit `container_id_prefix` for CI
+  service), UUID-only fixture IDs with exact class/q/obj bindings, partial
+  failure summary omitting unverified pins, governed Playwright port binding
+  guard, and production-shaped sanitizer→audit integration tests.
+
 - PK-V1-HINT-E2E-I01R9: Field-level semantic grammars in
   `audit_sanitized_artifacts.py` (reject marker-free narrative in allowlisted
   values); hardlink/symlink/flat-tree guards; CLOSED-only webserver release

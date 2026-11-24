@@ -14,6 +14,7 @@ import {
   waitForChildShutdown,
 } from "./managed_child_lifecycle.mjs";
 import { evaluateWebserverReleaseGate } from "./managed_webserver_lifecycle.mjs";
+import { assertHintE2ePortBindingsOrExit } from "./hint_e2e_port_binding_guard.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "../..");
@@ -45,6 +46,8 @@ function resolveCiExternal() {
 }
 
 const ciExternal = resolveCiExternal();
+
+assertHintE2ePortBindingsOrExit();
 
 let teardownDone = false;
 let child = null;

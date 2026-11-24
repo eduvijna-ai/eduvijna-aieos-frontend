@@ -6,7 +6,13 @@ import re
 import uuid
 from typing import Any
 
-from export_sanitize import ALLOWED_EVIDENCE_TIERS, PACKAGE_SCENARIO_ID
+from export_sanitize import (
+    ALLOWED_EVIDENCE_TIERS,
+    CI_PG_HOST_PORT,
+    LOCAL_PRIMARY_PG_HOST_PORT,
+    LOCAL_PROBE_PG_HOST_PORT,
+    PACKAGE_SCENARIO_ID,
+)
 
 EXPECTED_BACKEND_PIN_SHA = "5bbc09bc895407b71a61f9ba86a7209ff9c10ffa"
 EXPECTED_OPENAPI_AUTHORITY_SHA = (
@@ -43,6 +49,22 @@ _STEWARDSHIP_STATES = frozenset(
 _HOST_PORT_MIN = 1024
 _HOST_PORT_MAX = 65535
 
+EXPECTED_CLASS_REF = "class-5a"
+EXPECTED_EVALUATION_POLICY_ID = "aieos.learner_assessment.deterministic"
+EXPECTED_EVALUATION_POLICY_VERSION = 1
+
+_FIXTURE_QUESTION_IDS = {
+    "q_correct_id": "q-correct",
+    "q_incorrect_id": "q-incorrect",
+    "q_unanswered_id": "q-unanswered",
+    "q_open_id": "q-open",
+}
+_FIXTURE_OBJECTIVE_IDS = {
+    "obj_demonstrated_id": "obj-demonstrated",
+    "obj_not_yet_id": "obj-not-yet",
+    "obj_insufficient_id": "obj-insufficient",
+}
+
 
 def _is_uuid(value: str) -> bool:
     try:
@@ -60,12 +82,12 @@ def _validate_opaque_id(value: Any, code: str) -> str | None:
     return None
 
 
-def _validate_uuid_or_opaque(value: Any, code: str) -> str | None:
+def _validate_uuid_only(value: Any, code: str) -> str | None:
     if not isinstance(value, str):
         return f"{code}_TYPE"
-    if _is_uuid(value) or _RE_OPAQUE_ID.fullmatch(value):
-        return None
-    return code
+    if not _is_uuid(value):
+        return code
+    return None
 
 
 def validate_backend_pin_sha(value: Any) -> str | None:
@@ -166,18 +188,36 @@ def validate_evaluation_policy_version(value: Any) -> str | None:
     return None
 
 
-def validate_question_or_objective_id(value: Any, code: str) -> str | None:
+def validate_bound_question_id(field_key: str, value: Any) -> str | None:
+    expected = _FIXTURE_QUESTION_IDS.get(field_key)
+    code = field_key.upper()
+    if expected is None:
+        return f"{code}_UNKNOWN"
     if not isinstance(value, str):
         return f"{code}_TYPE"
-    if _is_uuid(value) or _RE_QUESTION_OR_OBJ_ID.fullmatch(value):
-        return None
-    if _RE_OPAQUE_ID.fullmatch(value) and "-" in value:
-        return None
-    return code
+    if value != expected:
+        return f"{code}_MISMATCH"
+    return None
+
+
+def validate_bound_objective_id(field_key: str, value: Any) -> str | None:
+    expected = _FIXTURE_OBJECTIVE_IDS.get(field_key)
+    code = field_key.upper()
+    if expected is None:
+        return f"{code}_UNKNOWN"
+    if not isinstance(value, str):
+        return f"{code}_TYPE"
+    if value != expected:
+        return f"{code}_MISMATCH"
+    return None
 
 
 def validate_class_ref(value: Any) -> str | None:
-    return _validate_opaque_id(value, "CLASS_REF_GRAMMAR")
+    if not isinstance(value, str):
+        return "CLASS_REF_TYPE"
+    if value != EXPECTED_CLASS_REF:
+        return "CLASS_REF_MISMATCH"
+    return None
 
 
 def validate_summary_fields(obj: dict[str, Any], *, require_authority_pins: bool) -> str | None:
@@ -260,6 +300,21 @@ def validate_db_fields(obj: dict[str, Any], *, role: str) -> str | None:
         err = validate_host_port(obj.get("host_port"))
         if err:
             return err
+        port = obj.get("host_port")
+        started = obj.get("started_container")
+        if started is False and port != CI_PG_HOST_PORT:
+            return "HOST_PORT_CI_MISMATCH"
+        if started is True:
+            expected = (
+                LOCAL_PROBE_PG_HOST_PORT if role == "probe" else LOCAL_PRIMARY_PG_HOST_PORT
+            )
+            if port != expected:
+                return "HOST_PORT_OWNED_MISMATCH"
+    started = obj.get("started_container")
+    if started is False and "container_id_prefix" in obj:
+        return "CONTAINER_PREFIX_WHEN_NOT_STARTED"
+    if started is True and "container_id_prefix" not in obj:
+        return "MISSING_CONTAINER_PREFIX"
     if "container_name" in obj:
         err = validate_container_name(obj.get("container_name"))
         if err:
@@ -287,31 +342,29 @@ def validate_fixture_fields(obj: dict[str, Any]) -> str | None:
         return "SEED_NOT_OK"
     for key in ("tenant_id", "content_id", "version_id", "work_id"):
         if key in obj:
-            err = _validate_uuid_or_opaque(obj.get(key), f"{key.upper()}_GRAMMAR")
+            err = _validate_uuid_only(obj.get(key), f"{key.upper()}_GRAMMAR")
             if err:
                 return err
     if "class_ref" in obj:
         err = validate_class_ref(obj.get("class_ref"))
         if err:
             return err
-    for key in (
-        "q_correct_id",
-        "q_incorrect_id",
-        "q_unanswered_id",
-        "q_open_id",
-        "obj_demonstrated_id",
-        "obj_not_yet_id",
-        "obj_insufficient_id",
-    ):
+    for key in _FIXTURE_QUESTION_IDS:
         if key in obj:
-            err = validate_question_or_objective_id(obj.get(key), key.upper())
+            err = validate_bound_question_id(key, obj.get(key))
+            if err:
+                return err
+    for key in _FIXTURE_OBJECTIVE_IDS:
+        if key in obj:
+            err = validate_bound_objective_id(key, obj.get(key))
             if err:
                 return err
     if "evaluation_policy_id" in obj:
-        value = obj.get("evaluation_policy_id")
-        if not isinstance(value, str) or not _RE_EVAL_POLICY_ID.fullmatch(value):
-            return "EVALUATION_POLICY_ID_GRAMMAR"
+        if obj.get("evaluation_policy_id") != EXPECTED_EVALUATION_POLICY_ID:
+            return "EVALUATION_POLICY_ID_MISMATCH"
     if "evaluation_policy_version" in obj:
+        if obj.get("evaluation_policy_version") != EXPECTED_EVALUATION_POLICY_VERSION:
+            return "EVALUATION_POLICY_VERSION_MISMATCH"
         err = validate_evaluation_policy_version(obj.get("evaluation_policy_version"))
         if err:
             return err

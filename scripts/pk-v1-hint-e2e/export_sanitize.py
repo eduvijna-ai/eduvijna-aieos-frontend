@@ -100,9 +100,51 @@ SECRET_MARKERS = re.compile(
     re.IGNORECASE,
 )
 
+_RE_DECIMAL_PORT = re.compile(r"^[0-9]+$")
+_RE_CONTAINER_ID_PREFIX = re.compile(r"^[0-9a-fA-F]{12}$")
+_RE_FULL_CONTAINER_ID = re.compile(r"^[0-9a-fA-F]{12,64}$")
+
+CI_PG_HOST_PORT = 5432
+LOCAL_PRIMARY_PG_HOST_PORT = 55439
+LOCAL_PROBE_PG_HOST_PORT = 55440
+
 
 def _scalar(value: Any) -> bool:
     return isinstance(value, (str, int, float, bool)) or value is None
+
+
+def _coerce_governed_host_port(raw: Any, *, role: str) -> int:
+    if isinstance(raw, bool):
+        raise ValueError("host_port bool not allowed")
+    if isinstance(raw, int):
+        port = raw
+    elif isinstance(raw, str):
+        stripped = raw.strip()
+        if stripped != raw or not _RE_DECIMAL_PORT.fullmatch(stripped):
+            raise ValueError("host_port must be decimal digits")
+        port = int(stripped)
+    else:
+        raise ValueError("host_port type")
+    if port < 1024 or port > 65535:
+        raise ValueError("host_port out of range")
+    allowed_ci = {CI_PG_HOST_PORT}
+    if role == "probe":
+        allowed_owned = {LOCAL_PROBE_PG_HOST_PORT}
+    else:
+        allowed_owned = {LOCAL_PRIMARY_PG_HOST_PORT}
+    if port not in allowed_ci | allowed_owned:
+        raise ValueError("host_port not governed for pk-v1-hint")
+    return port
+
+
+def _container_id_prefix(report: dict[str, Any]) -> str:
+    container_id = report.get("container_id")
+    if not isinstance(container_id, str) or not _RE_FULL_CONTAINER_ID.fullmatch(container_id):
+        raise ValueError("container_id shape required for owned substrate")
+    prefix = container_id[:12].lower()
+    if not _RE_CONTAINER_ID_PREFIX.fullmatch(prefix):
+        raise ValueError("container_id_prefix shape")
+    return prefix
 
 
 def _pick_allowlisted(payload: dict[str, Any], allowlist: frozenset[str]) -> dict[str, Any]:
@@ -122,18 +164,36 @@ def _pick_allowlisted(payload: dict[str, Any], allowlist: frozenset[str]) -> dic
 
 
 def build_db_report_export(report: dict[str, Any]) -> dict[str, Any]:
-    base = {
+    role = report.get("role", "primary")
+    if role not in ("primary", "probe"):
+        raise ValueError("db report role")
+    started_container = report.get("started_container")
+    if started_container is not True and started_container is not False:
+        raise ValueError("started_container must be bool")
+    host_port = _coerce_governed_host_port(report.get("host_port"), role=role)
+    if started_container is False and host_port != CI_PG_HOST_PORT:
+        raise ValueError("ci host_port mismatch")
+    if started_container is True:
+        expected_owned = (
+            LOCAL_PROBE_PG_HOST_PORT if role == "probe" else LOCAL_PRIMARY_PG_HOST_PORT
+        )
+        if host_port != expected_owned:
+            raise ValueError("owned host_port mismatch")
+    base: dict[str, Any] = {
         "package_scenario_id": PACKAGE_SCENARIO_ID,
-        "role": report.get("role", "primary"),
+        "role": role,
         "postgres_major": report.get("postgres_major"),
         "migration_head": report.get("migration_head"),
-        "started_container": report.get("started_container"),
-        "host_port": report.get("host_port"),
+        "started_container": started_container,
+        "host_port": host_port,
         "backend_pin_sha": report.get("backend_pin_sha"),
         "container_name": report.get("container_name"),
-        "container_id_prefix": (report.get("container_id") or "")[:12] or None,
         "bootstrap_ok": True,
     }
+    if started_container is True:
+        base["container_id_prefix"] = _container_id_prefix(report)
+    elif report.get("container_id"):
+        raise ValueError("container_id present without started_container")
     return _pick_allowlisted(base, ALLOWLIST_DB_REPORT)
 
 

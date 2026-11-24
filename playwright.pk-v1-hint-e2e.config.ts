@@ -1,17 +1,23 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const TEACHER_FRONTEND_PORT = Number(
-  process.env.PK_V1_HINT_E2E_TEACHER_FRONTEND_PORT || 5191,
-);
-const STUDENT_FRONTEND_PORT = Number(
-  process.env.PK_V1_HINT_E2E_STUDENT_FRONTEND_PORT || 5192,
-);
-const TEACHER_BACKEND_PORT = Number(
-  process.env.PK_V1_HINT_E2E_TEACHER_BACKEND_PORT || 8028,
-);
-const STUDENT_BACKEND_PORT = Number(
-  process.env.PK_V1_HINT_E2E_STUDENT_BACKEND_PORT || 8029,
-);
+const GOVERNED_PORTS = {
+  PK_V1_HINT_E2E_TEACHER_BACKEND_PORT: 8028,
+  PK_V1_HINT_E2E_STUDENT_BACKEND_PORT: 8029,
+  PK_V1_HINT_E2E_TEACHER_FRONTEND_PORT: 5191,
+  PK_V1_HINT_E2E_STUDENT_FRONTEND_PORT: 5192,
+} as const;
+
+for (const [key, expected] of Object.entries(GOVERNED_PORTS)) {
+  const raw = process.env[key];
+  if (raw !== undefined && raw !== "" && Number(raw) !== expected) {
+    throw new Error(`Governed pk-v1-hint port override rejected: ${key}`);
+  }
+}
+
+const TEACHER_FRONTEND_PORT = GOVERNED_PORTS.PK_V1_HINT_E2E_TEACHER_FRONTEND_PORT;
+const STUDENT_FRONTEND_PORT = GOVERNED_PORTS.PK_V1_HINT_E2E_STUDENT_FRONTEND_PORT;
+const TEACHER_BACKEND_PORT = GOVERNED_PORTS.PK_V1_HINT_E2E_TEACHER_BACKEND_PORT;
+const STUDENT_BACKEND_PORT = GOVERNED_PORTS.PK_V1_HINT_E2E_STUDENT_BACKEND_PORT;
 
 const TEACHER_FRONTEND_URL = `http://127.0.0.1:${TEACHER_FRONTEND_PORT}`;
 const STUDENT_FRONTEND_URL = `http://127.0.0.1:${STUDENT_FRONTEND_PORT}`;
