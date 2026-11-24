@@ -1,0 +1,225 @@
+# PK-V1-HINT-E2E-I01 — Real-Stack Learner-Hint Proof (NON_PRODUCTION)
+
+Additive Playwright lane plus Backend PostgreSQL HTTP probes at pinned Backend
+`5bbc09bc895407b71a61f9ba86a7209ff9c10ffa`, OpenAPI SHA-256
+`0061BCF6065FAFA184F196829A87AF98ADEDFCE6B633D45704141A5B48045D22`, Alembic
+head `a360s010005`.
+
+## Topology
+
+```text
+Teacher Vite :5191 ──/api──► Teacher FastAPI :8028 ──┐
+Student Vite :5192 ──/api──► Student FastAPI :8029 ──┴──► PostgreSQL 18 journey DB
+Phase J pytest probes ──► isolated probe DB (:55440 local / aieos_hint_probe in CI)
+```
+
+Three opaque teacher bearer aliases map to distinct HUMAN principals (author,
+reviewer, publisher) via harness-local composition only. Student uses
+`dev-student-a`.
+
+## Run locally
+
+```bash
+export AIEOS_BACKEND_ROOT=/path/to/eduvijna-aieos-backend@5bbc09bc895407b71a61f9ba86a7209ff9c10ffa
+pnpm test:e2e:pk-v1-hint
+```
+
+## Evidence confidentiality (I01R1 / I01R2)
+
+- Local-only raw `tmp/pk-v1-hint-e2e-*.json` files are mode `0600` and excluded from CI artifacts.
+- CI uploads only allowlisted `tmp/pk-v1-hint-e2e-sanitized/` (`export_sanitize.py` positive allowlist).
+- Playwright trace/screenshot/video are OFF for this lane.
+- Backend pytest `postgres18` destructive fixtures run only on the isolated probe substrate (`bootstrap_probe_database.py`).
+- Governed Docker binds `127.0.0.1:hostPort:5432` only; owned lifecycle cleanup on partial bootstrap failure.
+
+## Pre-CI safety (I01R9)
+
+- Sanitized artifact upload audit applies per-field semantic grammars (SHA,
+  UUID/token IDs, migration/OpenAPI pins, stewardship enums) — arbitrary short
+  prose in allowlisted keys is rejected without echoing payload content in CLI
+  output.
+- Webserver release accepts only four explicit `CLOSED` governed ports;
+  `undefined` / `null` / probe throws map to `UNKNOWN` and block owned PG
+  teardown via `evaluateWebserverReleaseGate`.
+
+## Pre-CI safety (I01R10)
+
+- `build_db_report_export` normalizes bootstrap string ports to governed integers
+  (`5432` CI service, `55439`/`55440` owned local) and omits
+  `container_id_prefix` when `started_container` is false (no JSON null).
+- Fixture audit requires UUID tenant/content/version/work IDs, exact `class-5a`,
+  deterministic `q-*` / `obj-*` IDs, and
+  `aieos.learner_assessment.deterministic` policy version `1`.
+- `emit_sanitized_evidence.build_evidence_summary` omits unverified authority
+  scalars so early-failure summaries pass upload-only audit without implying
+  E2E_PASS.
+- `hint_e2e_port_binding_guard` and `playwright.pk-v1-hint-e2e.config.ts` reject
+  governed port env overrides before managed Playwright starts.
+
+## Pre-CI safety (I01R8)
+
+- Governed webserver probe is tri-state: `ECONNREFUSED` ⇒ CLOSED; successful
+  connect ⇒ LISTENING; timeout / other errors ⇒ UNKNOWN (never treated as free).
+  Fixed ports `8028/8029/5191/5192` on `127.0.0.1` only — no env port override.
+- ANY LISTENING/UNKNOWN port or unobserved child `close` skips owned PG removal,
+  preserves ownership records, and forces managed wrapper `LIFECYCLE_UNCERTAIN`
+  (nonzero exit) even when Playwright child exit is 0.
+- CI artifact upload audit walks every top-level entry (reject nested dirs,
+  symlinks, forbidden types); only 1–4 flat allowlisted JSON files; structured
+  field validation is separate from `E2E_PASS`.
+
+## Pre-CI safety (I01R7)
+
+- `E2E_PASS` requires strict lifecycle proof (`child_exit===0`, export/teardown ok, no
+  unsafe `skip_container_teardown`) plus complete sanitized artifact JSON (not `{}` or
+  missing pins); S30/S31 must remain `DEFERRED_BY_ADR` in the committed ledger.
+- Governed webserver ports `8028/8029/5191/5192` must be released after Playwright
+  `close` before owned local PG removal (foreign listeners block teardown).
+- CI uploads sanitized bundles on green **and** red after `audit_sanitized_artifacts.py`;
+  upload safety is separate from `E2E_PASS`.
+- Verifier self-tests use `TemporaryDirectory` only; they never write/unlink repo `tmp/`.
+
+## Pre-CI safety (I01R6)
+
+- Post-run verifier enforces evidence contract v1: 67-row committed SP02A ledger,
+  artifact files must match `has_*` flags, governed Backend/OpenAPI/migration pins,
+  and `attempt_run_id` binding; no green on empty or forged proof.
+- Child PG teardown requires an observed Playwright child `close` (not `exitCode` alone).
+- Verifier self-tests use injected temp paths only; they do not mutate live `tmp/` receipts.
+
+## Pre-CI safety (I01R5)
+
+- Sanitized export failure no longer skips owned-container removal or raw credential
+  file scrub; teardown reports distinct export/cleanup/raw failure codes.
+- CI post-test verification uses `--require-e2e-evidence` (not child-only `PK_V1_HINT_E2E_RAN`).
+- Managed wrapper writes `tmp/pk-v1-hint-e2e-attempt-status.json` and skips local PG
+  teardown when the Playwright child does not close before timeout.
+- CI-external mode requires `PK_V1_HINT_E2E_CI_EXTERNAL_PG=1` plus governed loopback DSNs
+  (`ci_external_guard.py`); arbitrary inherited DSNs do not enable external skip.
+- Probe pytest subprocess env uses a positive allowlist (no provider token passthrough).
+
+## Pre-CI safety (I01R4)
+
+- Backend pytest subprocess env is built by `build_safe_probe_subprocess_env`
+  (strips every inherited `*DATABASE_URL*` route; re-injects probe-only URLs).
+- `localhost` and `127.0.0.1` canonicalize to the same physical DB target.
+- Teardown exports `tmp/pk-v1-hint-e2e-sanitized/` before deleting raw reports;
+  CI verifies existing sanitized output (no post-teardown regeneration).
+- Owned Docker containers are removed only after live ID/label verification;
+  inspection or removal failure preserves non-secret ownership records.
+- Managed wrapper exits non-zero when teardown fails even if Playwright passed.
+
+## Pre-CI safety (I01R3)
+
+- CI probe database `aieos_hint_probe` is created via existing journey admin DSN
+  (`AIEOS_TEST_BOOTSTRAP_DATABASE_URL` → `aieos`) only; probe role URLs target
+  `aieos_hint_probe` after creation.
+- Journey vs probe isolation compares physical target `(host, port, database)` only.
+- `test:e2e:pk-v1-hint` runs through `run_managed_pk_v1_hint_e2e.mjs` with global
+  teardown of owned primary+probe containers and raw tmp artifacts (CI service PG preserved).
+- `tier_counts` export keys are limited to enumerated SP02A evidence tiers.
+
+## SP02A S01–S67 ledger (sum = 67)
+
+| Scenario | Policy (summary) | Evidence tier | Test / probe path | Run / SHA |
+|----------|------------------|---------------|-------------------|-----------|
+| S01 | Learner hint disclosure control | NOT_TESTED | `e2e-pk-v1-hint/learner-hint-vertical.product.spec.ts (await CI)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S02 | Learner hint disclosure control | NOT_TESTED | `e2e-pk-v1-hint/learner-hint-vertical.product.spec.ts (await CI)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S03 | Learner hint disclosure control | NOT_TESTED | `e2e-pk-v1-hint/learner-hint-vertical.product.spec.ts (await CI)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S04 | Learner hint disclosure control | NOT_TESTED | `e2e-pk-v1-hint/learner-hint-vertical.product.spec.ts (await CI)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S05 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S06 | Learner hint disclosure control | NOT_TESTED | `e2e-pk-v1-hint/learner-hint-vertical.product.spec.ts (await CI)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S07 | Learner hint disclosure control | NOT_TESTED | `e2e-pk-v1-hint/learner-hint-vertical.product.spec.ts (await CI)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S08 | Learner hint disclosure control | NOT_TESTED | `e2e-pk-v1-hint/learner-hint-vertical.product.spec.ts (await CI)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S09 | Learner hint disclosure control | NOT_TESTED | `e2e-pk-v1-hint/learner-hint-vertical.product.spec.ts (await CI)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S10 | Learner hint disclosure control | NOT_TESTED | `e2e-pk-v1-hint/learner-hint-vertical.product.spec.ts (await CI)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S11 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S12 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S13 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S14 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S15 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S16 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S17 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S18 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S19 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S20 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S21 | Learner hint disclosure control | NOT_TESTED | `e2e-pk-v1-hint/learner-hint-vertical.product.spec.ts (await CI)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S22 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py::TestLearnerHintsConcurrency (probe DB only)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S23 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S24 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S25 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S26 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S27 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S28 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S29 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S30 | Learner hint disclosure control | DEFERRED_BY_ADR | `ADR-AIEOS-063 SP02A exclusion` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S31 | Learner hint disclosure control | DEFERRED_BY_ADR | `ADR-AIEOS-063 SP02A exclusion` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S32 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S33 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S34 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S35 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S36 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S37 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S38 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S39 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S40 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S41 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S42 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S43 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S44 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S45 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S46 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S47 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S48 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S49 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S50 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S51 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py::TestLearnerHintsConcurrency (probe DB only)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S52 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py::TestLearnerHintsConcurrency (probe DB only)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S53 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py::TestLearnerHintsConcurrency (probe DB only)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S54 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S55 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S56 | Learner hint disclosure control | NOT_TESTED | `tests/domains/learning/test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S57 | Learner hint disclosure control | NOT_TESTED | `e2e-pk-v1-hint Phase H–I Assessment→Improve (await CI)` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S58 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S59 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S60 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S61 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S62 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S63 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S64 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S65 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S66 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+| S67 | Learner hint disclosure control | NOT_TESTED | `tests/domains/education/test_aieos_v1_hint_t0_b_http.py and/or test_aieos_v1_hint_b.py` | NOT_EXECUTED_LOCAL / await Chief CI |
+
+
+### Tier counts
+
+- DEFERRED_BY_ADR: 2
+- NOT_TESTED: 65
+- **Total**: 67
+
+## CI observation — PK-V1-HINT-E2E-I01-CI02 (parent `7c2c47aa`)
+
+- Workflow run `#45325904897` (head `7c2c47aa22bd1d5d5107de85c1b3cec6c7628e9e`):
+  completed **failure**; pk-v1-hint-e2e job `138215318495`.
+- Playwright vertical: Phase A–B **pass**; Phase C failed at
+  `worksheet-hint-review` not found (prior navigation-before-connect ordering).
+- Sanitized artifact `14889113620`: summary + primary PG18 + fixture; no probe
+  report; uploaded summary `github_sha` is PR merge-ref (distinct from branch
+  HEAD by design).
+
+## CI02R1 test-only correction
+
+- Reviewer DEV session on `/teacher-os/today` before review-detail navigation.
+- `preflightReviewerQueueDetail`: GET review-queue detail via Vite proxy;
+  assert schema `education.worksheet` @2 and q-open `learner_hint` key presence
+  (no hint text in logs).
+- `assertWorksheetHintReviewPanelReady`: fixed codes
+  (`REVIEW_UI_SESSION_UNAVAILABLE`, `REVIEW_UI_RESOURCE_ERROR`, etc.) on UI miss.
+
+## Explicit non-claims
+
+- No `REAL_STACK_EXECUTED_PASS` row is claimed until Chief-controlled CI executes the lane.
+- Development harness ≠ production ERP/SIS integration
+- Product source `b4b3048…` Chief-attested; Cursor-unverified (404)
+- Architecture pin `3c0a66aa…` Chief-attested; Cursor GitHub connector could not verify architecture repo

@@ -9,6 +9,74 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-E2E-I01-CI02R1: Phase C reviewer session-first sequencing on
+  `/teacher-os/today`, bounded non-mutating review-queue GET preflight with
+  fixed safe HTTP/metadata codes, and classified UI failure categories before
+  attestation (Draft PR #53 only; CI run #45325904897 Phase C
+  `worksheet-hint-review` timeout prior).
+
+- PK-V1-HINT-E2E-I01R10: Governed DB report boundary normalization
+  (`host_port` int in sanitized export, omit `container_id_prefix` for CI
+  service), UUID-only fixture IDs with exact class/q/obj bindings, partial
+  failure summary omitting unverified pins, governed Playwright port binding
+  guard, and production-shaped sanitizer→audit integration tests.
+
+- PK-V1-HINT-E2E-I01R9: Field-level semantic grammars in
+  `audit_sanitized_artifacts.py` (reject marker-free narrative in allowlisted
+  values); hardlink/symlink/flat-tree guards; CLOSED-only webserver release
+  with normalized probe states and fail-closed gate wrapper tests.
+
+- PK-V1-HINT-E2E-I01R8: Tri-state governed webserver port release
+  (`LISTENING` / `CLOSED` / `UNKNOWN`) with fail-closed
+  `LIFECYCLE_UNCERTAIN` when teardown is skipped locally; recursive flat-only
+  sanitized artifact privacy audit with structured JSON validation; adversarial
+  audit/webserver self-tests in isolated temp roots.
+
+- PK-V1-HINT-E2E-I01R7: Strict E2E_PASS proof binding (mandatory pins, full
+  artifact JSON validation, S30/S31 deferred checks, CI run-id binding),
+  isolated verifier tests (no repo `tmp` mutation), governed webserver port
+  release before owned PG teardown, CI upload audit for green+red sanitized
+  evidence, and fail-closed missing-attempt detection after E2E step.
+
+- PK-V1-HINT-E2E-I01R6: Strict executed-evidence verifier contract (67-row
+  SP02A ledger binding, artifact presence, governed pin SHA/OpenAPI/migration,
+  no green on empty/forged proof), observed-only child `close` for PG teardown,
+  temp-root isolated verifier self-tests, and versioned sanitized summary
+  metadata (`attempt_run_id`, `generated_at_ms`).
+
+- PK-V1-HINT-E2E-I01R5: Fail-closed full teardown on sanitized export failure,
+  strict CI post-test evidence verification (`--require-e2e-evidence`),
+  child shutdown-before-PG-destruction lifecycle, governed CI-external
+  classification, positive probe subprocess env allowlist, and injected
+  export-fail / verifier / child-timeout self-tests.
+
+- PK-V1-HINT-E2E-I01R4: Full probe pytest subprocess env scrub (no inherited
+  journey DSNs), loopback alias normalization in physical target guard,
+  fail-closed owned-container teardown with ownership-record preservation,
+  sanitized evidence export before raw tmp deletion, managed-wrapper lifecycle
+  exit 124 on teardown failure, and injected lifecycle/sanitize self-tests.
+
+- PK-V1-HINT-E2E-I01R3: CI probe DB creation via journey admin `aieos`
+  connection (not absent `aieos_hint_probe`), physical host/port/db DSN guard
+  (role-independent), managed Playwright lifecycle teardown, stricter loopback
+  Docker destruction policy, enumerated SP02A tier export keys, and static
+  creation-order self-tests.
+
+- PK-V1-HINT-E2E-I01R2: Probe/journey DB isolation for Backend pytest,
+  loopback-only Docker ownership policy, allowlisted CI exporters,
+  credential-safe harness errors, and expanded static safety self-tests.
+
+- PK-V1-HINT-E2E-I01R1: Security-sanitized real-stack hint harness — owned PG18
+  lifecycle (no `start_postgres` destroy), DSN allowlist + sanitize exporters,
+  q-open Phase F binding, S57 Assessment→Improve phases, lock probe mapping
+  S22/S51–S53, 67-row SP02A ledger, CI sanitized-artifacts only.
+
+- PK-V1-HINT-E2E-I01: Additive real-stack Playwright lane
+  `test:e2e:pk-v1-hint`, disposable PostgreSQL 18 harness under
+  `scripts/pk-v1-hint-e2e/`, three-human teacher bearer composition, and
+  isolated CI job `pk-v1-hint-e2e` at Backend pin
+  `5bbc09bc895407b71a61f9ba86a7209ff9c10ffa`.
+
 - PK-V1-HINT-T0-F-I01: Teacher Library worksheet learner-hint authoring
   (`WorksheetHintAuthorPage`) and Review structured attestation
   (`WorksheetHintReviewPanel`); consumer OpenAPI pin Backend

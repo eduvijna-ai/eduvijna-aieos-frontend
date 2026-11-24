@@ -25,6 +25,7 @@
     "test:e2e:aieos360-s02-i04": "playwright test --config playwright.aieos360-s02-i04.config.ts",
     "test:e2e:aieos360-s03-i04": "playwright test --config playwright.aieos360-s03-i04.config.ts",
     "test:e2e:aieos360-s04-i03": "playwright test --config playwright.aieos360-s04-i03.config.ts",
+    "test:e2e:pk-v1-hint": "node scripts/pk-v1-hint-e2e/run_managed_pk_v1_hint_e2e.mjs",
     "showcase:aieos360:reset": "node scripts/aieos360-cx01-i01r9-showcase-rehearsal/reset.mjs",
     "showcase:aieos360:start": "node scripts/aieos360-cx01-i01r9-showcase-rehearsal/start.mjs",
     "showcase:aieos360:status": "node scripts/aieos360-cx01-i01r9-showcase-rehearsal/status.mjs",
