@@ -20,6 +20,21 @@ export function governedLocalPorts() {
   return [...GOVERNED_LOCAL_PORTS];
 }
 
+/**
+ * Only literal CLOSED is accepted as released; every other signal is UNKNOWN.
+ * @param {unknown} state
+ * @returns {PortProbeState}
+ */
+export function normalizePortProbeState(state) {
+  if (state === "CLOSED") {
+    return "CLOSED";
+  }
+  if (state === "LISTENING") {
+    return "LISTENING";
+  }
+  return "UNKNOWN";
+}
+
 function validateGovernedPortBinding(host) {
   const ports = governedLocalPorts();
   if (host !== GOVERNED_LOOPBACK_HOST) {
@@ -74,6 +89,20 @@ function delay(ms) {
 }
 
 /**
+ * @param {PortProbe} probe
+ * @param {string} host
+ * @param {number} port
+ */
+async function safeProbePort(probe, host, port) {
+  try {
+    const raw = await probe.probePort(host, port);
+    return normalizePortProbeState(raw);
+  } catch {
+    return "UNKNOWN";
+  }
+}
+
+/**
  * @param {PortProbe} [probe]
  * @param {string} [host]
  * @param {{ maxRetries?: number; retryDelayMs?: number }} [options]
@@ -88,7 +117,7 @@ export async function verifyGovernedWebserversReleased(
     return {
       released: false,
       occupiedPorts: [],
-      unknownPorts: [],
+      unknownPorts: [...GOVERNED_LOCAL_PORTS],
       ambiguous: true,
       bindingReason: binding.reason,
     };
@@ -100,21 +129,25 @@ export async function verifyGovernedWebserversReleased(
   const unknownPorts = [];
 
   for (const port of binding.ports) {
-    let state = await probe.probePort(host, port);
+    let state = await safeProbePort(probe, host, port);
     let attempts = 0;
     while (attempts < maxRetries && state !== "CLOSED") {
       if (state === "LISTENING" || state === "UNKNOWN") {
         await delay(retryDelayMs);
-        state = await probe.probePort(host, port);
+        state = await safeProbePort(probe, host, port);
         attempts += 1;
         continue;
       }
+      state = "UNKNOWN";
       break;
     }
 
+    if (state === "CLOSED") {
+      continue;
+    }
     if (state === "LISTENING") {
       occupiedPorts.push(port);
-    } else if (state === "UNKNOWN") {
+    } else {
       unknownPorts.push(port);
     }
   }
@@ -139,4 +172,58 @@ export function allowDatabaseTeardownAfterWebservers(state) {
     return false;
   }
   return state.released === true;
+}
+
+/**
+ * Fail-closed webserver gate shared with the managed E2E wrapper.
+ * @param {{ closed?: boolean } | null | undefined} childState
+ * @param {PortProbe} [probe]
+ */
+export async function evaluateWebserverReleaseGate(childState, probe = createTcpPortProbe()) {
+  if (!childState || childState.closed !== true) {
+    return {
+      released: false,
+      skipped: true,
+      reason: "CHILD_NOT_CLOSED",
+      lifecycleUncertain: true,
+      occupiedPorts: [],
+      unknownPorts: [],
+      ambiguous: true,
+    };
+  }
+
+  let webState;
+  try {
+    webState = await verifyGovernedWebserversReleased(probe);
+  } catch {
+    webState = {
+      released: false,
+      occupiedPorts: [],
+      unknownPorts: [...GOVERNED_LOCAL_PORTS],
+      ambiguous: true,
+      probeRejected: true,
+    };
+  }
+
+  if (!allowDatabaseTeardownAfterWebservers(webState)) {
+    const reason =
+      (webState.unknownPorts || []).length > 0
+        ? "WEBSERVER_PORT_UNKNOWN"
+        : (webState.occupiedPorts || []).length > 0
+          ? "PORTS_STILL_LISTENING"
+          : webState.bindingReason || "WEBSERVER_RELEASE_UNCERTAIN";
+    return {
+      ...webState,
+      skipped: false,
+      reason,
+      lifecycleUncertain: true,
+    };
+  }
+
+  return {
+    ...webState,
+    skipped: false,
+    reason: null,
+    lifecycleUncertain: false,
+  };
 }

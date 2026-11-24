@@ -32,6 +32,16 @@ pnpm test:e2e:pk-v1-hint
 - Backend pytest `postgres18` destructive fixtures run only on the isolated probe substrate (`bootstrap_probe_database.py`).
 - Governed Docker binds `127.0.0.1:hostPort:5432` only; owned lifecycle cleanup on partial bootstrap failure.
 
+## Pre-CI safety (I01R9)
+
+- Sanitized artifact upload audit applies per-field semantic grammars (SHA,
+  UUID/token IDs, migration/OpenAPI pins, stewardship enums) — arbitrary short
+  prose in allowlisted keys is rejected without echoing payload content in CLI
+  output.
+- Webserver release accepts only four explicit `CLOSED` governed ports;
+  `undefined` / `null` / probe throws map to `UNKNOWN` and block owned PG
+  teardown via `evaluateWebserverReleaseGate`.
+
 ## Pre-CI safety (I01R8)
 
 - Governed webserver probe is tri-state: `ECONNREFUSED` ⇒ CLOSED; successful

@@ -3,15 +3,31 @@ import assert from "node:assert/strict";
 import {
   GOVERNED_LOCAL_PORTS,
   allowDatabaseTeardownAfterWebservers,
+  evaluateWebserverReleaseGate,
   governedLocalPorts,
+  normalizePortProbeState,
   verifyGovernedWebserversReleased,
 } from "./managed_webserver_lifecycle.mjs";
 
 const probeFactory = (portStates) => ({
   async probePort(_host, port) {
-    return portStates.get(port) ?? "UNKNOWN";
+    const state = portStates.get(port);
+    if (state instanceof Error) {
+      throw state;
+    }
+    if (typeof state === "function") {
+      return state();
+    }
+    return state;
   },
 });
+
+assert.equal(normalizePortProbeState("CLOSED"), "CLOSED");
+assert.equal(normalizePortProbeState("LISTENING"), "LISTENING");
+assert.equal(normalizePortProbeState("UNKNOWN"), "UNKNOWN");
+assert.equal(normalizePortProbeState(undefined), "UNKNOWN");
+assert.equal(normalizePortProbeState(null), "UNKNOWN");
+assert.equal(normalizePortProbeState("ERROR"), "UNKNOWN");
 
 assert.deepEqual(governedLocalPorts(), [...GOVERNED_LOCAL_PORTS]);
 
@@ -21,6 +37,56 @@ const allClosed = await verifyGovernedWebserversReleased(
 assert.equal(allClosed.released, true);
 assert.equal(allClosed.ambiguous, false);
 assert.equal(allowDatabaseTeardownAfterWebservers(allClosed), true);
+
+const undefinedPort = await verifyGovernedWebserversReleased(
+  probeFactory(
+    new Map([
+      [8028, undefined],
+      [8029, "CLOSED"],
+      [5191, "CLOSED"],
+      [5192, "CLOSED"],
+    ]),
+  ),
+  "127.0.0.1",
+  { maxRetries: 0 },
+);
+assert.deepEqual(undefinedPort.unknownPorts, [8028]);
+
+const nullPort = await verifyGovernedWebserversReleased(
+  probeFactory(
+    new Map([
+      [8028, null],
+      [8029, "CLOSED"],
+      [5191, "CLOSED"],
+      [5192, "CLOSED"],
+    ]),
+  ),
+  "127.0.0.1",
+  { maxRetries: 0 },
+);
+assert.deepEqual(nullPort.unknownPorts, [8028]);
+
+const errorLiteral = await verifyGovernedWebserversReleased(
+  probeFactory(
+    new Map([
+      [8028, "ERROR"],
+      [8029, "CLOSED"],
+      [5191, "CLOSED"],
+      [5192, "CLOSED"],
+    ]),
+  ),
+  "127.0.0.1",
+  { maxRetries: 0 },
+);
+assert.deepEqual(errorLiteral.unknownPorts, [8028]);
+
+const rejectedProbe = await verifyGovernedWebserversReleased(
+  probeFactory(new Map(GOVERNED_LOCAL_PORTS.map((p) => [p, new Error("probe failed")]))),
+  "127.0.0.1",
+  { maxRetries: 0 },
+);
+assert.equal(rejectedProbe.released, false);
+assert.deepEqual(rejectedProbe.unknownPorts, [...GOVERNED_LOCAL_PORTS]);
 
 const oneListening = await verifyGovernedWebserversReleased(
   probeFactory(
@@ -82,6 +148,17 @@ const nonLoopback = await verifyGovernedWebserversReleased(
 );
 assert.equal(nonLoopback.ambiguous, true);
 assert.equal(allowDatabaseTeardownAfterWebservers(nonLoopback), false);
+
+const childClosedAmbiguous = await evaluateWebserverReleaseGate(
+  { closed: true },
+  probeFactory(new Map([[8028, "UNKNOWN"], [8029, "CLOSED"], [5191, "CLOSED"], [5192, "CLOSED"]])),
+);
+assert.equal(childClosedAmbiguous.lifecycleUncertain, true);
+assert.equal(childClosedAmbiguous.reason, "WEBSERVER_PORT_UNKNOWN");
+
+const childNotClosed = await evaluateWebserverReleaseGate({ closed: false });
+assert.equal(childNotClosed.lifecycleUncertain, true);
+assert.equal(childNotClosed.reason, "CHILD_NOT_CLOSED");
 
 assert.equal(allowDatabaseTeardownAfterWebservers({ released: false, ambiguous: true }), false);
 

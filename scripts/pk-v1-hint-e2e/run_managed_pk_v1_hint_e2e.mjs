@@ -13,10 +13,7 @@ import {
   allowOwnedDatabaseTeardown,
   waitForChildShutdown,
 } from "./managed_child_lifecycle.mjs";
-import {
-  allowDatabaseTeardownAfterWebservers,
-  verifyGovernedWebserversReleased,
-} from "./managed_webserver_lifecycle.mjs";
+import { evaluateWebserverReleaseGate } from "./managed_webserver_lifecycle.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "../..");
@@ -106,20 +103,16 @@ async function gateWebserversBeforeTeardown(childState) {
       skipped: true,
       reason: "CHILD_NOT_CLOSED",
       lifecycleUncertain: true,
+      occupiedPorts: [],
+      unknownPorts: [],
+      ambiguous: true,
     };
   }
-  const webState = await verifyGovernedWebserversReleased();
-  if (!allowDatabaseTeardownAfterWebservers(webState)) {
+  const gate = await evaluateWebserverReleaseGate(childState);
+  if (gate.lifecycleUncertain) {
     skipContainerTeardown = true;
-    const reason =
-      (webState.unknownPorts || []).length > 0
-        ? "WEBSERVER_PORT_UNKNOWN"
-        : (webState.occupiedPorts || []).length > 0
-          ? "PORTS_STILL_LISTENING"
-          : "WEBSERVER_RELEASE_UNCERTAIN";
-    return { ...webState, skipped: false, reason, lifecycleUncertain: true };
   }
-  return { ...webState, skipped: false, reason: null, lifecycleUncertain: false };
+  return gate;
 }
 
 async function shutdownAndExit(childExitCode, childState = { closed: true, timedOut: false }) {

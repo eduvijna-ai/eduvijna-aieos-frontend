@@ -9,6 +9,11 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-E2E-I01R9: Field-level semantic grammars in
+  `audit_sanitized_artifacts.py` (reject marker-free narrative in allowlisted
+  values); hardlink/symlink/flat-tree guards; CLOSED-only webserver release
+  with normalized probe states and fail-closed gate wrapper tests.
+
 - PK-V1-HINT-E2E-I01R8: Tri-state governed webserver port release
   (`LISTENING` / `CLOSED` / `UNKNOWN`) with fail-closed
   `LIFECYCLE_UNCERTAIN` when teardown is skipped locally; recursive flat-only

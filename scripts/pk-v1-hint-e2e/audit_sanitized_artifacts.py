@@ -10,11 +10,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from artifact_semantic_validation import (
+    validate_db_fields,
+    validate_fixture_fields,
+    validate_summary_fields,
+)
 from export_sanitize import (
     ALLOWLIST_DB_REPORT,
     ALLOWLIST_FIXTURE,
     ALLOWLIST_SUMMARY,
-    ALLOWED_EVIDENCE_TIERS,
     EVIDENCE_CONTRACT_VERSION,
     PACKAGE_SCENARIO_ID,
     SECRET_MARKERS,
@@ -35,9 +39,6 @@ _ALLOWED_TOP_FILES = frozenset(
 
 _FORBIDDEN_SUFFIXES = (".html", ".zip", ".png", ".webm", ".trace", ".log")
 
-_SCALAR = (str, int, float, bool, type(None))
-_MAX_STRING_LEN = 256
-
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
@@ -52,22 +53,10 @@ def _sanitized_dir() -> Path:
     )
 
 
-def _reject_unsafe_string(value: Any, field: str) -> str | None:
-    if not isinstance(value, str):
-        return f"{field}_TYPE"
-    if len(value) > _MAX_STRING_LEN:
-        return f"{field}_TOO_LONG"
-    if "\n" in value or "\r" in value:
-        return f"{field}_MULTILINE"
-    if SECRET_MARKERS.search(value):
-        return f"{field}_SECRET_MARKER"
-    return None
-
-
 def _assert_allowlisted_keys(obj: dict[str, Any], allowlist: frozenset[str]) -> str | None:
     extra = set(obj.keys()) - set(allowlist)
     if extra:
-        return f"UNKNOWN_KEY:{sorted(extra)[0]}"
+        return "UNKNOWN_KEY"
     return None
 
 
@@ -79,38 +68,9 @@ def _validate_summary_payload(obj: dict[str, Any], *, require_full_bundle: bool)
         return "UNSUPPORTED_EVIDENCE_CONTRACT"
     if obj.get("package_scenario_id") != PACKAGE_SCENARIO_ID:
         return "PACKAGE_SCENARIO_MISMATCH"
-    if not isinstance(obj.get("sanitized_evidence_ok"), bool):
-        return "SANITIZED_EVIDENCE_OK_TYPE"
-    tier_counts = obj.get("tier_counts")
-    if tier_counts is not None:
-        if not isinstance(tier_counts, dict):
-            return "TIER_COUNTS_TYPE"
-        total = 0
-        for key, value in tier_counts.items():
-            if not isinstance(key, str) or key not in ALLOWED_EVIDENCE_TIERS:
-                return "TIER_COUNTS_KEY"
-            if not isinstance(value, int) or value < 0:
-                return "TIER_COUNTS_VALUE"
-            total += value
-        if require_full_bundle and total != 67:
-            return "TIER_COUNTS_SUM"
-    for key in ("ledger_row_count", "generated_at_ms"):
-        if key in obj and not isinstance(obj[key], int):
-            return f"{key}_TYPE"
-    for key in (
-        "attempt_run_id",
-        "github_sha",
-        "backend_pin_sha",
-        "openapi_authority_sha",
-        "migration_head",
-    ):
-        if key in obj:
-            err = _reject_unsafe_string(obj[key], key)
-            if err:
-                return err
-    for key in ("has_fixture", "has_db_report", "has_probe_db_report"):
-        if key in obj and not isinstance(obj[key], bool):
-            return f"{key}_TYPE"
+    semantic = validate_summary_fields(obj, require_authority_pins=require_full_bundle)
+    if semantic:
+        return semantic
     try:
         build_summary_export(obj)
     except ValueError:
@@ -122,17 +82,9 @@ def _validate_db_payload(obj: dict[str, Any], *, role: str) -> str | None:
     code = _assert_allowlisted_keys(obj, ALLOWLIST_DB_REPORT)
     if code:
         return code
-    if obj.get("role") != role:
-        return "DB_ROLE_MISMATCH"
-    if obj.get("postgres_major") != 18:
-        return "POSTGRES_MAJOR"
-    if obj.get("bootstrap_ok") is not True:
-        return "BOOTSTRAP_NOT_OK"
-    for key in ("migration_head", "backend_pin_sha", "container_name", "container_id_prefix"):
-        if key in obj:
-            err = _reject_unsafe_string(obj[key], key)
-            if err:
-                return err
+    semantic = validate_db_fields(obj, role=role)
+    if semantic:
+        return semantic
     try:
         build_db_report_export({**obj, "role": role})
     except ValueError:
@@ -144,13 +96,9 @@ def _validate_fixture_payload(obj: dict[str, Any]) -> str | None:
     code = _assert_allowlisted_keys(obj, ALLOWLIST_FIXTURE)
     if code:
         return code
-    if obj.get("seed_ok") is not True:
-        return "SEED_NOT_OK"
-    for key, value in obj.items():
-        if isinstance(value, str):
-            err = _reject_unsafe_string(value, key)
-            if err:
-                return err
+    semantic = validate_fixture_fields(obj)
+    if semantic:
+        return semantic
     try:
         build_fixture_export(obj)
     except ValueError:
@@ -161,6 +109,8 @@ def _validate_fixture_payload(obj: dict[str, Any]) -> str | None:
 def _enumerate_flat_entries(out_dir: Path) -> tuple[list[Path] | None, str | None]:
     entries: list[Path] = []
     try:
+        if out_dir.is_symlink():
+            return None, "SYMLINK_ENTRY"
         names = sorted(out_dir.iterdir(), key=lambda p: p.name)
     except OSError:
         return None, "DIR_READ_FAILED"
@@ -175,8 +125,11 @@ def _enumerate_flat_entries(out_dir: Path) -> tuple[list[Path] | None, str | Non
                 return None, "NESTED_DIRECTORY"
             if not entry.is_file():
                 return None, "SPECIAL_FILE_ENTRY"
-            if stat.S_ISFIFO(entry.stat().st_mode) or stat.S_ISSOCK(entry.stat().st_mode):
+            mode = entry.stat().st_mode
+            if stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode):
                 return None, "SPECIAL_FILE_ENTRY"
+            if entry.stat().st_nlink > 1:
+                return None, "HARDLINKED_FILE_ENTRY"
         except OSError:
             return None, "ENTRY_STAT_FAILED"
         if any(name.endswith(suffix) for suffix in _FORBIDDEN_SUFFIXES):
@@ -199,7 +152,7 @@ def audit_sanitized_dir(out_dir: Path) -> tuple[bool, str, dict]:
     file_names = [p.name for p in entries]
     for name in file_names:
         if name not in _ALLOWED_TOP_FILES:
-            return False, "UNALLOWED_ARTIFACT_FILE", {"audit_ok": False, "file": name}
+            return False, "UNALLOWED_ARTIFACT_FILE", {"audit_ok": False}
 
     if "evidence-summary.json" not in file_names:
         return False, "MISSING_EVIDENCE_SUMMARY", {"audit_ok": False}
@@ -215,9 +168,9 @@ def audit_sanitized_dir(out_dir: Path) -> tuple[bool, str, dict]:
         try:
             obj = json.loads(entry.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
-            return False, "MALFORMED_JSON", {"audit_ok": False, "file": entry.name}
+            return False, "MALFORMED_JSON", {"audit_ok": False}
         if not isinstance(obj, dict) or not obj:
-            return False, "EMPTY_OR_NON_OBJECT_JSON", {"audit_ok": False, "file": entry.name}
+            return False, "EMPTY_OR_NON_OBJECT_JSON", {"audit_ok": False}
         parsed[entry.name] = obj
 
     summary_err = _validate_summary_payload(
@@ -225,20 +178,20 @@ def audit_sanitized_dir(out_dir: Path) -> tuple[bool, str, dict]:
         require_full_bundle=require_full_bundle,
     )
     if summary_err:
-        return False, summary_err, {"audit_ok": False, "file": "evidence-summary.json"}
+        return False, summary_err, {"audit_ok": False}
 
     if "db-report-sanitized.json" in parsed:
         err = _validate_db_payload(parsed["db-report-sanitized.json"], role="primary")
         if err:
-            return False, err, {"audit_ok": False, "file": "db-report-sanitized.json"}
+            return False, err, {"audit_ok": False}
     if "probe-db-report-sanitized.json" in parsed:
         err = _validate_db_payload(parsed["probe-db-report-sanitized.json"], role="probe")
         if err:
-            return False, err, {"audit_ok": False, "file": "probe-db-report-sanitized.json"}
+            return False, err, {"audit_ok": False}
     if "fixture-sanitized.json" in parsed:
         err = _validate_fixture_payload(parsed["fixture-sanitized.json"])
         if err:
-            return False, err, {"audit_ok": False, "file": "fixture-sanitized.json"}
+            return False, err, {"audit_ok": False}
 
     leaks: list[str] = []
     for entry in entries:
@@ -251,7 +204,6 @@ def audit_sanitized_dir(out_dir: Path) -> tuple[bool, str, dict]:
     if leaks:
         return False, "CREDENTIAL_MARKER_IN_ARTIFACT", {
             "audit_ok": False,
-            "paths": leaks,
         }
 
     return True, "UPLOAD_SAFE", {

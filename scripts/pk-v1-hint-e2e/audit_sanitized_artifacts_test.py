@@ -37,7 +37,7 @@ def _full_db(role: str) -> dict:
         "started_container": True,
         "host_port": 55432,
         "backend_pin_sha": "5bbc09bc895407b71a61f9ba86a7209ff9c10ffa",
-        "container_name": f"pk-v1-hint-{role}",
+        "container_name": "pk-v1-hint-primary" if role == "primary" else "pk-v1-hint-probe",
         "container_id_prefix": "deadbeefcafe",
         "bootstrap_ok": True,
     }
@@ -46,25 +46,25 @@ def _full_db(role: str) -> dict:
 def _full_fixture() -> dict:
     return {
         "package_scenario_id": PACKAGE_SCENARIO_ID,
-        "scenario_id": "S01",
+        "scenario_id": PACKAGE_SCENARIO_ID,
         "backend_pin_sha": "5bbc09bc895407b71a61f9ba86a7209ff9c10ffa",
         "migration_head": "a360s010005",
         "openapi_authority_sha": "0061BCF6065FAFA184F196829A87AF98ADEDFCE6B633D45704141A5B48045D22",
-        "tenant_id": "tenant-demo",
-        "content_id": "content-demo",
-        "version_id": "version-demo",
-        "work_id": "work-demo",
-        "class_ref": "class-demo",
-        "q_correct_id": "q1",
-        "q_incorrect_id": "q2",
-        "q_unanswered_id": "q3",
-        "q_open_id": "q4",
-        "obj_demonstrated_id": "o1",
-        "obj_not_yet_id": "o2",
-        "obj_insufficient_id": "o3",
-        "evaluation_policy_id": "eval-1",
-        "evaluation_policy_version": "1",
-        "stewardship_state": "published",
+        "tenant_id": "00000000-0000-0000-0000-000000000001",
+        "content_id": "00000000-0000-0000-0000-000000000002",
+        "version_id": "00000000-0000-0000-0000-000000000003",
+        "work_id": "00000000-0000-0000-0000-000000000004",
+        "class_ref": "aieos.class.5a",
+        "q_correct_id": "q-correct",
+        "q_incorrect_id": "q-incorrect",
+        "q_unanswered_id": "q-unanswered",
+        "q_open_id": "q-open",
+        "obj_demonstrated_id": "obj-demonstrated",
+        "obj_not_yet_id": "obj-not-yet",
+        "obj_insufficient_id": "obj-insufficient",
+        "evaluation_policy_id": "aieos.learner_assessment.deterministic",
+        "evaluation_policy_version": 1,
+        "stewardship_state": "APPROVED",
         "shared_database": False,
         "seed_ok": True,
     }
@@ -100,6 +100,112 @@ class AuditSanitizedArtifactsTest(unittest.TestCase):
             self.assertEqual(proc.returncode, 1)
             payload = json.loads(proc.stdout.strip())
             self.assertEqual(payload.get("code"), "NESTED_DIRECTORY")
+            self.assertNotIn("student answer", proc.stdout)
+
+    def test_rejects_marker_free_narrative_in_content_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "sanitized"
+            root.mkdir()
+            (root / "evidence-summary.json").write_text(
+                json.dumps(_minimal_summary(sanitized_evidence_ok=True)), encoding="utf-8"
+            )
+            fixture = _full_fixture()
+            fixture["content_id"] = "The student wrote a paragraph about home"
+            (root / "fixture-sanitized.json").write_text(
+                json.dumps(fixture), encoding="utf-8"
+            )
+            proc = self._run_audit(root)
+            self.assertEqual(proc.returncode, 1)
+            code = json.loads(proc.stdout.strip()).get("code")
+            self.assertEqual(code, "CONTENT_ID_GRAMMAR")
+            self.assertNotIn("student wrote", proc.stdout)
+
+    def test_rejects_narrative_in_github_sha(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "sanitized"
+            root.mkdir()
+            summary = _minimal_summary(github_sha="student answer text without marker")
+            (root / "evidence-summary.json").write_text(
+                json.dumps(summary), encoding="utf-8"
+            )
+            proc = self._run_audit(root)
+            self.assertEqual(proc.returncode, 1)
+            self.assertEqual(
+                json.loads(proc.stdout.strip()).get("code"),
+                "GITHUB_SHA_GRAMMAR",
+            )
+
+    def test_rejects_unknown_key_without_echoing_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "sanitized"
+            root.mkdir()
+            summary = _minimal_summary()
+            summary["supersecret_student_answer"] = "hidden"
+            (root / "evidence-summary.json").write_text(
+                json.dumps(summary), encoding="utf-8"
+            )
+            proc = self._run_audit(root)
+            self.assertEqual(proc.returncode, 1)
+            self.assertEqual(json.loads(proc.stdout.strip()).get("code"), "UNKNOWN_KEY")
+            self.assertNotIn("supersecret", proc.stdout)
+            self.assertNotIn("hidden", proc.stdout)
+
+    def test_rejects_invalid_backend_pin_length(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "sanitized"
+            root.mkdir()
+            (root / "evidence-summary.json").write_text(
+                json.dumps(
+                    _minimal_summary(
+                        backend_pin_sha="not-a-valid-40-character-git-sha-value"
+                    )
+                ),
+                encoding="utf-8",
+            )
+            proc = self._run_audit(root)
+            self.assertEqual(proc.returncode, 1)
+            self.assertEqual(
+                json.loads(proc.stdout.strip()).get("code"),
+                "BACKEND_PIN_SHA_GRAMMAR",
+            )
+
+    def test_rejects_bool_as_evaluation_policy_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "sanitized"
+            root.mkdir()
+            (root / "evidence-summary.json").write_text(
+                json.dumps(_minimal_summary()), encoding="utf-8"
+            )
+            fixture = _full_fixture()
+            fixture["evaluation_policy_version"] = True
+            (root / "fixture-sanitized.json").write_text(
+                json.dumps(fixture), encoding="utf-8"
+            )
+            proc = self._run_audit(root)
+            self.assertEqual(proc.returncode, 1)
+            self.assertEqual(
+                json.loads(proc.stdout.strip()).get("code"),
+                "EVALUATION_POLICY_VERSION_TYPE",
+            )
+
+    def test_rejects_invalid_stewardship_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "sanitized"
+            root.mkdir()
+            (root / "evidence-summary.json").write_text(
+                json.dumps(_minimal_summary()), encoding="utf-8"
+            )
+            fixture = _full_fixture()
+            fixture["stewardship_state"] = "published"
+            (root / "fixture-sanitized.json").write_text(
+                json.dumps(fixture), encoding="utf-8"
+            )
+            proc = self._run_audit(root)
+            self.assertEqual(proc.returncode, 1)
+            self.assertEqual(
+                json.loads(proc.stdout.strip()).get("code"),
+                "STEWARDSHIP_STATE_GRAMMAR",
+            )
 
     def test_rejects_empty_nested_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -158,21 +264,8 @@ class AuditSanitizedArtifactsTest(unittest.TestCase):
             self.assertEqual(proc.returncode, 1)
             self.assertEqual(
                 json.loads(proc.stdout.strip()).get("code"),
-                "attempt_run_id_SECRET_MARKER",
+                "CREDENTIAL_MARKER_IN_ARTIFACT",
             )
-
-    def test_rejects_arbitrary_free_text_in_allowlisted_key(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "sanitized"
-            root.mkdir()
-            narrative = "x" * 300
-            summary = _minimal_summary(github_sha=narrative)
-            (root / "evidence-summary.json").write_text(
-                json.dumps(summary), encoding="utf-8"
-            )
-            proc = self._run_audit(root)
-            self.assertEqual(proc.returncode, 1)
-            self.assertEqual(json.loads(proc.stdout.strip()).get("code"), "github_sha_TOO_LONG")
 
     def test_accepts_early_failure_summary_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -186,6 +279,7 @@ class AuditSanitizedArtifactsTest(unittest.TestCase):
             payload = json.loads(proc.stdout.strip())
             self.assertTrue(payload.get("audit_ok"))
             self.assertTrue(payload.get("partial_bundle"))
+            self.assertFalse(payload.get("e2e_pass_claim"))
 
     def test_accepts_complete_safe_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
