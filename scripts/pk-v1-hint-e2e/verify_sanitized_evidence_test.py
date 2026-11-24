@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from export_sanitize import EVIDENCE_CONTRACT_VERSION
 from sp02a_ledger import parse_sp02a_ledger_doc, repo_ledger_doc
@@ -18,6 +19,19 @@ from verify_sanitized_evidence import (
     EXPECTED_OPENAPI_AUTHORITY_SHA,
     evaluate_require_e2e_evidence,
 )
+
+# Synthetic local tests must not inherit real GitHub Actions run identity from the parent process.
+_GITHUB_IDENTITY_ENV_KEYS = (
+    "GITHUB_ACTIONS",
+    "GITHUB_RUN_ID",
+    "GITHUB_RUN_ATTEMPT",
+    "GITHUB_SHA",
+    "GITHUB_WORKFLOW",
+    "GITHUB_REF",
+)
+
+_SYNTHETIC_GITHUB_SHA = "abc123def4567890abcdef1234567890abcd1234"
+_SYNTHETIC_ATTEMPT_RUN_ID = "test-run-1"
 
 
 class VerifySanitizedEvidenceTest(unittest.TestCase):
@@ -31,7 +45,11 @@ class VerifySanitizedEvidenceTest(unittest.TestCase):
         return tiers
 
     def _run(self, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-        run_env = os.environ.copy()
+        run_env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in _GITHUB_IDENTITY_ENV_KEYS
+        }
         run_env["PK_V1_HINT_E2E_VERIFIER_TEST_INJECT"] = "1"
         if env:
             run_env.update(env)
@@ -43,6 +61,19 @@ class VerifySanitizedEvidenceTest(unittest.TestCase):
             text=True,
         )
 
+    def _evaluate_isolated(
+        self,
+        attempt: dict[str, object],
+        out_dir: Path,
+        *,
+        ci_env: dict[str, str] | None = None,
+    ) -> tuple[bool, str, dict[str, object]]:
+        overlay: dict[str, str] = {k: "" for k in _GITHUB_IDENTITY_ENV_KEYS}
+        if ci_env:
+            overlay.update(ci_env)
+        with patch.dict(os.environ, overlay, clear=False):
+            return evaluate_require_e2e_evidence(attempt, out_dir)
+
     def _base_attempt(self, **extra: object) -> dict[str, object]:
         return {
             "attempted": True,
@@ -51,9 +82,9 @@ class VerifySanitizedEvidenceTest(unittest.TestCase):
             "sanitized_export_ok": True,
             "lifecycle_teardown_ok": True,
             "skip_container_teardown": False,
-            "attempt_run_id": "test-run-1",
+            "attempt_run_id": _SYNTHETIC_ATTEMPT_RUN_ID,
             "started_at_ms": 8_000_000_000_000,
-            "github_sha": "abc123def4567890abcdef1234567890abcd1234",
+            "github_sha": _SYNTHETIC_GITHUB_SHA,
             **extra,
         }
 
@@ -83,8 +114,8 @@ class VerifySanitizedEvidenceTest(unittest.TestCase):
             "has_probe_db_report": has_probe,
             "evidence_contract_version": EVIDENCE_CONTRACT_VERSION,
             "generated_at_ms": 9_000_000_000_000,
-            "attempt_run_id": "test-run-1",
-            "github_sha": "abc123def4567890abcdef1234567890abcd1234",
+            "attempt_run_id": _SYNTHETIC_ATTEMPT_RUN_ID,
+            "github_sha": _SYNTHETIC_GITHUB_SHA,
             "backend_pin_sha": EXPECTED_BACKEND_PIN_SHA,
             "openapi_authority_sha": EXPECTED_OPENAPI_AUTHORITY_SHA,
             "migration_head": EXPECTED_MIGRATION_HEAD,
@@ -219,8 +250,8 @@ class VerifySanitizedEvidenceTest(unittest.TestCase):
                         "has_probe_db_report": False,
                         "evidence_contract_version": EVIDENCE_CONTRACT_VERSION,
                         "generated_at_ms": 9_000_000_000_000,
-                        "attempt_run_id": "test-run-1",
-                        "github_sha": "abc123def4567890abcdef1234567890abcd1234",
+                        "attempt_run_id": _SYNTHETIC_ATTEMPT_RUN_ID,
+                        "github_sha": _SYNTHETIC_GITHUB_SHA,
                         "backend_pin_sha": EXPECTED_BACKEND_PIN_SHA,
                         "openapi_authority_sha": EXPECTED_OPENAPI_AUTHORITY_SHA,
                         "migration_head": EXPECTED_MIGRATION_HEAD,
@@ -229,7 +260,7 @@ class VerifySanitizedEvidenceTest(unittest.TestCase):
                 encoding="utf-8",
             )
             attempt = self._base_attempt()
-            ok, code, _ = evaluate_require_e2e_evidence(attempt, out_dir)
+            ok, code, _ = self._evaluate_isolated(attempt, out_dir)
             self.assertFalse(ok)
             self.assertEqual(code, "FORGED_ARTIFACT_FLAG:has_fixture")
 
@@ -258,7 +289,7 @@ class VerifySanitizedEvidenceTest(unittest.TestCase):
             tmp_path = Path(tmp)
             out_dir = self._write_bundle(tmp_path)
             attempt = self._base_attempt(child_exit=None)
-            ok, code, _ = evaluate_require_e2e_evidence(attempt, out_dir)
+            ok, code, _ = self._evaluate_isolated(attempt, out_dir)
             self.assertFalse(ok)
             self.assertEqual(code, "CHILD_EXIT_NOT_ZERO")
 
@@ -268,7 +299,7 @@ class VerifySanitizedEvidenceTest(unittest.TestCase):
             out_dir = self._write_bundle(tmp_path)
             (out_dir / "probe-db-report-sanitized.json").write_text("{}", encoding="utf-8")
             attempt = self._base_attempt()
-            ok, code, _ = evaluate_require_e2e_evidence(attempt, out_dir)
+            ok, code, _ = self._evaluate_isolated(attempt, out_dir)
             self.assertFalse(ok)
             self.assertEqual(code, "EMPTY_ARTIFACT:probe-db-report-sanitized.json")
 
@@ -281,7 +312,7 @@ class VerifySanitizedEvidenceTest(unittest.TestCase):
             del summary["backend_pin_sha"]
             summary_path.write_text(json.dumps(summary), encoding="utf-8")
             attempt = self._base_attempt()
-            ok, code, _ = evaluate_require_e2e_evidence(attempt, out_dir)
+            ok, code, _ = self._evaluate_isolated(attempt, out_dir)
             self.assertFalse(ok)
             self.assertIn("INCOMPLETE_EVIDENCE_SUMMARY", code)
 
@@ -293,9 +324,93 @@ class VerifySanitizedEvidenceTest(unittest.TestCase):
             bad_tiers["DEFERRED_BY_ADR"] = bad_tiers.get("DEFERRED_BY_ADR", 0) - 1
             out_dir = self._write_bundle(tmp_path, tier_counts=bad_tiers)
             attempt = self._base_attempt()
-            ok, code, _ = evaluate_require_e2e_evidence(attempt, out_dir)
+            ok, code, _ = self._evaluate_isolated(attempt, out_dir)
             self.assertFalse(ok)
             self.assertEqual(code, "LEDGER_TIER_COUNTS_MISMATCH_COMMITTED_DOC")
+
+    def test_ci_mode_green_complete_bundle_matching_run_binding(self) -> None:
+        ci_sha = "7280bd9fd1e1c8daaba1bb31698871c518b229a4"
+        ci_attempt_id = "123456-2"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            out_dir = self._write_bundle(
+                tmp_path,
+                extra_summary={
+                    "attempt_run_id": ci_attempt_id,
+                    "github_sha": ci_sha,
+                },
+            )
+            attempt = self._base_attempt(
+                attempt_run_id=ci_attempt_id,
+                github_sha=ci_sha,
+            )
+            (tmp_path / "attempt.json").write_text(json.dumps(attempt), encoding="utf-8")
+            proc = self._run(
+                "--require-e2e-evidence",
+                env={
+                    "GITHUB_ACTIONS": "true",
+                    "GITHUB_RUN_ID": "123456",
+                    "GITHUB_RUN_ATTEMPT": "2",
+                    "GITHUB_SHA": ci_sha,
+                    "PK_V1_HINT_E2E_REQUIRE_EVIDENCE": "1",
+                    "PK_V1_HINT_E2E_SANITIZED_DIR": str(out_dir),
+                    "PK_V1_HINT_E2E_ATTEMPT_STATUS_PATH": str(
+                        tmp_path / "attempt.json"
+                    ),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+            payload = json.loads(proc.stdout.strip())
+            self.assertEqual(payload.get("code"), "E2E_PASS")
+
+    def test_ci_mode_stale_github_run_attempt_rejected(self) -> None:
+        ci_sha = "7280bd9fd1e1c8daaba1bb31698871c518b229a4"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            out_dir = self._write_bundle(tmp_path)
+            attempt = self._base_attempt(github_sha=ci_sha)
+            ok, code, _ = self._evaluate_isolated(
+                attempt,
+                out_dir,
+                ci_env={
+                    "GITHUB_ACTIONS": "true",
+                    "GITHUB_RUN_ID": "123456",
+                    "GITHUB_RUN_ATTEMPT": "2",
+                    "GITHUB_SHA": ci_sha,
+                },
+            )
+            self.assertFalse(ok)
+            self.assertEqual(code, "STALE_GITHUB_RUN_ATTEMPT")
+
+    def test_ci_mode_github_sha_env_mismatch_rejected(self) -> None:
+        ci_sha = "7280bd9fd1e1c8daaba1bb31698871c518b229a4"
+        other_sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ci_attempt_id = "123456-2"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            out_dir = self._write_bundle(
+                tmp_path,
+                extra_summary={
+                    "attempt_run_id": ci_attempt_id,
+                    "github_sha": ci_sha,
+                },
+            )
+            attempt = self._base_attempt(
+                attempt_run_id=ci_attempt_id,
+                github_sha=ci_sha,
+            )
+            ok, code, _ = self._evaluate_isolated(
+                attempt,
+                out_dir,
+                ci_env={
+                    "GITHUB_ACTIONS": "true",
+                    "GITHUB_RUN_ID": "123456",
+                    "GITHUB_RUN_ATTEMPT": "2",
+                    "GITHUB_SHA": other_sha,
+                },
+            )
+            self.assertFalse(ok)
+            self.assertEqual(code, "GITHUB_SHA_ENV_MISMATCH")
 
     def test_child_nonzero_exit_fails_even_with_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
