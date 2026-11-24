@@ -13,6 +13,10 @@ export const EXPECTED_MIGRATION_HEAD = "a360s010005";
 export const OPENAPI_AUTHORITY_SHA =
   "0061BCF6065FAFA184F196829A87AF98ADEDFCE6B633D45704141A5B48045D22";
 
+/** Governed review-detail schema gate (metadata only — no hint text). */
+export const WORKSHEET_HINT_REVIEW_SCHEMA_ID = "education.worksheet";
+export const WORKSHEET_HINT_REVIEW_SCHEMA_VERSION = 2;
+
 export const TEACHER_FRONTEND_URL =
   process.env.PK_V1_HINT_E2E_TEACHER_FRONTEND_URL ||
   `http://127.0.0.1:${process.env.PK_V1_HINT_E2E_TEACHER_FRONTEND_PORT || 5191}`;
@@ -156,6 +160,102 @@ export function assertNoApiMocksInstalled(page: Page) {
   const routes = (page as unknown as { _routes?: unknown[] })._routes;
   if (routes && routes.length > 0) {
     throw new Error("PK-V1-HINT E2E must not register page.route handlers");
+  }
+}
+
+function qOpenHasNonemptyLearnerHintKey(
+  payload: Record<string, unknown>,
+  qOpenId: string,
+): boolean {
+  const questions = payload.questions;
+  if (!Array.isArray(questions)) return false;
+  for (const item of questions) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) {
+      return false;
+    }
+    const record = item as Record<string, unknown>;
+    if (record.id !== qOpenId) continue;
+    if (!("learner_hint" in record)) return false;
+    const hint = record.learner_hint;
+    return typeof hint === "string" && hint.trim().length > 0;
+  }
+  return false;
+}
+
+/**
+ * Non-mutating reviewer GET preflight via same-origin Vite proxy (no mocks).
+ * Inspects bounded metadata only; never logs response bodies or hint text.
+ */
+export async function preflightReviewerQueueDetail(
+  page: Page,
+  contentId: string,
+  versionId: string,
+  qOpenId: string,
+  role: TeacherRole = "reviewer",
+): Promise<void> {
+  const response = await page.request.get(
+    `/api/v1/teacher-os/review-queue/${contentId}/versions/${versionId}`,
+    { headers: teacherApiHeaders(role) },
+  );
+  const status = response.status();
+  if (status === 401) {
+    throw new Error("REVIEW_DETAIL_HTTP_401");
+  }
+  if (status === 403) {
+    throw new Error("REVIEW_DETAIL_HTTP_403");
+  }
+  if (status === 404) {
+    throw new Error("REVIEW_DETAIL_HTTP_404");
+  }
+  if (status >= 500) {
+    throw new Error("REVIEW_DETAIL_HTTP_5XX");
+  }
+  if (!response.ok()) {
+    throw new Error(`REVIEW_DETAIL_HTTP_${status}`);
+  }
+
+  const detail = (await response.json()) as {
+    content_id: string;
+    version_id: string;
+    schema_id: string;
+    schema_version: number;
+    payload: Record<string, unknown>;
+  };
+
+  if (detail.content_id !== contentId || detail.version_id !== versionId) {
+    throw new Error("REVIEW_DETAIL_METADATA_MISMATCH");
+  }
+  if (
+    detail.schema_id !== WORKSHEET_HINT_REVIEW_SCHEMA_ID ||
+    detail.schema_version !== WORKSHEET_HINT_REVIEW_SCHEMA_VERSION
+  ) {
+    throw new Error("REVIEW_HINT_SCHEMA_MISMATCH");
+  }
+  if (!qOpenHasNonemptyLearnerHintKey(detail.payload, qOpenId)) {
+    throw new Error("REVIEW_HINT_ELIGIBILITY_MISSING");
+  }
+}
+
+/** Classify reviewer UI state with fixed safe codes only (no page dumps). */
+export async function assertWorksheetHintReviewPanelReady(page: Page): Promise<void> {
+  const panel = page.getByTestId("worksheet-hint-review");
+  try {
+    await expect(panel).toBeVisible({ timeout: 30_000 });
+    return;
+  } catch {
+    if (await page.getByText("Session required").isVisible()) {
+      throw new Error("REVIEW_UI_SESSION_UNAVAILABLE");
+    }
+    if (await page.getByText("Loading resource").isVisible()) {
+      throw new Error("REVIEW_UI_STILL_LOADING");
+    }
+    if (await page.getByText("Could not load resource").isVisible()) {
+      throw new Error("REVIEW_UI_RESOURCE_ERROR");
+    }
+    if (await page.getByText("Cannot review learner hints").isVisible()) {
+      throw new Error("REVIEW_UI_PANEL_INVALID");
+    }
+    throw new Error("REVIEW_UI_PANEL_MISSING");
   }
 }
 

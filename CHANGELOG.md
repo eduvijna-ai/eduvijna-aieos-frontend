@@ -9,6 +9,12 @@ and this repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PK-V1-HINT-E2E-I01-CI02R1: Phase C reviewer session-first sequencing on
+  `/teacher-os/today`, bounded non-mutating review-queue GET preflight with
+  fixed safe HTTP/metadata codes, and classified UI failure categories before
+  attestation (Draft PR #53 only; CI run #45325904897 Phase C
+  `worksheet-hint-review` timeout prior).
+
 - PK-V1-HINT-E2E-I01R10: Governed DB report boundary normalization
   (`host_port` int in sanitized export, omit `container_id_prefix` for CI
   service), UUID-only fixture IDs with exact class/q/obj bindings, partial

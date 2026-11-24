@@ -84,5 +84,9 @@ describe("PK-V1-HINT-E2E-I01R1 pin and security consistency", () => {
     expect(spec).toContain("Show hint for question 4");
     expect(spec).toContain("assert-evaluation");
     expect(spec).toContain("assert-remediation-origin");
+    expect(spec).toContain("preflightReviewerQueueDetail");
+    expect(spec).toMatch(
+      /teacher-os\/today[\s\S]*connectTeacherRole\(page, "reviewer"\)[\s\S]*preflightReviewerQueueDetail/,
+    );
   });
 });

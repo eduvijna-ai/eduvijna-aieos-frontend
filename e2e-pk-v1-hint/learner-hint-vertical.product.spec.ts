@@ -6,10 +6,12 @@ import {
   assertNoApiMocksInstalled,
   calendarDateOnlyLocal,
   connectStudentDevSession,
+  assertWorksheetHintReviewPanelReady,
   connectTeacherRole,
   loadPkV1HintFixture,
   openStudentPage,
   openTeacherPage,
+  preflightReviewerQueueDetail,
   runBackendHintProbes,
   runPersistenceAssert,
   studentApiHeaders,
@@ -108,15 +110,27 @@ test.describe("[PK-V1-HINT-E2E] learner-hint real-stack vertical", () => {
 
   test("Phase C — Reviewer attests and approves", async ({ browser }) => {
     expect(state.hintVersionId).toBeTruthy();
+    const hintVersionId = state.hintVersionId!;
     const page = await openTeacherPage(browser);
     assertNoApiMocksInstalled(page);
-    await page.goto(
-      `${TEACHER_FRONTEND_URL}/teacher-os/review/${fixture.content_id}/versions/${state.hintVersionId}`,
-    );
+
+    await page.goto(`${TEACHER_FRONTEND_URL}/teacher-os/today`);
     await connectTeacherRole(page, "reviewer");
 
+    await preflightReviewerQueueDetail(
+      page,
+      fixture.content_id,
+      hintVersionId,
+      fixture.q_open_id,
+      "reviewer",
+    );
+
+    await page.goto(
+      `${TEACHER_FRONTEND_URL}/teacher-os/review/${fixture.content_id}/versions/${hintVersionId}`,
+    );
+    await assertWorksheetHintReviewPanelReady(page);
+
     const panel = page.getByTestId("worksheet-hint-review");
-    await expect(panel).toBeVisible();
     const boxes = panel.getByRole("checkbox");
     const count = await boxes.count();
     for (let i = 0; i < count; i += 1) {

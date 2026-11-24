@@ -198,6 +198,25 @@ pnpm test:e2e:pk-v1-hint
 - NOT_TESTED: 65
 - **Total**: 67
 
+## CI observation — PK-V1-HINT-E2E-I01-CI02 (parent `7c2c47aa`)
+
+- Workflow run `#45325904897` (head `7c2c47aa22bd1d5d5107de85c1b3cec6c7628e9e`):
+  completed **failure**; pk-v1-hint-e2e job `138215318495`.
+- Playwright vertical: Phase A–B **pass**; Phase C failed at
+  `worksheet-hint-review` not found (prior navigation-before-connect ordering).
+- Sanitized artifact `14889113620`: summary + primary PG18 + fixture; no probe
+  report; uploaded summary `github_sha` is PR merge-ref (distinct from branch
+  HEAD by design).
+
+## CI02R1 test-only correction
+
+- Reviewer DEV session on `/teacher-os/today` before review-detail navigation.
+- `preflightReviewerQueueDetail`: GET review-queue detail via Vite proxy;
+  assert schema `education.worksheet` @2 and q-open `learner_hint` key presence
+  (no hint text in logs).
+- `assertWorksheetHintReviewPanelReady`: fixed codes
+  (`REVIEW_UI_SESSION_UNAVAILABLE`, `REVIEW_UI_RESOURCE_ERROR`, etc.) on UI miss.
+
 ## Explicit non-claims
 
 - No `REAL_STACK_EXECUTED_PASS` row is claimed until Chief-controlled CI executes the lane.
